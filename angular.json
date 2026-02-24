@@ -70,7 +70,8 @@
               "buildTarget": "clone-app:build:production"
             },
             "development": {
-              "buildTarget": "clone-app:build:development"
+              "buildTarget": "clone-app:build:development",
+              "proxyConfig": "proxy.conf.json"
             }
           },
           "defaultConfiguration": "development"

@@ -1,0 +1,21 @@
+.import-page {
+  max-width: 40rem;
+  margin: 2rem auto;
+  display: grid;
+  gap: 1rem;
+  padding: 0 1rem;
+}
+
+label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+input,
+button {
+  padding: 0.6rem;
+}
+
+.msg {
+  min-height: 1.2rem;
+}

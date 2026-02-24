@@ -1,0 +1,23 @@
+<section class="import-page">
+  <h1>Import Document</h1>
+
+  <label>
+    Doc Key
+    <input [(ngModel)]="docKey" placeholder="e.g. doc-001" />
+  </label>
+
+  <label>
+    File
+    <input
+      type="file"
+      accept=".pdf,application/pdf"
+      (change)="onFileChange($event)"
+    />
+  </label>
+
+  <button type="button" (click)="submit()" [disabled]="loading()">
+    {{ loading() ? 'Importing...' : 'Import' }}
+  </button>
+
+  <p class="msg">{{ message() }}</p>
+</section>
