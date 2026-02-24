@@ -1,5 +1,5 @@
-import { Component, Inject, OnInit, PLATFORM_ID, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { Component, Inject, OnInit, PLATFORM_ID, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RagApiService, RagDocumentResponse } from '../../core/api/rag-api.service';
 
@@ -49,7 +49,15 @@ export class DocumentsComponent implements OnInit {
     if (typeof doc['createdAt'] === 'string' && doc['createdAt'].trim()) {
       parts.push(doc['createdAt']);
     }
-    return parts.join(' • ');
+    return parts.join(' | ');
+  }
+
+  docKeyForRoute(doc: RagDocumentResponse): string | null {
+    const key = doc['docKey'];
+    if (typeof key === 'string' && key.trim()) {
+      return key.trim();
+    }
+    return null;
   }
 
   private loadDocuments(): void {

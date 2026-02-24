@@ -19,9 +19,19 @@
   @if (docs().length) {
     <ul class="docs-grid">
       @for (doc of docs(); track $index) {
-        <li class="doc-card">
-          <h2>{{ displayTitle(doc, $index) }}</h2>
-          <p class="meta">{{ displayMeta(doc) || 'No metadata available' }}</p>
+        <li>
+          @if (docKeyForRoute(doc)) {
+            <a class="doc-card doc-link" [routerLink]="['/documents', docKeyForRoute(doc)]">
+              <h2>{{ displayTitle(doc, $index) }}</h2>
+              <p class="meta">{{ displayMeta(doc) || 'No metadata available' }}</p>
+            </a>
+          } @else {
+            <div class="doc-card doc-disabled">
+              <h2>{{ displayTitle(doc, $index) }}</h2>
+              <p class="meta">{{ displayMeta(doc) || 'No metadata available' }}</p>
+              <p class="meta">Missing docKey, details unavailable.</p>
+            </div>
+          }
         </li>
       }
     </ul>

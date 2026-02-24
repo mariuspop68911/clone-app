@@ -1,0 +1,87 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(255, 189, 89, 0.45) 0%, transparent 40%),
+    radial-gradient(circle at 90% 15%, rgba(110, 190, 255, 0.4) 0%, transparent 35%),
+    linear-gradient(145deg, #f4eee0 0%, #dcecf8 50%, #e8f5ef 100%);
+}
+
+.tts-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.panel {
+  border-radius: 18px;
+  padding: 1.4rem;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(8, 43, 66, 0.15);
+  box-shadow: 0 14px 32px rgba(8, 45, 71, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.kicker {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  color: #51687c;
+}
+
+h1 {
+  margin: 0.35rem 0 0.4rem;
+  font-size: clamp(1.8rem, 4vw, 2.7rem);
+  line-height: 1.1;
+  color: #14283b;
+}
+
+.line {
+  margin: 0;
+  color: #29445b;
+}
+
+.controls {
+  margin-top: 1.2rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+button {
+  border-radius: 999px;
+  border: 0;
+  padding: 0.62rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.play {
+  background: #0f3d5e;
+  color: #fff;
+}
+
+.stop {
+  background: #c14d4d;
+  color: #fff;
+}
+
+.status {
+  margin: 1rem 0 0;
+  color: #28445d;
+}
+
+.status.live {
+  color: #0f5f3c;
+  font-weight: 600;
+}
+
+.status.error {
+  color: #8a2a2a;
+}

@@ -90,11 +90,20 @@ h1 {
 }
 
 .doc-card {
+  display: block;
   border: 1px solid rgba(9, 39, 62, 0.14);
   border-radius: 14px;
   padding: 0.95rem;
   background: rgba(255, 255, 255, 0.86);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.doc-link {
+  text-decoration: none;
+}
+
+.doc-disabled {
+  opacity: 0.75;
 }
 
 .doc-card:hover {

@@ -16,11 +16,42 @@ export interface RagDocumentResponse {
   [key: string]: unknown;
 }
 
+export type RagSummarySize = 'small' | 'large';
+
+export interface RagSummaryRequest {
+  docKey: string;
+  size: RagSummarySize;
+}
+
+export interface RagSummaryResponse {
+  docKey?: string;
+  size?: string;
+  totalChunksInDoc?: number;
+  processedChunks?: number;
+  sectionSummaries?: number;
+  summary?: string;
+  [key: string]: unknown;
+}
+
+export interface RagStoredSummaryResponse {
+  id: number;
+  name: string;
+  docKey: string;
+  size: string;
+  totalChunksInDoc: number;
+  processedChunks: number;
+  sectionSummaries: number;
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RagApiService {
   private readonly baseUrl = '/api/rag';
   private readonly ingestTimeoutMs = 120000;
   private readonly listDocumentsTimeoutMs = 30000;
+  private readonly listSummariesTimeoutMs = 60000;
 
   constructor(private readonly http: HttpClient) {}
 
@@ -37,5 +68,15 @@ export class RagApiService {
     return this.http
       .get<RagDocumentResponse[]>(`${this.baseUrl}/documents`)
       .pipe(timeout(this.listDocumentsTimeoutMs));
+  }
+
+  summarizeDocument(req: RagSummaryRequest): Observable<RagSummaryResponse> {
+    return this.http.post<RagSummaryResponse>(`${this.baseUrl}/summary`, req);
+  }
+
+  listStoredSummaries(docKey: string): Observable<RagStoredSummaryResponse[]> {
+    return this.http
+      .get<RagStoredSummaryResponse[]>(`${this.baseUrl}/summaries/${encodeURIComponent(docKey)}`)
+      .pipe(timeout(this.listSummariesTimeoutMs));
   }
 }
