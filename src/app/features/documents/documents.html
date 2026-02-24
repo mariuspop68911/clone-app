@@ -1,0 +1,29 @@
+<section class="docs-page">
+  <header class="hero">
+    <p class="eyebrow">RAG Library</p>
+    <h1>Indexed Documents</h1>
+    <p class="subtitle">Browse every ingested document and quickly inspect imported metadata.</p>
+
+    <div class="actions">
+      <button type="button" (click)="refresh()" [disabled]="loading()">
+        {{ loading() ? 'Refreshing...' : 'Refresh List' }}
+      </button>
+      <a routerLink="/import">Import New Document</a>
+    </div>
+  </header>
+
+  @if (message()) {
+    <p class="message">{{ message() }}</p>
+  }
+
+  @if (docs().length) {
+    <ul class="docs-grid">
+      @for (doc of docs(); track $index) {
+        <li class="doc-card">
+          <h2>{{ displayTitle(doc, $index) }}</h2>
+          <p class="meta">{{ displayMeta(doc) || 'No metadata available' }}</p>
+        </li>
+      }
+    </ul>
+  }
+</section>

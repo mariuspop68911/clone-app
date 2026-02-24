@@ -1,7 +1,6 @@
-import { HttpClient } from '@angular/common/http';
 import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { timeout } from 'rxjs';
+import { RagApiService } from '../../core/api/rag-api.service';
 
 @Component({
   selector: 'app-import',
@@ -10,13 +9,12 @@ import { timeout } from 'rxjs';
   styleUrl: './import.scss'
 })
 export class ImportComponent {
-  private readonly ingestUrl = '/api/rag/ingest';
   docKey = '';
   selectedFile: File | null = null;
   loading = signal(false);
   message = signal('');
 
-  constructor(private http: HttpClient) {}
+  constructor(private readonly ragApi: RagApiService) {}
 
   onFileChange(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -37,13 +35,9 @@ export class ImportComponent {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', this.selectedFile, this.selectedFile.name);
-
     this.loading.set(true);
-    this.http
-      .post(this.ingestUrl, formData, { params: { docKey } })
-      .pipe(timeout(120000))
+    this.ragApi
+      .ingestDocument(docKey, this.selectedFile)
       .subscribe({
       next: () => {
         this.message.set('File ingested successfully.');
@@ -63,6 +57,6 @@ export class ImportComponent {
         this.message.set(`Ingest failed (${status}): ${backendMessage}`);
         this.loading.set(false);
       }
-      });
+    });
   }
 }
