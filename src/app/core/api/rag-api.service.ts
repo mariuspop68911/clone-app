@@ -46,6 +46,20 @@ export interface RagStoredSummaryResponse {
   updatedAt: string;
 }
 
+export interface RagAskRequest {
+  question: string;
+  docKey: string;
+  topK?: number;
+}
+
+export interface RagAskResponse {
+  answer?: string;
+  docKey?: string;
+  topK?: number;
+  retrieved?: unknown[];
+  [key: string]: unknown;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RagApiService {
   private readonly baseUrl = '/api/rag';
@@ -78,5 +92,9 @@ export class RagApiService {
     return this.http
       .get<RagStoredSummaryResponse[]>(`${this.baseUrl}/summaries/${encodeURIComponent(docKey)}`)
       .pipe(timeout(this.listSummariesTimeoutMs));
+  }
+
+  askQuestion(req: RagAskRequest): Observable<RagAskResponse> {
+    return this.http.post<RagAskResponse>(`${this.baseUrl}/ask`, req);
   }
 }

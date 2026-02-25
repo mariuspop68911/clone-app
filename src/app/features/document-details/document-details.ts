@@ -1,5 +1,5 @@
 import { Component, computed, effect, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   RagSummaryJobService,
   RagSummaryJobState
@@ -30,6 +30,7 @@ export class DocumentDetailsComponent {
 
   constructor(
     private readonly route: ActivatedRoute,
+    private readonly router: Router,
     private readonly summaryJobs: RagSummaryJobService,
     private readonly ragApi: RagApiService
   ) {
@@ -63,7 +64,12 @@ export class DocumentDetailsComponent {
   }
 
   ask(): void {
-    this.message.set('Ask action clicked.');
+    const key = this.docKey();
+    if (!key || key === 'Unknown Document') {
+      this.message.set('Missing docKey.');
+      return;
+    }
+    this.router.navigate(['/documents', key, 'chat']);
   }
 
   startSummary(size: RagSummarySize): void {

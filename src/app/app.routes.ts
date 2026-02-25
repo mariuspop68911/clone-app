@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { DocumentDetailsComponent } from './features/document-details';
+import { DocumentChatComponent } from './features/document-chat';
 import { HomeComponent } from './home';
 import { DocumentsComponent } from './features/documents';
 import { ImportComponent } from './features/import';
@@ -11,6 +12,7 @@ export const routes: Routes = [
   { path: 'import', component: ImportComponent },
   { path: 'documents', component: DocumentsComponent },
   { path: 'documents/:docKey', component: DocumentDetailsComponent },
+  { path: 'documents/:docKey/chat', component: DocumentChatComponent },
   { path: 'documents/:docKey/summaries/:summaryId', component: SummaryDetailsComponent },
   { path: 'tts-playback', component: TtsPlaybackComponent }
 ];
