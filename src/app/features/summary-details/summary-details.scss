@@ -1,16 +1,7 @@
-:host {
-  display: block;
-  min-height: 100dvh;
-  background:
-    radial-gradient(circle at 20% 10%, #ffe1aa 0%, transparent 34%),
-    radial-gradient(circle at 88% 12%, #aad8ff 0%, transparent 30%),
-    linear-gradient(145deg, #f7f0e1 0%, #e2eef9 55%, #f1f8f0 100%);
-}
-
 .summary-page {
   max-width: 980px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 1.2rem 1rem 2rem;
 }
 
 .back {
@@ -22,11 +13,11 @@
 }
 
 .summary-panel {
-  border: 1px solid rgba(12, 46, 72, 0.14);
-  border-radius: 18px;
+  border: 1px solid #dde3eb;
+  border-radius: 12px;
   padding: 1.2rem;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 12px 28px rgba(10, 44, 71, 0.13);
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(24, 119, 242, 0.08);
 }
 
 .eyebrow {
@@ -66,33 +57,17 @@ h1 {
 }
 
 .tts-controls button {
-  border: 0;
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 0.56rem 0.95rem;
-  color: #fff;
   font-weight: 700;
-  cursor: pointer;
-}
-
-.tts-controls button:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.btn-play {
-  background: #14476b;
-}
-
-.btn-stop {
-  background: #b54848;
 }
 
 .summary-text {
   margin-top: 1rem;
   padding: 0.95rem;
   border-radius: 12px;
-  border: 1px solid rgba(18, 63, 93, 0.16);
-  background: rgba(250, 253, 255, 0.98);
+  border: 1px solid #dde3eb;
+  background: #ffffff;
   color: #203d55;
   line-height: 1.62;
   white-space: pre-wrap;

@@ -1,1 +1,39 @@
-<router-outlet />
+<div class="app-layout">
+  <aside class="drawer">
+    <h1>RAG Console</h1>
+    <nav>
+      <a routerLink="/documents" routerLinkActive="active">View Documents</a>
+    </nav>
+
+    <section class="drawer-docs">
+      <h2>My Documents</h2>
+
+      @if (drawerLoading()) {
+        <p>Loading...</p>
+      } @else if (!drawerDocs().length) {
+        <p>No documents yet.</p>
+      } @else {
+        <ul>
+          @for (doc of drawerDocs(); track $index) {
+            <li>
+              @if (drawerDocKey(doc)) {
+                <a
+                  routerLinkActive="active-doc"
+                  [routerLink]="['/documents', drawerDocKey(doc)]"
+                >
+                  {{ drawerDocLabel(doc, $index) }}
+                </a>
+              } @else {
+                <span>{{ drawerDocLabel(doc, $index) }}</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </aside>
+
+  <main class="content">
+    <router-outlet />
+  </main>
+</div>

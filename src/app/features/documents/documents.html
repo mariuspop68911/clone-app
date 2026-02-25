@@ -1,13 +1,7 @@
 <section class="docs-page">
   <header class="hero">
-    <p class="eyebrow">RAG Library</p>
-    <h1>Indexed Documents</h1>
-    <p class="subtitle">Browse every ingested document and quickly inspect imported metadata.</p>
-
+    <h1>RAG Library</h1>
     <div class="actions">
-      <button type="button" (click)="refresh()" [disabled]="loading()">
-        {{ loading() ? 'Refreshing...' : 'Refresh List' }}
-      </button>
       <a routerLink="/import">Import New Document</a>
     </div>
   </header>

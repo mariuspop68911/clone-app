@@ -26,10 +26,6 @@ export class DocumentsComponent implements OnInit {
     this.loadDocuments();
   }
 
-  refresh(): void {
-    this.loadDocuments();
-  }
-
   displayTitle(doc: RagDocumentResponse, index: number): string {
     const key = doc['docKey'];
     if (typeof key === 'string' && key.trim()) {

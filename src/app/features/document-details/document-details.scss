@@ -1,16 +1,7 @@
-:host {
-  display: block;
-  min-height: 100dvh;
-  background:
-    radial-gradient(circle at 15% 10%, #ffe09f 0%, transparent 36%),
-    radial-gradient(circle at 90% 15%, #9dd3ff 0%, transparent 30%),
-    linear-gradient(150deg, #f8f1e2 0%, #e3f0f9 55%, #f3f9ee 100%);
-}
-
 .details-page {
   max-width: 960px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 1.2rem 1rem 2rem;
 }
 
 .back {
@@ -22,11 +13,11 @@
 }
 
 .panel {
-  border: 1px solid rgba(11, 43, 69, 0.15);
-  border-radius: 18px;
+  border: 1px solid #dde3eb;
+  border-radius: 12px;
   padding: 1.2rem;
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 12px 28px rgba(9, 44, 70, 0.14);
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(24, 119, 242, 0.08);
 }
 
 .eyebrow {
@@ -52,20 +43,9 @@ h1 {
 }
 
 .actions button {
-  border: 0;
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 0.62rem 1rem;
   font-weight: 700;
-  color: #fff;
-  cursor: pointer;
-}
-
-.btn-summary {
-  background: #0f4266;
-}
-
-.btn-ask {
-  background: #1f7d4f;
 }
 
 .size-picker {
@@ -89,21 +69,20 @@ h1 {
 }
 
 .btn-size {
-  border: 1px solid #184563;
-  border-radius: 999px;
-  background: #fff;
-  color: #184563;
+  border: 1px solid #1877f2;
+  border-radius: 8px;
+  background: #1877f2;
+  color: #fff;
   padding: 0.45rem 0.8rem;
   font-weight: 700;
-  cursor: pointer;
 }
 
 .summary-box {
   margin-top: 1rem;
   padding: 1rem;
-  border-radius: 14px;
-  border: 1px solid rgba(14, 45, 68, 0.15);
-  background: rgba(255, 255, 255, 0.76);
+  border-radius: 12px;
+  border: 1px solid #dde3eb;
+  background: #ffffff;
 }
 
 .summary-box h2 {
@@ -136,8 +115,8 @@ h1 {
   margin-top: 0.9rem;
   padding: 0.8rem;
   border-radius: 10px;
-  background: rgba(248, 252, 255, 0.95);
-  border: 1px solid rgba(22, 70, 100, 0.16);
+  background: #ffffff;
+  border: 1px solid #dde3eb;
 }
 
 .summary-result h3 {
@@ -155,9 +134,9 @@ h1 {
 .stored-summaries {
   margin-top: 1rem;
   padding: 1rem;
-  border-radius: 14px;
-  border: 1px solid rgba(14, 45, 68, 0.15);
-  background: rgba(255, 255, 255, 0.76);
+  border-radius: 12px;
+  border: 1px solid #dde3eb;
+  background: #ffffff;
 }
 
 .stored-header {
@@ -185,8 +164,8 @@ h1 {
   display: block;
   padding: 0.7rem 0.8rem;
   border-radius: 10px;
-  border: 1px solid rgba(17, 60, 89, 0.16);
-  background: rgba(251, 254, 255, 0.95);
+  border: 1px solid #dde3eb;
+  background: #ffffff;
   text-decoration: none;
 }
 

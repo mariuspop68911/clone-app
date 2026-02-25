@@ -1,16 +1,7 @@
-:host {
-  display: block;
-  min-height: 100dvh;
-  background:
-    radial-gradient(circle at 15% 10%, #ffe3a6 0%, transparent 34%),
-    radial-gradient(circle at 88% 14%, #a8d8ff 0%, transparent 30%),
-    linear-gradient(150deg, #f7efdf 0%, #e0eef9 55%, #eef7ee 100%);
-}
-
 .chat-page {
   max-width: 980px;
   margin: 0 auto;
-  min-height: 100dvh;
+  min-height: calc(100dvh - 2rem);
   display: flex;
   flex-direction: column;
   padding: 1rem 1rem 0.9rem;
@@ -34,10 +25,9 @@ h1 {
 
 .chat-body {
   flex: 1;
-  border-radius: 16px;
-  border: 1px solid rgba(12, 48, 73, 0.14);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border-radius: 12px;
+  border: 1px solid #dde3eb;
+  background: #ffffff;
   padding: 0.9rem;
   overflow-y: auto;
 }
@@ -62,7 +52,7 @@ h1 {
 }
 
 .bubble-user {
-  background: #1d4c72;
+  background: #1877f2;
   color: #fff;
 }
 
@@ -89,16 +79,7 @@ h1 {
 }
 
 .composer button {
-  border: 0;
   border-radius: 12px;
   padding: 0.66rem 1rem;
-  background: #1b567f;
-  color: #fff;
   font-weight: 700;
-  cursor: pointer;
-}
-
-.composer button:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
 }

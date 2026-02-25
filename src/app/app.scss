@@ -1,0 +1,125 @@
+.app-layout {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  background: #ffffff;
+}
+
+.drawer {
+  border-right: 1px solid #dde3eb;
+  padding: 1rem;
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  background: #ffffff;
+}
+
+.drawer h1 {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  color: #1c1e21;
+}
+
+.drawer nav {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.drawer a {
+  display: block;
+  text-decoration: none;
+  color: #1c1e21;
+  font-weight: 600;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+}
+
+.drawer a:hover {
+  background: #f0f2f5;
+}
+
+.drawer a.active {
+  background: #e7f3ff;
+  color: #1877f2;
+}
+
+.drawer-docs {
+  border-top: 1px solid #dde3eb;
+  padding-top: 0.75rem;
+}
+
+.drawer-docs h2 {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #606770;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.drawer-docs p {
+  margin: 0.6rem 0 0;
+  color: #606770;
+  font-size: 0.9rem;
+}
+
+.drawer-docs ul {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.drawer-docs li a,
+.drawer-docs li span {
+  display: block;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.drawer-docs li a {
+  color: #1c1e21;
+  text-decoration: none;
+}
+
+.drawer-docs li a:hover {
+  background: #f0f2f5;
+}
+
+.drawer-docs li a.active-doc {
+  background: #e7f3ff;
+  color: #1877f2;
+  font-weight: 700;
+}
+
+.drawer-docs li span {
+  color: #8a8d91;
+}
+
+.content {
+  min-width: 0;
+  background: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid #dde3eb;
+  }
+
+  .drawer nav {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer a {
+    text-align: left;
+  }
+}

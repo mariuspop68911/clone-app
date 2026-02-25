@@ -1,32 +1,14 @@
-:host {
-  display: block;
-  min-height: 100dvh;
-  background:
-    radial-gradient(circle at 20% 10%, #ffd36d 0%, transparent 35%),
-    radial-gradient(circle at 90% 20%, #9dd9ff 0%, transparent 30%),
-    linear-gradient(160deg, #f7f4ea 0%, #d8e8f3 55%, #f1f8ff 100%);
-}
-
 .docs-page {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 2rem 1rem 3rem;
+  padding: 1.2rem 1rem 2rem;
 }
 
 .hero {
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #dde3eb;
+  border-radius: 12px;
   padding: 1.2rem 1.2rem 1.4rem;
-  backdrop-filter: blur(8px);
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.75rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #56687a;
 }
 
 h1 {
@@ -50,28 +32,16 @@ h1 {
 
 .actions button,
 .actions a {
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 0.58rem 1rem;
   font-weight: 600;
   text-decoration: none;
 }
 
-.actions button {
-  border: 1px solid #163a57;
-  background: #163a57;
-  color: #fff;
-  cursor: pointer;
-}
-
-.actions button:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
 .actions a {
-  border: 1px solid #163a57;
-  color: #163a57;
-  background: transparent;
+  border: 1px solid #1877f2;
+  color: #ffffff;
+  background: #1877f2;
 }
 
 .message {
@@ -91,10 +61,10 @@ h1 {
 
 .doc-card {
   display: block;
-  border: 1px solid rgba(9, 39, 62, 0.14);
-  border-radius: 14px;
+  border: 1px solid #dde3eb;
+  border-radius: 12px;
   padding: 0.95rem;
-  background: rgba(255, 255, 255, 0.86);
+  background: #ffffff;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -108,7 +78,7 @@ h1 {
 
 .doc-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 22px rgba(7, 39, 67, 0.13);
+  box-shadow: 0 8px 18px rgba(24, 119, 242, 0.15);
 }
 
 .doc-card h2 {
