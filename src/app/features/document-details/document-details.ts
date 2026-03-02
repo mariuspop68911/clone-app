@@ -53,8 +53,7 @@ export class DocumentDetailsComponent {
         }
         this.lastSuccessUpdatedAt.set(job.updatedAt);
         this.loadStoredSummaries();
-      },
-      { allowSignalWrites: true }
+      }
     );
   }
 
