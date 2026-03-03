@@ -3,6 +3,12 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ChunkedTtsPlayerService } from '../../core/audio/chunked-tts-player.service';
 import { RagApiService, RagStoredSummaryResponse } from '../../core/api/rag-api.service';
 
+interface SummaryToken {
+  text: string;
+  isWord: boolean;
+  wordIndex: number;
+}
+
 @Component({
   selector: 'app-summary-details',
   imports: [RouterLink],
@@ -20,6 +26,8 @@ export class SummaryDetailsComponent {
   ttsPlaying = signal(false);
   ttsCurrentChunk = signal(0);
   ttsTotalChunks = signal(0);
+  ttsCurrentWord = signal(-1);
+  ttsTotalWords = signal(0);
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -50,6 +58,8 @@ export class SummaryDetailsComponent {
 
     this.ttsCurrentChunk.set(0);
     this.ttsTotalChunks.set(0);
+    this.ttsCurrentWord.set(-1);
+    this.ttsTotalWords.set(0);
 
     await this.ttsPlayer.play(text, {
       onLoading: (loading) => this.ttsLoading.set(loading),
@@ -58,6 +68,10 @@ export class SummaryDetailsComponent {
       onProgress: (current, total) => {
         this.ttsCurrentChunk.set(current);
         this.ttsTotalChunks.set(total);
+      },
+      onWordProgress: (currentWordIndex, totalWords) => {
+        this.ttsCurrentWord.set(currentWordIndex);
+        this.ttsTotalWords.set(totalWords);
       }
     });
   }
@@ -65,6 +79,27 @@ export class SummaryDetailsComponent {
   stopSummaryTts(): void {
     this.ttsPlayer.stop();
     this.ttsPlaying.set(false);
+    this.ttsCurrentWord.set(-1);
+    this.ttsTotalWords.set(0);
+  }
+
+  summaryTokens(text: string): SummaryToken[] {
+    const parts = text.split(/(\s+)/);
+    const tokens: SummaryToken[] = [];
+    let wordIndex = -1;
+
+    for (const part of parts) {
+      const isWord = part.trim().length > 0;
+      if (isWord) {
+        wordIndex += 1;
+      }
+      tokens.push({
+        text: part,
+        isWord,
+        wordIndex
+      });
+    }
+    return tokens;
   }
 
   private loadSummary(): void {

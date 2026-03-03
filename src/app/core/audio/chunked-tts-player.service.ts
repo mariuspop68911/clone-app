@@ -6,6 +6,7 @@ export interface ChunkedTtsHooks {
   onLoading?: (loading: boolean) => void;
   onPlaying?: (playing: boolean) => void;
   onProgress?: (currentChunk: number, totalChunks: number) => void;
+  onWordProgress?: (currentWordIndex: number, totalWords: number) => void;
   onMessage?: (message: string) => void;
 }
 
@@ -40,6 +41,8 @@ export class ChunkedTtsPlayerService {
     }
 
     const chunks = this.chunkText(normalized);
+    const chunkWordCounts = chunks.map((chunk) => this.countWords(chunk));
+    const totalWords = chunkWordCounts.reduce((sum, count) => sum + count, 0);
     this.stop();
     hooks?.onLoading?.(true);
     hooks?.onMessage?.('');
@@ -56,7 +59,17 @@ export class ChunkedTtsPlayerService {
 
       for (let i = 0; i < chunks.length; i += 1) {
         hooks?.onProgress?.(i + 1, chunks.length);
+        const chunkPrefixWords = chunkWordCounts.slice(0, i).reduce((sum, count) => sum + count, 0);
+        const currentChunkWordCount = chunkWordCounts[i] ?? 0;
+        const removeWordProgressListener = this.attachWordProgressListener(
+          chunkPrefixWords,
+          currentChunkWordCount,
+          totalWords,
+          hooks
+        );
+
         if (!nextChunkBlobPromise) {
+          removeWordProgressListener();
           throw new Error('Missing queued TTS chunk.');
         }
         const blob = await nextChunkBlobPromise;
@@ -77,6 +90,7 @@ export class ChunkedTtsPlayerService {
         }
 
         await this.waitForChunkEnd(this.abortController.signal);
+        removeWordProgressListener();
       }
 
       hooks?.onPlaying?.(false);
@@ -150,6 +164,43 @@ export class ChunkedTtsPlayerService {
     });
   }
 
+  private attachWordProgressListener(
+    chunkPrefixWords: number,
+    currentChunkWordCount: number,
+    totalWords: number,
+    hooks?: ChunkedTtsHooks
+  ): () => void {
+    if (!this.audio || currentChunkWordCount <= 0) {
+      return () => {};
+    }
+
+    const emitProgress = () => {
+      if (!this.audio) {
+        return;
+      }
+      const duration = Number.isFinite(this.audio.duration) && this.audio.duration > 0
+        ? this.audio.duration
+        : 0;
+      const ratio = duration > 0 ? this.audio.currentTime / duration : 0;
+      const chunkWordIndex = Math.min(
+        currentChunkWordCount - 1,
+        Math.max(0, Math.floor(ratio * currentChunkWordCount))
+      );
+      const globalWordIndex = chunkPrefixWords + chunkWordIndex;
+      hooks?.onWordProgress?.(globalWordIndex, totalWords);
+    };
+
+    emitProgress();
+    this.audio.addEventListener('timeupdate', emitProgress);
+    return () => {
+      this.audio?.removeEventListener('timeupdate', emitProgress);
+      if (currentChunkWordCount > 0) {
+        const finalWordIndex = chunkPrefixWords + currentChunkWordCount - 1;
+        hooks?.onWordProgress?.(finalWordIndex, totalWords);
+      }
+    };
+  }
+
   private chunkText(text: string): string[] {
     const normalized = text.replace(/\s+/g, ' ').trim();
     if (normalized.length <= this.maxChunkChars) {
@@ -200,5 +251,10 @@ export class ChunkedTtsPlayerService {
       URL.revokeObjectURL(this.currentObjectUrl);
       this.currentObjectUrl = null;
     }
+  }
+
+  private countWords(text: string): number {
+    const matches = text.trim().match(/\S+/g);
+    return matches ? matches.length : 0;
   }
 }

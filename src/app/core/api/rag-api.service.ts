@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, timeout } from 'rxjs';
 
@@ -60,6 +60,33 @@ export interface RagAskResponse {
   [key: string]: unknown;
 }
 
+export interface RagCharacterDetails {
+  id: number;
+  doc_id?: number;
+  docId?: number;
+  character_name?: string;
+  characterName?: string;
+  summary?: string;
+  top_k?: number;
+  topK?: number;
+  created_at?: string;
+  createdAt?: string;
+  updated_at?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface RagChapterEventResponse {
+  id: number;
+  docKey: string;
+  chapterId: number;
+  chapterTitle?: string | null;
+  eventOrder: number;
+  eventText: string;
+  importanceScore: number;
+  createdAt?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RagApiService {
   private readonly baseUrl = '/api/rag';
@@ -96,5 +123,22 @@ export class RagApiService {
 
   askQuestion(req: RagAskRequest): Observable<RagAskResponse> {
     return this.http.post<RagAskResponse>(`${this.baseUrl}/ask`, req);
+  }
+
+  getCharactersByDocKey(docKey: string): Observable<RagCharacterDetails[]> {
+    return this.http.get<RagCharacterDetails[]>(
+      `${this.baseUrl}/characters/${encodeURIComponent(docKey)}`
+    );
+  }
+
+  listChapterEvents(docKey: string, minImportance?: number): Observable<RagChapterEventResponse[]> {
+    let params: HttpParams | undefined;
+    if (typeof minImportance === 'number' && Number.isFinite(minImportance)) {
+      params = new HttpParams().set('minImportance', minImportance.toString());
+    }
+    return this.http.get<RagChapterEventResponse[]>(
+      `${this.baseUrl}/chapter-events/${encodeURIComponent(docKey)}`,
+      { params }
+    );
   }
 }

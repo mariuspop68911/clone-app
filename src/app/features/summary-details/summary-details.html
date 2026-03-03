@@ -46,7 +46,21 @@
         <p class="state error">{{ ttsMessage() }}</p>
       }
 
-      <div class="summary-text">{{ item.summary }}</div>
+      @if (ttsPlaying()) {
+        <p class="state">Word {{ ttsCurrentWord() + 1 }} of {{ ttsTotalWords() || 1 }}</p>
+      }
+
+      <div class="summary-text">
+        @for (token of summaryTokens(item.summary); track $index) {
+          @if (token.isWord) {
+            <span class="word" [class.word-active]="token.wordIndex === ttsCurrentWord()">
+              {{ token.text }}
+            </span>
+          } @else {
+            <span>{{ token.text }}</span>
+          }
+        }
+      </div>
     }
   </article>
 </section>

@@ -71,6 +71,24 @@ export class DocumentDetailsComponent {
     this.router.navigate(['/documents', key, 'chat']);
   }
 
+  characters(): void {
+    const key = this.docKey();
+    if (!key || key === 'Unknown Document') {
+      this.message.set('Missing docKey.');
+      return;
+    }
+    this.router.navigate(['/documents', key, 'characters']);
+  }
+
+  events(): void {
+    const key = this.docKey();
+    if (!key || key === 'Unknown Document') {
+      this.message.set('Missing docKey.');
+      return;
+    }
+    this.router.navigate(['/documents', key, 'events']);
+  }
+
   startSummary(size: RagSummarySize): void {
     const key = this.docKey();
     if (!key || key === 'Unknown Document') {

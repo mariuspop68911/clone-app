@@ -1,0 +1,31 @@
+<section class="characters-page">
+  <a class="back" [routerLink]="['/documents', docKey()]">Back to Document Details</a>
+
+  <section class="panel">
+    <h1>Characters: {{ docKey() }}</h1>
+
+    @if (loading()) {
+      <p class="status">Loading characters...</p>
+    }
+
+    @if (message()) {
+      <p class="status error">{{ message() }}</p>
+      @if (!loading()) {
+        <button type="button" (click)="retry()">Try Again</button>
+      }
+    }
+
+    @if (characters().length) {
+      <ul class="cards">
+        @for (item of characters(); track item.id) {
+          <li class="card">
+            <div class="card-head">
+              <h2 class="card-title">{{ characterName(item) }}</h2>
+            </div>
+            <p class="summary">{{ item.summary || 'No summary available.' }}</p>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</section>

@@ -2,6 +2,14 @@ import { RenderMode, ServerRoute } from '@angular/ssr';
 
 export const serverRoutes: ServerRoute[] = [
   {
+    path: 'documents/:docKey/characters',
+    renderMode: RenderMode.Server
+  },
+  {
+    path: 'documents/:docKey/events',
+    renderMode: RenderMode.Server
+  },
+  {
     path: 'documents/:docKey/chat',
     renderMode: RenderMode.Server
   },

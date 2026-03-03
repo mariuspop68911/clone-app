@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
+import { DocumentCharactersComponent } from './features/document-characters';
 import { DocumentDetailsComponent } from './features/document-details';
+import { DocumentEventsComponent } from './features/document-events';
 import { DocumentChatComponent } from './features/document-chat';
 import { DocumentsComponent } from './features/documents';
 import { ImportComponent } from './features/import';
@@ -10,6 +12,8 @@ export const routes: Routes = [
   { path: 'import', component: ImportComponent },
   { path: 'documents', component: DocumentsComponent },
   { path: 'documents/:docKey', component: DocumentDetailsComponent },
+  { path: 'documents/:docKey/characters', component: DocumentCharactersComponent },
+  { path: 'documents/:docKey/events', component: DocumentEventsComponent },
   { path: 'documents/:docKey/chat', component: DocumentChatComponent },
   { path: 'documents/:docKey/summaries/:summaryId', component: SummaryDetailsComponent },
   { path: '**', redirectTo: 'documents' }

@@ -73,3 +73,14 @@ h1 {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.word {
+  border-radius: 4px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.word-active {
+  background: #ffe08a;
+  color: #332500;
+  box-shadow: 0 0 0 1px rgba(140, 99, 0, 0.2) inset;
+}

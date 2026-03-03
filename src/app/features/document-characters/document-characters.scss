@@ -1,0 +1,78 @@
+.characters-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 1.2rem 1rem 2rem;
+}
+
+.back {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: #17486c;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.panel {
+  border: 1px solid #dde3eb;
+  border-radius: 12px;
+  padding: 1.1rem;
+  background: #fff;
+}
+
+h1 {
+  margin: 0;
+  color: #11263a;
+}
+
+.status {
+  margin: 0.8rem 0 0;
+  color: #2d4a61;
+}
+
+.status.error {
+  color: #8a2c2c;
+}
+
+.cards {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.9rem;
+}
+
+.card {
+  border: 1px solid #d7e2ee;
+  border-radius: 12px;
+  padding: 0.95rem;
+  background: #ffffff;
+  box-shadow: 0 5px 14px rgba(22, 61, 94, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(22, 61, 94, 0.14);
+}
+
+.card-title {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.card-head {
+  margin: -0.95rem -0.95rem 0;
+  padding: 0.75rem 0.95rem;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(90deg, #1877f2 0%, #1f8fff 100%);
+}
+
+.summary {
+  margin: 0.6rem 0 0;
+  color: #243f55;
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
