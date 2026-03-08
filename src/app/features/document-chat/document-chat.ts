@@ -27,6 +27,7 @@ export class DocumentChatComponent {
   ) {
     this.route.paramMap.subscribe((params) => {
       this.docKey.set(params.get('docKey') ?? '');
+      const initialQuestion = this.route.snapshot.queryParamMap.get('q')?.trim() ?? '';
       this.message.set('');
       this.messages.set([
         {
@@ -34,6 +35,10 @@ export class DocumentChatComponent {
           text: 'Ask a question about this document and I will answer from indexed content.'
         }
       ]);
+      this.input = initialQuestion;
+      if (initialQuestion) {
+        setTimeout(() => this.send(), 0);
+      }
     });
   }
 

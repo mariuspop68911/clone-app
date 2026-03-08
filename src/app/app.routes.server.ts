@@ -6,6 +6,10 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Server
   },
   {
+    path: 'documents/:docKey/characters-images',
+    renderMode: RenderMode.Server
+  },
+  {
     path: 'documents/:docKey/events',
     renderMode: RenderMode.Server
   },

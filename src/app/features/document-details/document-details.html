@@ -7,10 +7,76 @@
 
     <div class="actions">
       <button type="button" class="btn-summary" (click)="summarize()">Summarize</button>
+      <button type="button" class="btn-comic" (click)="generateComicBook()" [disabled]="comicLoading()">
+        {{ comicLoading() ? 'Generating Comic...' : 'Generate Comic' }}
+      </button>
+      <button
+        type="button"
+        class="btn-comic"
+        (click)="generateCharacterImages()"
+      >
+        Generate Characters Images
+      </button>
       <button type="button" class="btn-ask" (click)="ask()">Ask</button>
       <button type="button" class="btn-characters" (click)="characters()">Characters</button>
       <button type="button" class="btn-events" (click)="events()">Events</button>
     </div>
+
+    @if (comicLoading() || comicMessage() || comicProcessedChunks() > 0 || comicNotesCount() > 0) {
+      <section class="comic-progress">
+        <h2>Comic Generation</h2>
+        <div class="progress-track">
+          <div class="progress-fill" [style.width.%]="comicProgressPercent()"></div>
+        </div>
+        <p class="job-meta">
+          Progress: {{ comicProcessedChunks() }} / {{ comicTotalChunks() || '?' }} chunks
+          ({{ comicProgressPercent() }}%)
+        </p>
+        @if (comicLastSceneId() !== null) {
+          <p class="job-meta">Last Scene Id: {{ comicLastSceneId() }}</p>
+        }
+        @if (comicNotesCount() > 0) {
+          <p class="job-meta">Generated Notes: {{ comicNotesCount() }}</p>
+        }
+        @if (comicMessage()) {
+          <p class="message">{{ comicMessage() }}</p>
+        }
+      </section>
+    }
+
+    <div class="quick-ask">
+      <input
+        type="text"
+        [value]="quickQuestion()"
+        (input)="onQuickQuestionInput($event)"
+        placeholder="Type your prompt..."
+      />
+      <button
+        type="button"
+        (click)="sendQuickQuestion()"
+        [disabled]="imageLoading() || !quickQuestion().trim()"
+      >
+        {{ imageLoading() ? 'Generating...' : 'Send' }}
+      </button>
+    </div>
+
+    @if (imageMessage()) {
+      <p class="message error">{{ imageMessage() }}</p>
+    }
+
+    @if (generatedImageUrl()) {
+      <section class="generated-image">
+        <img [src]="generatedImageUrl()" [alt]="'Generated image for: ' + quickQuestion()" />
+        <p class="job-meta">
+          @if (generatedImageModel()) {
+            <span>Model: {{ generatedImageModel() }}</span>
+          }
+          @if (generatedImageMimeType()) {
+            <span> | Mime: {{ generatedImageMimeType() }}</span>
+          }
+        </p>
+      </section>
+    }
 
     @if (showSizePicker()) {
       <div class="size-picker">

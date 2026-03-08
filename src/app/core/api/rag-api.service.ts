@@ -87,6 +87,53 @@ export interface RagChapterEventResponse {
   createdAt?: string;
 }
 
+export interface RagImageGenerateRequest {
+  prompt: string;
+  provider: "openai";
+  model: "gpt-image-1";
+}
+
+export interface RagImageGenerateResponse {
+  model?: string;
+  mimeType?: string;
+  imageBase64?: string;
+  [key: string]: unknown;
+}
+
+export interface RagComicNoteResponse {
+  id?: number;
+  [key: string]: unknown;
+}
+
+export interface RagComicBookGenerateRequest {
+  docKey: string;
+  limit?: number;
+}
+
+export interface RagComicBookGenerateResponse {
+  docKey?: string;
+  docId?: number;
+  limit?: number;
+  processedChunks?: number;
+  lastSceneId?: number;
+  notes?: RagComicNoteResponse[];
+  [key: string]: unknown;
+}
+
+export interface RagComicCharacterImageItem {
+  name?: string;
+  appearance?: string | null;
+  [key: string]: unknown;
+}
+
+export interface RagComicCharacterImagesGenerateResponse {
+  docKey?: string;
+  docId?: number;
+  count?: number;
+  characters?: RagComicCharacterImageItem[];
+  [key: string]: unknown;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RagApiService {
   private readonly baseUrl = '/api/rag';
@@ -139,6 +186,22 @@ export class RagApiService {
     return this.http.get<RagChapterEventResponse[]>(
       `${this.baseUrl}/chapter-events/${encodeURIComponent(docKey)}`,
       { params }
+    );
+  }
+
+  generateImage(req: RagImageGenerateRequest): Observable<RagImageGenerateResponse> {
+    return this.http.post<RagImageGenerateResponse>(`${this.baseUrl}/image/generate`, req);
+  }
+
+  generateComicBook(req: RagComicBookGenerateRequest): Observable<RagComicBookGenerateResponse> {
+    return this.http.post<RagComicBookGenerateResponse>(`${this.baseUrl}/comic-book/generate`, req);
+  }
+
+  generateComicCharacterImages(
+    docKey: string
+  ): Observable<RagComicCharacterImagesGenerateResponse> {
+    return this.http.get<RagComicCharacterImagesGenerateResponse>(
+      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/generate-image-characters`
     );
   }
 }

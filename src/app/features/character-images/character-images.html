@@ -1,0 +1,35 @@
+<section class="characters-images-page">
+  <a class="back" [routerLink]="['/documents', docKey()]">Back to Document Details</a>
+
+  <article class="panel">
+    <p class="eyebrow">Characters Images</p>
+    <h1>{{ docKey() }}</h1>
+
+    <div class="header-actions">
+      <button type="button" class="btn-refresh" (click)="refresh()" [disabled]="loading()">
+        {{ loading() ? 'Loading...' : 'Refresh' }}
+      </button>
+    </div>
+
+    @if (message()) {
+      <p class="message">{{ message() }}</p>
+    }
+
+    @if (result(); as payload) {
+      <p class="meta">
+        Doc Id: {{ payload.docId ?? '-' }} | Count: {{ payload.count ?? characters().length }}
+      </p>
+
+      @if (characters().length) {
+        <ul class="characters-list">
+          @for (item of characters(); track item.name ?? $index) {
+            <li class="character-card">
+              <p class="name">{{ characterName(item, $index) }}</p>
+              <p class="appearance">{{ characterAppearance(item) }}</p>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </article>
+</section>
