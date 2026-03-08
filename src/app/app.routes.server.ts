@@ -2,11 +2,19 @@ import { RenderMode, ServerRoute } from '@angular/ssr';
 
 export const serverRoutes: ServerRoute[] = [
   {
+    path: 'tts/openai',
+    renderMode: RenderMode.Server
+  },
+  {
     path: 'documents/:docKey/characters',
     renderMode: RenderMode.Server
   },
   {
     path: 'documents/:docKey/characters-images',
+    renderMode: RenderMode.Server
+  },
+  {
+    path: 'documents/:docKey/comic-page',
     renderMode: RenderMode.Server
   },
   {

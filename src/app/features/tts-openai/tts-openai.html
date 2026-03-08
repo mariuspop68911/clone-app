@@ -1,0 +1,51 @@
+<section class="tts-openai-page">
+  <a class="back" routerLink="/documents">Back to Documents</a>
+
+  <article class="panel">
+    <p class="eyebrow">OpenAI TTS</p>
+    <h1>Voice Generator</h1>
+
+    <label class="field-label" for="voice-select">Voice</label>
+    <div class="row">
+      <select id="voice-select" [(ngModel)]="selectedVoice">
+        <option value="" disabled>Select a voice</option>
+        @for (voice of voices(); track voice) {
+          <option [value]="voice">{{ voice }}</option>
+        }
+      </select>
+      <button type="button" class="btn-secondary" (click)="loadVoices()" [disabled]="loadingVoices() || generating()">
+        {{ loadingVoices() ? 'Loading...' : 'Reload Voices' }}
+      </button>
+    </div>
+
+    <label class="field-label" for="tts-text">Text</label>
+    <textarea
+      id="tts-text"
+      [(ngModel)]="text"
+      rows="6"
+      placeholder="Hello from comic narrator"
+    ></textarea>
+
+    <div class="actions">
+      <button
+        type="button"
+        class="btn-primary"
+        (click)="generate()"
+        [disabled]="generating() || loadingVoices() || !text.trim() || !selectedVoice"
+      >
+        {{ generating() ? 'Generating...' : 'Generate' }}
+      </button>
+    </div>
+
+    @if (errorMessage()) {
+      <p class="error">{{ errorMessage() }}</p>
+    }
+
+    @if (audioUrl()) {
+      <section class="audio-box">
+        <p class="meta">Mime: {{ audioMimeType() || 'audio/mpeg' }}</p>
+        <audio controls [src]="audioUrl()"></audio>
+      </section>
+    }
+  </article>
+</section>

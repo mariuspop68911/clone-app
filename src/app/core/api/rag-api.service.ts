@@ -89,14 +89,64 @@ export interface RagChapterEventResponse {
 
 export interface RagImageGenerateRequest {
   prompt: string;
-  provider: "openai";
-  model: "gpt-image-1";
+  limit?: number;
 }
 
 export interface RagImageGenerateResponse {
   model?: string;
   mimeType?: string;
   imageBase64?: string;
+  [key: string]: unknown;
+}
+
+export interface RagComicPageGenerateRequest {
+  docKey: string;
+  limit?: number;
+}
+
+export interface RagComicPageGenerateResponse {
+  status?: string;
+  docKey?: string;
+  docId?: number;
+  limit?: number;
+  requestedNotes?: number;
+  processedNotes?: number;
+  failedNotes?: number;
+  imageUris?: string[];
+  [key: string]: unknown;
+}
+
+export interface RagComicPageNoteResponse {
+  id?: number;
+  docId?: number;
+  chunkId?: number;
+  chunkIndex?: number;
+  previousSceneId?: number;
+  previousLocation?: string;
+  previousMainNotesJson?: string;
+  imagePrompt?: string;
+  charactersInImageJson?: string;
+  segmentsJson?: string;
+  updatedSceneIdMax?: number;
+  rawJson?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
+export interface RagComicPageItemResponse {
+  comicNote?: RagComicPageNoteResponse;
+  imageUris?: string[];
+  [key: string]: unknown;
+}
+
+export interface RagComicPagesResponse {
+  docKey?: string;
+  docId?: number;
+  folder?: string;
+  limit?: number;
+  requestedNotes?: number;
+  returnedNotes?: number;
+  items?: RagComicPageItemResponse[];
   [key: string]: unknown;
 }
 
@@ -202,6 +252,21 @@ export class RagApiService {
   ): Observable<RagComicCharacterImagesGenerateResponse> {
     return this.http.get<RagComicCharacterImagesGenerateResponse>(
       `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/generate-image-characters`
+    );
+  }
+
+  generateComicPageImages(req: RagComicPageGenerateRequest): Observable<RagComicPageGenerateResponse> {
+    return this.http.post<RagComicPageGenerateResponse>(`${this.baseUrl}/image/generate`, req);
+  }
+
+  getComicPages(docKey: string, limit?: number): Observable<RagComicPagesResponse> {
+    let params: HttpParams | undefined;
+    if (typeof limit === 'number' && Number.isFinite(limit)) {
+      params = new HttpParams().set('limit', String(limit));
+    }
+    return this.http.get<RagComicPagesResponse>(
+      `${this.baseUrl}/image/${encodeURIComponent(docKey)}/comic-pages`,
+      { params }
     );
   }
 }

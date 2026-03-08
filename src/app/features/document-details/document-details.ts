@@ -7,7 +7,6 @@ import {
 import {
   RagApiService,
   RagComicBookGenerateResponse,
-  RagImageGenerateResponse,
   RagStoredSummaryResponse,
   RagSummarySize
 } from '../../core/api/rag-api.service';
@@ -22,12 +21,6 @@ export class DocumentDetailsComponent {
   docKey = signal('');
   showSizePicker = signal(false);
   message = signal('');
-  quickQuestion = signal('');
-  imageLoading = signal(false);
-  imageMessage = signal('');
-  generatedImageUrl = signal('');
-  generatedImageMimeType = signal('');
-  generatedImageModel = signal('');
   comicLoading = signal(false);
   comicMessage = signal('');
   comicProcessedChunks = signal(0);
@@ -52,12 +45,6 @@ export class DocumentDetailsComponent {
       this.docKey.set(params.get('docKey') ?? 'Unknown Document');
       this.showSizePicker.set(false);
       this.message.set('');
-      this.quickQuestion.set('');
-      this.imageLoading.set(false);
-      this.imageMessage.set('');
-      this.generatedImageUrl.set('');
-      this.generatedImageMimeType.set('');
-      this.generatedImageModel.set('');
       this.comicLoading.set(false);
       this.comicMessage.set('');
       this.comicProcessedChunks.set(0);
@@ -95,51 +82,6 @@ export class DocumentDetailsComponent {
       return;
     }
     this.router.navigate(['/documents', key, 'chat']);
-  }
-
-  onQuickQuestionInput(event: Event): void {
-    const target = event.target as HTMLInputElement | null;
-    this.quickQuestion.set(target?.value ?? '');
-  }
-
-  sendQuickQuestion(): void {
-    const prompt = this.quickQuestion().trim();
-    if (!prompt || this.imageLoading()) {
-      return;
-    }
-
-    this.imageLoading.set(true);
-    this.imageMessage.set('');
-    this.generatedImageUrl.set('');
-    this.generatedImageMimeType.set('');
-    this.generatedImageModel.set('');
-    const provider = 'openai';
-    const model = 'gpt-image-1';
-
-    this.ragApi.generateImage({ prompt, provider, model }).subscribe({
-      next: (response) => {
-        const imageUrl = this.toImageDataUrl(response);
-        if (!imageUrl) {
-          this.imageMessage.set('Image generation completed, but no image data was returned.');
-          this.imageLoading.set(false);
-          return;
-        }
-
-        this.generatedImageUrl.set(imageUrl);
-        this.generatedImageMimeType.set((response.mimeType ?? '').trim());
-        this.generatedImageModel.set((response.model ?? '').trim());
-        this.imageLoading.set(false);
-      },
-      error: (err) => {
-        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
-        const backendMessage =
-          typeof err?.error === 'string'
-            ? err.error
-            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-        this.imageMessage.set(`Image generation failed (${status}): ${backendMessage}`);
-        this.imageLoading.set(false);
-      }
-    });
   }
 
   generateComicBook(): void {
@@ -186,6 +128,14 @@ export class DocumentDetailsComponent {
     this.router.navigate(['/documents', key, 'characters-images']);
   }
 
+  generateComicImages(): void {
+    const key = this.docKey().trim();
+    if (!key || key === 'Unknown Document') {
+      return;
+    }
+    this.router.navigate(['/documents', key, 'comic-page']);
+  }
+
   comicProgressPercent(): number {
     const total = this.comicTotalChunks();
     if (total <= 0) {
@@ -193,19 +143,6 @@ export class DocumentDetailsComponent {
     }
     const processed = Math.max(0, Math.min(this.comicProcessedChunks(), total));
     return Math.round((processed / total) * 100);
-  }
-
-  private toImageDataUrl(response: RagImageGenerateResponse): string {
-    const raw = (response.imageBase64 ?? '').trim();
-    if (!raw) {
-      return '';
-    }
-    if (raw.startsWith('data:')) {
-      return raw;
-    }
-
-    const mimeType = (response.mimeType ?? 'image/png').trim() || 'image/png';
-    return `data:${mimeType};base64,${raw}`;
   }
 
   private applyComicResponse(response: RagComicBookGenerateResponse): void {

@@ -17,6 +17,13 @@
       >
         Generate Characters Images
       </button>
+      <button
+        type="button"
+        class="btn-comic"
+        (click)="generateComicImages()"
+      >
+        Generate Comic Images
+      </button>
       <button type="button" class="btn-ask" (click)="ask()">Ask</button>
       <button type="button" class="btn-characters" (click)="characters()">Characters</button>
       <button type="button" class="btn-events" (click)="events()">Events</button>
@@ -41,40 +48,6 @@
         @if (comicMessage()) {
           <p class="message">{{ comicMessage() }}</p>
         }
-      </section>
-    }
-
-    <div class="quick-ask">
-      <input
-        type="text"
-        [value]="quickQuestion()"
-        (input)="onQuickQuestionInput($event)"
-        placeholder="Type your prompt..."
-      />
-      <button
-        type="button"
-        (click)="sendQuickQuestion()"
-        [disabled]="imageLoading() || !quickQuestion().trim()"
-      >
-        {{ imageLoading() ? 'Generating...' : 'Send' }}
-      </button>
-    </div>
-
-    @if (imageMessage()) {
-      <p class="message error">{{ imageMessage() }}</p>
-    }
-
-    @if (generatedImageUrl()) {
-      <section class="generated-image">
-        <img [src]="generatedImageUrl()" [alt]="'Generated image for: ' + quickQuestion()" />
-        <p class="job-meta">
-          @if (generatedImageModel()) {
-            <span>Model: {{ generatedImageModel() }}</span>
-          }
-          @if (generatedImageMimeType()) {
-            <span> | Mime: {{ generatedImageMimeType() }}</span>
-          }
-        </p>
       </section>
     }
 

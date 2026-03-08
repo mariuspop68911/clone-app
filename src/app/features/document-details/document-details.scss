@@ -48,46 +48,6 @@ h1 {
   font-weight: 700;
 }
 
-.quick-ask {
-  margin-top: 0.8rem;
-  display: flex;
-  gap: 0.55rem;
-  align-items: center;
-}
-
-.quick-ask input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid #c9d7e5;
-  border-radius: 8px;
-  padding: 0.58rem 0.7rem;
-  font: inherit;
-  color: #13283c;
-}
-
-.quick-ask button {
-  border-radius: 8px;
-  padding: 0.58rem 0.9rem;
-  font-weight: 700;
-}
-
-.generated-image {
-  margin-top: 0.9rem;
-  padding: 0.7rem;
-  border: 1px solid #dde3eb;
-  border-radius: 12px;
-  background: #ffffff;
-}
-
-.generated-image img {
-  display: block;
-  width: 100%;
-  max-height: 520px;
-  object-fit: contain;
-  border-radius: 8px;
-  background: #f5f7fb;
-}
-
 .comic-progress {
   margin-top: 1rem;
   border: 1px solid #dde3eb;

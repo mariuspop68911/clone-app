@@ -1,6 +1,7 @@
 import { Inject, Injectable, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { TtsApiService } from '../api/tts-api.service';
+import { firstValueFrom } from 'rxjs';
 
 export interface ChunkedTtsHooks {
   onLoading?: (loading: boolean) => void;
@@ -10,13 +11,21 @@ export interface ChunkedTtsHooks {
   onMessage?: (message: string) => void;
 }
 
+interface PreparedTtsAudio {
+  chunkWordCounts: number[];
+  totalWords: number;
+  blobs: Blob[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class ChunkedTtsPlayerService {
   private readonly maxChunkChars = 900;
+  private readonly maxCacheEntries = 30;
   private readonly isBrowser: boolean;
   private audio: HTMLAudioElement | null = null;
   private abortController: AbortController | null = null;
   private currentObjectUrl: string | null = null;
+  private readonly preparedCache = new Map<string, PreparedTtsAudio>();
 
   constructor(
     private readonly ttsApi: TtsApiService,
@@ -40,54 +49,35 @@ export class ChunkedTtsPlayerService {
       return;
     }
 
-    const chunks = this.chunkText(normalized);
-    const chunkWordCounts = chunks.map((chunk) => this.countWords(chunk));
-    const totalWords = chunkWordCounts.reduce((sum, count) => sum + count, 0);
     this.stop();
     hooks?.onLoading?.(true);
     hooks?.onMessage?.('');
     hooks?.onPlaying?.(false);
 
     this.abortController = new AbortController();
-    let firstChunkStarted = false;
 
     try {
-      let nextChunkBlobPromise: Promise<Blob> | null = this.fetchChunkBlob(
-        chunks[0],
-        this.abortController.signal
-      );
+      const prepared = await this.prepareAudio(normalized, this.abortController.signal);
+      hooks?.onLoading?.(false);
 
-      for (let i = 0; i < chunks.length; i += 1) {
-        hooks?.onProgress?.(i + 1, chunks.length);
-        const chunkPrefixWords = chunkWordCounts.slice(0, i).reduce((sum, count) => sum + count, 0);
-        const currentChunkWordCount = chunkWordCounts[i] ?? 0;
+      for (let i = 0; i < prepared.blobs.length; i += 1) {
+        hooks?.onProgress?.(i + 1, prepared.blobs.length);
+        const chunkPrefixWords = prepared.chunkWordCounts
+          .slice(0, i)
+          .reduce((sum, count) => sum + count, 0);
+        const currentChunkWordCount = prepared.chunkWordCounts[i] ?? 0;
         const removeWordProgressListener = this.attachWordProgressListener(
           chunkPrefixWords,
           currentChunkWordCount,
-          totalWords,
+          prepared.totalWords,
           hooks
         );
 
-        if (!nextChunkBlobPromise) {
-          removeWordProgressListener();
-          throw new Error('Missing queued TTS chunk.');
-        }
-        const blob = await nextChunkBlobPromise;
-
-        nextChunkBlobPromise =
-          i + 1 < chunks.length
-            ? this.fetchChunkBlob(chunks[i + 1], this.abortController.signal)
-            : null;
-
         this.clearObjectUrl();
-        this.currentObjectUrl = URL.createObjectURL(blob);
+        this.currentObjectUrl = URL.createObjectURL(prepared.blobs[i]);
         this.audio.src = this.currentObjectUrl;
         await this.audio.play();
         hooks?.onPlaying?.(true);
-        if (!firstChunkStarted) {
-          firstChunkStarted = true;
-          hooks?.onLoading?.(false);
-        }
 
         await this.waitForChunkEnd(this.abortController.signal);
         removeWordProgressListener();
@@ -103,22 +93,68 @@ export class ChunkedTtsPlayerService {
         hooks?.onMessage?.(`TTS playback failed: ${raw?.message ?? 'unknown error'}`);
       }
     } finally {
-      if (!firstChunkStarted) {
-        hooks?.onLoading?.(false);
-      }
+      hooks?.onLoading?.(false);
       this.abortController = null;
     }
   }
 
-  private async fetchChunkBlob(chunk: string, signal: AbortSignal): Promise<Blob> {
-    const response = await this.ttsApi.streamTts(chunk, signal);
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(errText || `HTTP ${response.status}`);
+  async preload(text: string): Promise<void> {
+    if (!this.isBrowser || !this.audio) {
+      return;
     }
-    const contentType = response.headers.get('content-type') ?? 'audio/wav';
-    const audioBuffer = await response.arrayBuffer();
-    return new Blob([audioBuffer], { type: contentType });
+
+    const normalized = text.trim();
+    if (!normalized) {
+      return;
+    }
+
+    await this.prepareAudio(normalized);
+  }
+
+  private async fetchChunkBlob(chunk: string, signal: AbortSignal): Promise<Blob> {
+    if (signal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    const blob = await firstValueFrom(this.ttsApi.streamTts(chunk));
+    if (!blob.size) {
+      throw new Error('API returned empty audio content.');
+    }
+    return blob;
+  }
+
+  private async prepareAudio(text: string, signal?: AbortSignal): Promise<PreparedTtsAudio> {
+    const cached = this.preparedCache.get(text);
+    if (cached) {
+      return cached;
+    }
+
+    const chunks = this.chunkText(text);
+    const chunkWordCounts = chunks.map((chunk) => this.countWords(chunk));
+    const totalWords = chunkWordCounts.reduce((sum, count) => sum + count, 0);
+    const blobs: Blob[] = [];
+
+    for (const chunk of chunks) {
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      blobs.push(await this.fetchChunkBlob(chunk, signal ?? new AbortController().signal));
+    }
+
+    const prepared: PreparedTtsAudio = {
+      chunkWordCounts,
+      totalWords,
+      blobs
+    };
+
+    this.preparedCache.set(text, prepared);
+    if (this.preparedCache.size > this.maxCacheEntries) {
+      const firstKey = this.preparedCache.keys().next().value;
+      if (typeof firstKey === 'string') {
+        this.preparedCache.delete(firstKey);
+      }
+    }
+
+    return prepared;
   }
 
   stop(): void {
