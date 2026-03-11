@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, Input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RagApiService } from '../../core/api/rag-api.service';
@@ -15,6 +15,7 @@ interface ChatMessage {
   styleUrl: './document-chat.scss'
 })
 export class DocumentChatComponent {
+  @Input() embedded = false;
   docKey = signal('');
   input = '';
   loading = signal(false);

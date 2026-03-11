@@ -5,20 +5,6 @@
     <p class="eyebrow">Comic Page Images</p>
     <h1>{{ docKey() }}</h1>
 
-    <div class="actions">
-      <button type="button" class="btn-generate" (click)="generate()" [disabled]="generating() || loading()">
-        {{ generating() ? 'Generating...' : 'Generate' }}
-      </button>
-    </div>
-
-    @if (generateResponse(); as generatePayload) {
-      <p class="meta">
-        Last Generate: {{ generatePayload.status ?? '-' }} | Requested:
-        {{ generatePayload.requestedNotes ?? '-' }} | Processed:
-        {{ generatePayload.processedNotes ?? '-' }} | Failed: {{ generatePayload.failedNotes ?? '-' }}
-      </p>
-    }
-
     @if (message()) {
       <p class="message">{{ message() }}</p>
     }
@@ -102,7 +88,7 @@
                     type="button"
                     class="btn-tts-toggle"
                     (click)="toggleCardTts(item, cardIndex)"
-                    [disabled]="(ttsLoading() && !isCardLoading(item, cardIndex)) || generating() || loading()"
+                    [disabled]="(ttsLoading() && !isCardLoading(item, cardIndex)) || loading()"
                     [attr.aria-label]="isCardPlaying(item, cardIndex) ? 'Pause' : 'Play'"
                   >
                     @if (isCardPlaying(item, cardIndex)) {
@@ -136,4 +122,49 @@
       }
     }
   </article>
+
+  @if (askOpen()) {
+    <button
+      type="button"
+      class="ask-backdrop"
+      (click)="askOpen.set(false)"
+      aria-label="Close ask panel"
+    ></button>
+  }
+
+  @if (!askOpen()) {
+    <button
+      type="button"
+      class="ask-fab"
+      [class.ask-fab-open]="askOpen()"
+      (click)="askOpen.set(!askOpen())"
+      [attr.aria-expanded]="askOpen()"
+      aria-controls="comic-ask-panel"
+      aria-label="Open ask panel"
+    >
+      Ask
+    </button>
+  }
+
+  <aside
+    id="comic-ask-panel"
+    class="ask-drawer"
+    [class.ask-drawer-open]="askOpen()"
+    [attr.aria-hidden]="!askOpen()"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="ask-drawer-header">
+      <p class="ask-drawer-eyebrow">Ask</p>
+      <button
+        type="button"
+        class="ask-drawer-close"
+        (click)="askOpen.set(false)"
+        aria-label="Close ask panel"
+      >
+        Close
+      </button>
+    </div>
+
+    <app-document-chat [embedded]="true"></app-document-chat>
+  </aside>
 </section>

@@ -4,6 +4,10 @@
   padding: 1.2rem 1rem 2rem;
 }
 
+:host {
+  display: block;
+}
+
 .back {
   display: inline-block;
   margin-bottom: 1rem;
@@ -173,6 +177,108 @@ h1 {
   border-bottom: 0.36rem solid transparent;
   border-left: 0.56rem solid currentColor;
   margin-left: 0.08rem;
+}
+
+.ask-fab {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 30;
+  width: 4rem;
+  height: 4rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0f5fa8, #23a6d5);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 16px 32px rgba(15, 95, 168, 0.28);
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+
+.ask-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 36px rgba(15, 95, 168, 0.34);
+}
+
+.ask-fab-open {
+  opacity: 0.9;
+}
+
+.ask-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  border: 0;
+  background: rgba(11, 27, 40, 0.24);
+  cursor: pointer;
+}
+
+.ask-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  width: min(92vw, 440px);
+  background: #f8fbff;
+  border-left: 1px solid rgba(23, 72, 108, 0.14);
+  box-shadow: -24px 0 48px rgba(16, 45, 67, 0.18);
+  transform: translateX(100%);
+  transition: transform 220ms ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.ask-drawer-open {
+  transform: translateX(0);
+}
+
+.ask-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0;
+}
+
+.ask-drawer-eyebrow {
+  margin: 0;
+  color: #2a5878;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.ask-drawer-close {
+  border: 1px solid #c7d4df;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #183a57;
+  font-weight: 700;
+  padding: 0.42rem 0.8rem;
+  cursor: pointer;
+}
+
+.ask-drawer app-document-chat {
+  display: block;
+  min-height: 0;
+  flex: 1;
+}
+
+@media (max-width: 720px) {
+  .ask-fab {
+    right: 1rem;
+    bottom: 1rem;
+    width: 3.6rem;
+    height: 3.6rem;
+  }
+
+  .ask-drawer {
+    width: 100vw;
+  }
 }
 
 .tts-icon-pause {

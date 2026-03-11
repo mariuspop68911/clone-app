@@ -1,8 +1,10 @@
-<section class="chat-page">
-  <header class="chat-header">
-    <a class="back" [routerLink]="['/documents', docKey()]">Back to Details</a>
-    <h1>Chat: {{ docKey() }}</h1>
-  </header>
+<section class="chat-page" [class.chat-page-embedded]="embedded">
+  @if (!embedded) {
+    <header class="chat-header">
+      <a class="back" [routerLink]="['/documents', docKey()]">Back to Details</a>
+      <h1>Chat: {{ docKey() }}</h1>
+    </header>
+  }
 
   <section class="chat-body">
     @for (item of messages(); track $index) {

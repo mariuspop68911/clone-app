@@ -16,36 +16,6 @@ export interface RagDocumentResponse {
   [key: string]: unknown;
 }
 
-export type RagSummarySize = 'small' | 'large';
-
-export interface RagSummaryRequest {
-  docKey: string;
-  size: RagSummarySize;
-}
-
-export interface RagSummaryResponse {
-  docKey?: string;
-  size?: string;
-  totalChunksInDoc?: number;
-  processedChunks?: number;
-  sectionSummaries?: number;
-  summary?: string;
-  [key: string]: unknown;
-}
-
-export interface RagStoredSummaryResponse {
-  id: number;
-  name: string;
-  docKey: string;
-  size: string;
-  totalChunksInDoc: number;
-  processedChunks: number;
-  sectionSummaries: number;
-  summary: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface RagAskRequest {
   question: string;
   docKey: string;
@@ -60,33 +30,6 @@ export interface RagAskResponse {
   [key: string]: unknown;
 }
 
-export interface RagCharacterDetails {
-  id: number;
-  doc_id?: number;
-  docId?: number;
-  character_name?: string;
-  characterName?: string;
-  summary?: string;
-  top_k?: number;
-  topK?: number;
-  created_at?: string;
-  createdAt?: string;
-  updated_at?: string;
-  updatedAt?: string;
-  [key: string]: unknown;
-}
-
-export interface RagChapterEventResponse {
-  id: number;
-  docKey: string;
-  chapterId: number;
-  chapterTitle?: string | null;
-  eventOrder: number;
-  eventText: string;
-  importanceScore: number;
-  createdAt?: string;
-}
-
 export interface RagImageGenerateRequest {
   prompt: string;
   limit?: number;
@@ -96,23 +39,6 @@ export interface RagImageGenerateResponse {
   model?: string;
   mimeType?: string;
   imageBase64?: string;
-  [key: string]: unknown;
-}
-
-export interface RagComicPageGenerateRequest {
-  docKey: string;
-  limit?: number;
-}
-
-export interface RagComicPageGenerateResponse {
-  status?: string;
-  docKey?: string;
-  docId?: number;
-  limit?: number;
-  requestedNotes?: number;
-  processedNotes?: number;
-  failedNotes?: number;
-  imageUris?: string[];
   [key: string]: unknown;
 }
 
@@ -139,14 +65,52 @@ export interface RagComicPageItemResponse {
   [key: string]: unknown;
 }
 
-export interface RagComicPagesResponse {
+export interface RagComicSlideCharacter {
+  name?: string;
+  appearance?: string | null;
+  [key: string]: unknown;
+}
+
+export interface RagComicSlideDialogue {
+  character?: string;
+  line?: string;
+  [key: string]: unknown;
+}
+
+export interface RagComicSlideSegment {
+  characters?: RagComicSlideCharacter[];
+  location?: string;
+  main_note?: string;
+  dialogue?: RagComicSlideDialogue[];
+  [key: string]: unknown;
+}
+
+export interface RagComicSlideNote {
+  id?: number;
+  chunkId?: number;
+  chunkIndex?: number;
+  imagePrompt?: string;
+  charactersInImage?: string[];
+  segments?: RagComicSlideSegment[];
+  [key: string]: unknown;
+}
+
+export interface RagComicSlide {
+  id?: number;
+  comicGroupNoteId?: number;
+  comicNoteId?: number;
+  naration?: string;
+  comicNote?: RagComicSlideNote;
+  imageUrls?: string[];
+  [key: string]: unknown;
+}
+
+export interface RagComicSlidesWithImagesResponse {
   docKey?: string;
   docId?: number;
   folder?: string;
-  limit?: number;
-  requestedNotes?: number;
-  returnedNotes?: number;
-  items?: RagComicPageItemResponse[];
+  slideCount?: number;
+  slides?: RagComicSlide[];
   [key: string]: unknown;
 }
 
@@ -160,6 +124,10 @@ export interface RagComicBookGenerateRequest {
   limit?: number;
 }
 
+export interface RagComicGroupNotesGenerateRequest {
+  docKey: string;
+}
+
 export interface RagComicBookGenerateResponse {
   docKey?: string;
   docId?: number;
@@ -170,17 +138,11 @@ export interface RagComicBookGenerateResponse {
   [key: string]: unknown;
 }
 
-export interface RagComicCharacterImageItem {
-  name?: string;
-  appearance?: string | null;
-  [key: string]: unknown;
-}
-
-export interface RagComicCharacterImagesGenerateResponse {
+export interface RagComicSlidesResponse {
   docKey?: string;
   docId?: number;
-  count?: number;
-  characters?: RagComicCharacterImageItem[];
+  slideCount?: number;
+  slides?: RagComicSlide[];
   [key: string]: unknown;
 }
 
@@ -189,7 +151,6 @@ export class RagApiService {
   private readonly baseUrl = '/api/rag';
   private readonly ingestTimeoutMs = 120000;
   private readonly listDocumentsTimeoutMs = 30000;
-  private readonly listSummariesTimeoutMs = 60000;
 
   constructor(private readonly http: HttpClient) {}
 
@@ -208,35 +169,8 @@ export class RagApiService {
       .pipe(timeout(this.listDocumentsTimeoutMs));
   }
 
-  summarizeDocument(req: RagSummaryRequest): Observable<RagSummaryResponse> {
-    return this.http.post<RagSummaryResponse>(`${this.baseUrl}/summary`, req);
-  }
-
-  listStoredSummaries(docKey: string): Observable<RagStoredSummaryResponse[]> {
-    return this.http
-      .get<RagStoredSummaryResponse[]>(`${this.baseUrl}/summaries/${encodeURIComponent(docKey)}`)
-      .pipe(timeout(this.listSummariesTimeoutMs));
-  }
-
   askQuestion(req: RagAskRequest): Observable<RagAskResponse> {
     return this.http.post<RagAskResponse>(`${this.baseUrl}/ask`, req);
-  }
-
-  getCharactersByDocKey(docKey: string): Observable<RagCharacterDetails[]> {
-    return this.http.get<RagCharacterDetails[]>(
-      `${this.baseUrl}/characters/${encodeURIComponent(docKey)}`
-    );
-  }
-
-  listChapterEvents(docKey: string, minImportance?: number): Observable<RagChapterEventResponse[]> {
-    let params: HttpParams | undefined;
-    if (typeof minImportance === 'number' && Number.isFinite(minImportance)) {
-      params = new HttpParams().set('minImportance', minImportance.toString());
-    }
-    return this.http.get<RagChapterEventResponse[]>(
-      `${this.baseUrl}/chapter-events/${encodeURIComponent(docKey)}`,
-      { params }
-    );
   }
 
   generateImage(req: RagImageGenerateRequest): Observable<RagImageGenerateResponse> {
@@ -247,26 +181,24 @@ export class RagApiService {
     return this.http.post<RagComicBookGenerateResponse>(`${this.baseUrl}/comic-book/generate`, req);
   }
 
-  generateComicCharacterImages(
-    docKey: string
-  ): Observable<RagComicCharacterImagesGenerateResponse> {
-    return this.http.get<RagComicCharacterImagesGenerateResponse>(
-      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/generate-image-characters`
+  generateComicGroupNotes(
+    req: RagComicGroupNotesGenerateRequest
+  ): Observable<RagComicBookGenerateResponse> {
+    return this.http.post<RagComicBookGenerateResponse>(
+      `${this.baseUrl}/comic-book/generate-group-notes`,
+      req
     );
   }
 
-  generateComicPageImages(req: RagComicPageGenerateRequest): Observable<RagComicPageGenerateResponse> {
-    return this.http.post<RagComicPageGenerateResponse>(`${this.baseUrl}/image/generate`, req);
+  getComicSlidesWithImages(docKey: string): Observable<RagComicSlidesWithImagesResponse> {
+    return this.http.get<RagComicSlidesWithImagesResponse>(
+      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/slides-with-images`
+    );
   }
 
-  getComicPages(docKey: string, limit?: number): Observable<RagComicPagesResponse> {
-    let params: HttpParams | undefined;
-    if (typeof limit === 'number' && Number.isFinite(limit)) {
-      params = new HttpParams().set('limit', String(limit));
-    }
-    return this.http.get<RagComicPagesResponse>(
-      `${this.baseUrl}/image/${encodeURIComponent(docKey)}/comic-pages`,
-      { params }
+  getComicSlides(docKey: string): Observable<RagComicSlidesResponse> {
+    return this.http.get<RagComicSlidesResponse>(
+      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/slides`
     );
   }
 }

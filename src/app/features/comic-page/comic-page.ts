@@ -7,11 +7,11 @@ import {
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { DocumentChatComponent } from '../document-chat';
 import {
   RagApiService,
-  RagComicPageGenerateResponse,
-  RagComicPageItemResponse,
-  RagComicPagesResponse
+  RagComicSlide,
+  RagComicSlidesWithImagesResponse
 } from '../../core/api/rag-api.service';
 import { TtsApiService } from '../../core/api/tts-api.service';
 import { register } from 'swiper/element/bundle';
@@ -48,7 +48,7 @@ interface VoiceOption {
 
 @Component({
   selector: 'app-comic-page',
-  imports: [RouterLink],
+  imports: [RouterLink, DocumentChatComponent],
   templateUrl: './comic-page.html',
   styleUrl: './comic-page.scss',
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -61,7 +61,6 @@ export class ComicPageComponent {
     'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
   docKey = signal('');
   loading = signal(false);
-  generating = signal(false);
   message = signal('');
   ttsMessage = signal('');
   ttsLoading = signal(false);
@@ -73,10 +72,10 @@ export class ComicPageComponent {
   ttsCurrentWord = signal(-1);
   ttsTotalWords = signal(0);
   currentSlide = signal(0);
+  askOpen = signal(false);
   availableVoices = signal<string[]>([]);
   masculineVoices = signal<string[]>([]);
-  generateResponse = signal<RagComicPageGenerateResponse | null>(null);
-  pages = signal<RagComicPagesResponse | null>(null);
+  pages = signal<RagComicSlidesWithImagesResponse | null>(null);
   private readonly dialogueVisibleMap = signal<Record<string, true>>({});
   private readonly failedUriMap = signal<Record<string, true>>({});
   @ViewChild('carouselEl') private carouselElement?: ElementRef<{
@@ -108,7 +107,6 @@ export class ComicPageComponent {
     this.route.paramMap.subscribe((params) => {
       this.docKey.set(params.get('docKey') ?? '');
       this.loading.set(false);
-      this.generating.set(false);
       this.message.set('');
       this.ttsMessage.set('');
       this.ttsLoading.set(false);
@@ -120,10 +118,10 @@ export class ComicPageComponent {
       this.ttsCurrentWord.set(-1);
       this.ttsTotalWords.set(0);
       this.currentSlide.set(0);
+      this.askOpen.set(false);
       this.dialogueVisibleMap.set({});
       this.characterVoiceMap.clear();
       this.characterVoiceCursor = 0;
-      this.generateResponse.set(null);
       this.pages.set(null);
       this.failedUriMap.set({});
       this.stopCardTts();
@@ -139,79 +137,38 @@ export class ComicPageComponent {
     this.clearObjectUrl();
   }
 
-  generate(): void {
-    const key = this.docKey().trim();
-    if (!key || this.generating()) {
-      return;
-    }
-
-    this.generating.set(true);
-    this.message.set('');
-    this.generateResponse.set(null);
-    this.failedUriMap.set({});
-
-    this.ragApi.generateComicPageImages({ docKey: key }).subscribe({
-      next: (response) => {
-        this.generateResponse.set(response);
-        this.generating.set(false);
-        this.loadComicPages();
-      },
-      error: (err) => {
-        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
-        const backendMessage =
-          typeof err?.error === 'string'
-            ? err.error
-            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-        this.message.set(`Comic page generation failed (${status}): ${backendMessage}`);
-        this.generating.set(false);
-      }
-    });
-  }
-
-  items(): RagComicPageItemResponse[] {
-    const all = this.pages()?.items;
+  items(): RagComicSlide[] {
+    const all = this.pages()?.slides;
     return Array.isArray(all) ? all : [];
   }
 
-  firstImageUri(item: RagComicPageItemResponse): string {
+  firstImageUri(item: RagComicSlide): string {
     const uris = this.imageUris(item);
     return uris[0] ?? '';
   }
 
-  imageUris(item: RagComicPageItemResponse): string[] {
-    const uris = item.imageUris;
+  imageUris(item: RagComicSlide): string[] {
+    const uris = item.imageUrls;
     return Array.isArray(uris) ? uris : [];
   }
 
-  mainNote(item: RagComicPageItemResponse): string {
-    const note = item.comicNote;
-    const segments = this.segments(note?.segmentsJson);
-    const firstMainNote = segments[0]?.['main_note'];
-    if (typeof firstMainNote === 'string' && firstMainNote.trim()) {
-      return firstMainNote.trim();
+  mainNote(item: RagComicSlide): string {
+    const narration = typeof item.naration === 'string' ? item.naration.trim() : '';
+    if (narration) {
+      return narration;
     }
-
-    const previousMainNotes = this.parseJsonArray(note?.previousMainNotesJson);
-    const firstPreviousMain = previousMainNotes[0];
-    if (typeof firstPreviousMain === 'string' && firstPreviousMain.trim()) {
-      return firstPreviousMain.trim();
-    }
-    return 'No main note.';
+    const prompt = typeof item.comicNote?.imagePrompt === 'string' ? item.comicNote.imagePrompt.trim() : '';
+    return prompt || 'No narration.';
   }
 
-  dialogue(item: RagComicPageItemResponse): string[] {
+  dialogue(item: RagComicSlide): string[] {
     return this.dialogueEntries(item).map((entry) => entry.text).filter((entry) => entry.length > 0);
   }
 
-  private dialogueEntries(item: RagComicPageItemResponse): DialogueEntry[] {
-    const note = item.comicNote;
-    const segments = this.segments(note?.segmentsJson);
-    const fromSegments = segments[0]?.['dialogue'];
-    if (!Array.isArray(fromSegments)) {
-      return [];
-    }
-
-    return fromSegments
+  private dialogueEntries(item: RagComicSlide): DialogueEntry[] {
+    const segments = Array.isArray(item.comicNote?.segments) ? item.comicNote.segments : [];
+    return segments
+      .flatMap((segment) => (Array.isArray(segment.dialogue) ? segment.dialogue : []))
       .map((entry) => this.dialogueLine(entry))
       .filter((entry) => entry.text.length > 0);
   }
@@ -229,19 +186,19 @@ export class ComicPageComponent {
     return uri;
   }
 
-  cardKey(item: RagComicPageItemResponse, index: number): string {
-    const id = item.comicNote?.id;
+  cardKey(item: RagComicSlide, index: number): string {
+    const id = item.id ?? item.comicNote?.id;
     if (typeof id === 'number' && Number.isFinite(id)) {
       return `note-${id}`;
     }
     return `idx-${index}`;
   }
 
-  isCardPlaying(item: RagComicPageItemResponse, index: number): boolean {
+  isCardPlaying(item: RagComicSlide, index: number): boolean {
     return this.ttsPlaying() && this.playingCardKey() === this.cardKey(item, index);
   }
 
-  toggleCardTts(item: RagComicPageItemResponse, index: number): void {
+  toggleCardTts(item: RagComicSlide, index: number): void {
     if (this.isCardPlaying(item, index)) {
       this.stopCardTts();
       return;
@@ -249,7 +206,7 @@ export class ComicPageComponent {
     void this.playCardTts(item, index);
   }
 
-  isCardLoading(item: RagComicPageItemResponse, index: number): boolean {
+  isCardLoading(item: RagComicSlide, index: number): boolean {
     return this.ttsLoading() && this.playingCardKey() === this.cardKey(item, index);
   }
 
@@ -274,15 +231,15 @@ export class ComicPageComponent {
     }
   }
 
-  isSubtitleVisible(item: RagComicPageItemResponse, index: number): boolean {
+  isSubtitleVisible(item: RagComicSlide, index: number): boolean {
     return this.subtitleLine().length > 0 && this.subtitleCardKey() === this.cardKey(item, index);
   }
 
-  shouldShowDialogue(item: RagComicPageItemResponse, index: number): boolean {
+  shouldShowDialogue(item: RagComicSlide, index: number): boolean {
     return Boolean(this.dialogueVisibleMap()[this.cardKey(item, index)]);
   }
 
-  async playCardTts(item: RagComicPageItemResponse, index: number): Promise<void> {
+  async playCardTts(item: RagComicSlide, index: number): Promise<void> {
     const key = this.cardKey(item, index);
     this.playingCardKey.set(key);
     this.ttsMessage.set('');
@@ -402,7 +359,7 @@ export class ComicPageComponent {
     this.ttsTotalWords.set(0);
   }
 
-  mainNoteTokens(item: RagComicPageItemResponse): CardToken[] {
+  mainNoteTokens(item: RagComicSlide): CardToken[] {
     return this.tokens(this.mainNote(item));
   }
 
@@ -410,18 +367,18 @@ export class ComicPageComponent {
     return this.tokens(line);
   }
 
-  isTokenActive(item: RagComicPageItemResponse, index: number, tokenWordIndex: number, offset: number): boolean {
+  isTokenActive(item: RagComicSlide, index: number, tokenWordIndex: number, offset: number): boolean {
     if (tokenWordIndex < 0 || !this.isCardPlaying(item, index)) {
       return false;
     }
     return this.ttsCurrentWord() === offset + tokenWordIndex;
   }
 
-  mainWordCount(item: RagComicPageItemResponse): number {
+  mainWordCount(item: RagComicSlide): number {
     return this.countWords(this.mainNote(item));
   }
 
-  dialogueWordOffset(item: RagComicPageItemResponse, lineIndex: number): number {
+  dialogueWordOffset(item: RagComicSlide, lineIndex: number): number {
     const lines = this.dialogue(item);
     const priorDialogueWords = lines
       .slice(0, lineIndex)
@@ -474,12 +431,12 @@ export class ComicPageComponent {
     this.pages.set(null);
     this.failedUriMap.set({});
 
-    this.ragApi.getComicPages(key).subscribe({
+    this.ragApi.getComicSlidesWithImages(key).subscribe({
       next: (response) => {
         this.pages.set(response);
         const items = this.items();
         if (!items.length) {
-          this.message.set('No comic page items were returned.');
+          this.message.set('No comic slides were returned.');
         }
         this.loading.set(false);
       },
@@ -489,32 +446,10 @@ export class ComicPageComponent {
           typeof err?.error === 'string'
             ? err.error
             : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-        this.message.set(`Failed to load comic pages (${status}): ${backendMessage}`);
+        this.message.set(`Failed to load comic slides (${status}): ${backendMessage}`);
         this.loading.set(false);
       }
     });
-  }
-
-  private segments(raw: unknown): Record<string, unknown>[] {
-    const parsed = this.parseJsonArray(raw);
-    return parsed.filter((entry) => entry && typeof entry === 'object') as Record<string, unknown>[];
-  }
-
-  private parseJsonArray(raw: unknown): unknown[] {
-    if (Array.isArray(raw)) {
-      return raw;
-    }
-
-    if (typeof raw !== 'string' || !raw.trim()) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
   }
 
   private dialogueLine(entry: unknown): DialogueEntry {
@@ -530,7 +465,7 @@ export class ComicPageComponent {
     return { character: '', line, text: line };
   }
 
-  private cardTextForTts(item: RagComicPageItemResponse): string {
+  private cardTextForTts(item: RagComicSlide): string {
     const main = this.mainNote(item).trim();
     const lines = this.dialogue(item);
     const prompt = (item.comicNote?.imagePrompt ?? '').trim();
@@ -544,7 +479,7 @@ export class ComicPageComponent {
     return [main, ...lines].join('\n').trim() || prompt;
   }
 
-  private cardSegmentsForTts(item: RagComicPageItemResponse): TtsSegment[] {
+  private cardSegmentsForTts(item: RagComicSlide): TtsSegment[] {
     const segments: TtsSegment[] = [];
     let wordStart = 0;
 

@@ -1,0 +1,60 @@
+<section class="pipeline-page">
+  <a class="back" [routerLink]="['/documents', docKey()]">Back to Document Details</a>
+
+  <section class="panel">
+    <h1>Pipeline: {{ docKey() }}</h1>
+
+    <button
+      type="button"
+      class="primary-action"
+      (click)="generateComicNotes()"
+      [disabled]="comicLoading()"
+    >
+      {{ comicLoading() ? 'Generating Comic Notes...' : 'Generate Comic Notes' }}
+    </button>
+
+    @if (comicLoading() || comicMessage() || comicProcessedChunks() > 0 || comicNotesCount() > 0) {
+      <section class="comic-progress">
+        <h2>Comic Notes</h2>
+        <div class="progress-track">
+          <div class="progress-fill" [style.width.%]="comicProgressPercent()"></div>
+        </div>
+        <p class="job-meta">
+          Progress: {{ comicProcessedChunks() }} / {{ comicTotalChunks() || '?' }} chunks
+          ({{ comicProgressPercent() }}%)
+        </p>
+        @if (comicLastSceneId() !== null) {
+          <p class="job-meta">Last Scene Id: {{ comicLastSceneId() }}</p>
+        }
+        @if (comicNotesCount() > 0) {
+          <p class="job-meta">Generated Notes: {{ comicNotesCount() }}</p>
+        }
+        @if (comicMessage()) {
+          <p class="status">{{ comicMessage() }}</p>
+        }
+      </section>
+    }
+
+    <button
+      type="button"
+      class="primary-action"
+      (click)="generateGroupSummaries()"
+      [disabled]="loading()"
+    >
+      {{ loading() ? 'Generating...' : 'Generate Group Summaries' }}
+    </button>
+
+    <button
+      type="button"
+      class="primary-action secondary-action"
+      (click)="getSlides()"
+      [disabled]="loading()"
+    >
+      Get Slides
+    </button>
+
+    @if (message()) {
+      <p class="status">{{ message() }}</p>
+    }
+  </section>
+</section>
