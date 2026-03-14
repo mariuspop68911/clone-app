@@ -95,6 +95,7 @@ export class PipelineComponent {
 
   docKey = signal('');
   loading = signal(false);
+  clearing = signal(false);
   message = signal('');
   comicBatchStart = signal(0);
   comicBatchEnd = signal(PipelineComponent.comicBatchSize);
@@ -146,6 +147,7 @@ export class PipelineComponent {
       const key = params.get('docKey') ?? '';
       this.docKey.set(key);
       this.loading.set(false);
+      this.clearing.set(false);
       this.message.set('');
       const batchState = this.readComicBatchState(key);
       this.comicBatchStart.set(batchState?.start ?? 0);
@@ -197,7 +199,7 @@ export class PipelineComponent {
       this.message.set('Missing docKey.');
       return;
     }
-    if (this.loading()) {
+    if (this.loading() || this.clearing()) {
       return;
     }
 
@@ -220,13 +222,44 @@ export class PipelineComponent {
       this.message.set('Missing docKey.');
       return;
     }
-    if (this.loading()) {
+    if (this.loading() || this.clearing()) {
       return;
     }
 
     const nextStart = this.comicBatchEnd();
     const nextEnd = nextStart + PipelineComponent.comicBatchSize;
     this.generateAllBatch(key, nextStart, nextEnd);
+  }
+
+  clearSlides(): void {
+    const key = this.docKey().trim();
+    if (!key) {
+      this.message.set('Missing docKey.');
+      return;
+    }
+    if (this.loading() || this.clearing()) {
+      return;
+    }
+
+    this.clearing.set(true);
+    this.message.set('');
+
+    this.ragApi.resetComicBook(key).subscribe({
+      next: () => {
+        this.clearing.set(false);
+        this.resetSlideState(key);
+        this.message.set('Comic book data cleared.');
+      },
+      error: (err) => {
+        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+        const backendMessage =
+          typeof err?.error === 'string'
+            ? err.error
+            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
+        this.clearing.set(false);
+        this.message.set(`Failed to clear comic book (${status}): ${backendMessage}`);
+      }
+    });
   }
 
   onSlideIndexChange(event: Event): void {
@@ -275,6 +308,10 @@ export class PipelineComponent {
       .filter((entry) => entry.length > 0);
   }
 
+  hasDialogue(slide: RagComicSlide): boolean {
+    return this.dialogueEntries(slide).length > 0;
+  }
+
   imageSrc(uri: string): string {
     if (uri.startsWith('gs://')) {
       const noScheme = uri.substring(5);
@@ -313,7 +350,8 @@ export class PipelineComponent {
   }
 
   shouldShowHeadMarkers(item: RagComicSlide, index: number): boolean {
-    return this.activeDialogueBubble(item, index) !== null;
+    const key = this.cardKey(item, index);
+    return this.activeHeadCardKey() === key && this.headMarkers(item, index).length > 0;
   }
 
   headMarkers(item: RagComicSlide, index: number): SlideHeadMarker[] {
@@ -353,6 +391,42 @@ export class PipelineComponent {
   activeDialogueBubbleTokens(item: RagComicSlide, index: number): CardToken[] {
     const bubble = this.activeDialogueBubble(item, index);
     return bubble ? this.tokens(bubble.line) : [];
+  }
+
+  activeDialogueFallbackLine(item: RagComicSlide, index: number): string {
+    const key = this.cardKey(item, index);
+    if (this.activeDialogueCardKey() !== key) {
+      return '';
+    }
+    if (this.activeDialogueBubble(item, index)) {
+      return '';
+    }
+    const line = this.activeDialogueLine().trim();
+    const character = this.activeDialogueCharacter().trim();
+    if (!line) {
+      return '';
+    }
+    return character ? `${character}: ${line}` : line;
+  }
+
+  activeDialogueFallbackSpeaker(item: RagComicSlide, index: number): string {
+    const key = this.cardKey(item, index);
+    if (this.activeDialogueCardKey() !== key || this.activeDialogueBubble(item, index)) {
+      return '';
+    }
+    return this.activeDialogueCharacter().trim();
+  }
+
+  activeDialogueFallbackText(item: RagComicSlide, index: number): string {
+    const key = this.cardKey(item, index);
+    if (this.activeDialogueCardKey() !== key || this.activeDialogueBubble(item, index)) {
+      return '';
+    }
+    return this.activeDialogueLine().trim();
+  }
+
+  activeDialogueFallbackTokens(item: RagComicSlide, index: number): CardToken[] {
+    return this.tokens(this.activeDialogueFallbackText(item, index));
   }
 
   isTokenActive(item: RagComicSlide, index: number, tokenWordIndex: number, offset: number): boolean {
@@ -577,6 +651,29 @@ export class PipelineComponent {
     }
   }
 
+  private resetSlideState(docKey: string): void {
+    this.comicBatchStart.set(0);
+    this.comicBatchEnd.set(PipelineComponent.comicBatchSize);
+    this.showLoadMoreSlide.set(false);
+    this.slides.set([]);
+    this.slidesLoading.set(false);
+    this.slidesMessage.set('');
+    this.slidePromptById.set({});
+    this.slidePromptLoadingById.set({});
+    this.slidePromptErrorById.set({});
+    this.slideHeadsByCardKey.set({});
+    this.slideHeadsLoadingByCardKey.set({});
+    this.activeHeadCardKey.set('');
+    this.currentSlide.set(0);
+    this.failedUriMap.set({});
+    this.stopCardTts();
+    this.writeComicBatchState(docKey, {
+      start: 0,
+      end: PipelineComponent.comicBatchSize,
+      hasMore: false
+    });
+  }
+
   private dialogueEntries(item: RagComicSlide): DialogueEntry[] {
     const segments = Array.isArray(item.comicNote?.segments) ? item.comicNote.segments : [];
     return segments
@@ -620,48 +717,81 @@ export class PipelineComponent {
 
     const main = this.mainNote(item).trim();
     if (main) {
-      const wordCount = this.countWords(main);
-      segments.push({
+      wordStart = this.pushSentenceSegments(segments, {
         kind: 'narration',
         text: main,
         voice: this.narratorVoice(),
-        wordStart,
-        wordCount
+        wordStart
       });
-      wordStart += wordCount;
     }
 
     for (const entry of this.dialogueEntries(item)) {
       if (!entry.text) {
         continue;
       }
-      const wordCount = this.countWords(entry.text);
-      segments.push({
+      wordStart = this.pushSentenceSegments(segments, {
         kind: 'dialogue',
-        text: entry.text,
+        text: entry.line || entry.text,
         voice: this.voiceForCharacter(entry.character),
         wordStart,
-        wordCount,
         character: entry.character,
         line: entry.line || entry.text
       });
-      wordStart += wordCount;
     }
 
     if (!segments.length) {
       const fallback = this.cardTextForTts(item);
       if (fallback) {
-        segments.push({
+        this.pushSentenceSegments(segments, {
           kind: 'narration',
           text: fallback,
           voice: this.narratorVoice(),
-          wordStart: 0,
-          wordCount: this.countWords(fallback)
+          wordStart: 0
         });
       }
     }
 
     return segments;
+  }
+
+  private pushSentenceSegments(
+    target: TtsSegment[],
+    base: Omit<TtsSegment, 'wordCount'>
+  ): number {
+    let nextWordStart = base.wordStart;
+    const sentences = this.splitTextIntoSentences(base.text);
+
+    for (const sentence of sentences) {
+      const wordCount = this.countWords(sentence);
+      if (!wordCount) {
+        continue;
+      }
+      target.push({
+        ...base,
+        text: sentence,
+        line: base.kind === 'dialogue' ? sentence : base.line,
+        wordStart: nextWordStart,
+        wordCount
+      });
+      nextWordStart += wordCount;
+    }
+
+    return nextWordStart;
+  }
+
+  private splitTextIntoSentences(text: string): string[] {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+      const segmenter = new Intl.Segmenter(undefined, { granularity: 'sentence' });
+      return Array.from(segmenter.segment(trimmed), (segment) => segment.segment.trim()).filter(Boolean);
+    }
+
+    const matches = trimmed.match(/[^.!?]+(?:[.!?]+|$)/g);
+    return (matches ?? [trimmed]).map((part) => part.trim()).filter(Boolean);
   }
 
   private narratorVoice(): string {
@@ -783,31 +913,33 @@ export class PipelineComponent {
     this.ttsTotalWords.set(segments.reduce((sum, segment) => sum + segment.wordCount, 0));
 
     try {
+      if (this.hasDialogue(item)) {
+        await this.ensureSlideHeadsLoaded(item, index);
+        if (token !== this.playbackToken) {
+          return;
+        }
+        if (this.headMarkers(item, index).length) {
+          this.activeHeadCardKey.set(key);
+        }
+      }
+
       for (let i = 0; i < segments.length; i += 1) {
         if (token !== this.playbackToken) {
           return;
         }
         const segment = segments[i];
         if (segment.kind === 'dialogue') {
-          await this.ensureSlideHeadsLoaded(item, index);
-          if (token !== this.playbackToken) {
-            return;
-          }
           const matchingMarker = this.findMarkerForCharacter(
             this.headMarkers(item, index),
             segment.character ?? ''
           );
+          this.activeDialogueCardKey.set(key);
+          this.activeDialogueCharacter.set(segment.character ?? '');
+          this.activeDialogueLine.set(segment.line ?? segment.text);
+          this.activeDialogueWordStart.set(segment.wordStart);
           if (matchingMarker) {
-            this.activeDialogueCardKey.set(key);
-            this.activeDialogueCharacter.set(segment.character ?? '');
-            this.activeDialogueLine.set(segment.line ?? segment.text);
-            this.activeDialogueWordStart.set(segment.wordStart);
             this.activeHeadCardKey.set(key);
           } else {
-            this.activeDialogueCardKey.set('');
-            this.activeDialogueCharacter.set('');
-            this.activeDialogueLine.set('');
-            this.activeDialogueWordStart.set(0);
             this.activeHeadCardKey.set('');
           }
         } else {
@@ -815,7 +947,6 @@ export class PipelineComponent {
           this.activeDialogueCharacter.set('');
           this.activeDialogueLine.set('');
           this.activeDialogueWordStart.set(0);
-          this.activeHeadCardKey.set('');
         }
         const blob = await firstValueFrom(this.ttsApi.openAiVoice(segment.text, segment.voice));
         if (!blob.size) {
@@ -915,6 +1046,7 @@ export class PipelineComponent {
     try {
       const response = await firstValueFrom(this.ragApi.getSlideHeads(docKey, slideId));
       const markers = this.toSlideHeadMarkers(response);
+      this.logSlideHeadMarkers(docKey, slideId, markers);
       this.slideHeadsByCardKey.update((current) => ({
         ...current,
         [key]: markers
@@ -983,6 +1115,20 @@ export class PipelineComponent {
       leftPercent: Math.max(0, Math.min(100, leftPercent)),
       topPercent: Math.max(0, Math.min(100, topPercent))
     };
+  }
+
+  private logSlideHeadMarkers(docKey: string, slideId: number, markers: SlideHeadMarker[]): void {
+    if (!markers.length) {
+      console.info(`[Pipeline] No mouth positions found for doc "${docKey}" slide ${slideId}.`);
+      return;
+    }
+
+    for (const marker of markers) {
+      const name = marker.characterName || 'Unknown character';
+      console.info(
+        `[Pipeline] Mouth position found for ${name} on doc "${docKey}" slide ${slideId}: left=${marker.leftPercent.toFixed(2)}%, top=${marker.topPercent.toFixed(2)}%`
+      );
+    }
   }
 
   private findMarkerForCharacter(

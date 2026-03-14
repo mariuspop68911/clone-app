@@ -4,9 +4,25 @@
       <h2 class="book-title">{{ docKey() }}</h2>
     }
 
-    <button type="button" class="primary-action" (click)="generateAll()" [disabled]="loading()">
-      {{ loading() ? 'Generating...' : 'Generate all' }}
-    </button>
+    <div class="action-row">
+      <button
+        type="button"
+        class="primary-action"
+        (click)="generateAll()"
+        [disabled]="loading() || clearing()"
+      >
+        {{ loading() ? 'Generating...' : 'Generate all' }}
+      </button>
+
+      <button
+        type="button"
+        class="secondary-action"
+        (click)="clearSlides()"
+        [disabled]="loading() || clearing()"
+      >
+        {{ clearing() ? 'Clearing...' : 'Clear' }}
+      </button>
+    </div>
 
     @if (message()) {
       <p class="status">{{ message() }}</p>
@@ -56,6 +72,17 @@
 
                   @if (shouldShowHeadMarkers(slide, cardIndex)) {
                     <div class="head-markers-layer" aria-hidden="true">
+                      @for (marker of headMarkers(slide, cardIndex); track marker.characterName + '-' + $index) {
+                        <div
+                          class="mouth-marker"
+                          [style.left.%]="marker.leftPercent"
+                          [style.top.%]="marker.topPercent"
+                          [attr.title]="marker.characterName || 'Character'"
+                        >
+                          <span class="mouth-marker-x">X</span>
+                          <span class="mouth-marker-name">{{ marker.characterName || 'Character' }}</span>
+                        </div>
+                      }
                       @if (activeDialogueBubble(slide, cardIndex); as bubble) {
                         <div
                           class="speech-bubble"
@@ -79,6 +106,31 @@
                           </p>
                         </div>
                       }
+                    </div>
+                  }
+
+                  @if (activeDialogueFallbackLine(slide, cardIndex)) {
+                    <div class="speech-bubble speech-bubble-fallback">
+                      <p class="speech-bubble-text">
+                        @if (activeDialogueFallbackSpeaker(slide, cardIndex)) {
+                          <span class="speech-bubble-speaker">
+                            {{ activeDialogueFallbackSpeaker(slide, cardIndex) }}:
+                          </span>
+                          <span> </span>
+                        }
+                        @for (token of activeDialogueFallbackTokens(slide, cardIndex); track $index) {
+                          @if (token.isWord) {
+                            <span
+                              class="word"
+                              [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
+                            >
+                              {{ token.text }}
+                            </span>
+                          } @else {
+                            <span>{{ token.text }}</span>
+                          }
+                        }
+                      </p>
                     </div>
                   }
 
@@ -171,16 +223,18 @@
         <p class="status">{{ slidesMessage() }}</p>
       }
 
-      <div class="load-more-actions">
-        <button
-          type="button"
-          class="primary-action"
-          (click)="loadMoreSlides()"
-          [disabled]="loading()"
-        >
-          {{ loading() ? 'Loading More...' : 'Load more' }}
-        </button>
-      </div>
+      @if (slides().length > 0) {
+        <div class="load-more-actions">
+          <button
+            type="button"
+            class="primary-action"
+            (click)="loadMoreSlides()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ loading() ? 'Loading More...' : 'Load more' }}
+          </button>
+        </div>
+      }
     </section>
   </section>
 

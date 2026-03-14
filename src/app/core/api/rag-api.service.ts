@@ -216,6 +216,10 @@ export class RagApiService {
     );
   }
 
+  resetComicBook(docKey: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/reset`);
+  }
+
   getComicSlidesWithImages(docKey: string): Observable<RagComicSlidesWithImagesResponse> {
     return this.http.get<RagComicSlidesWithImagesResponse>(
       `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/slides-with-images`
