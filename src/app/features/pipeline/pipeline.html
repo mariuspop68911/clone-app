@@ -1,60 +1,231 @@
 <section class="pipeline-page">
-  <a class="back" [routerLink]="['/documents', docKey()]">Back to Document Details</a>
-
   <section class="panel">
-    <h1>Pipeline: {{ docKey() }}</h1>
-
-    <button
-      type="button"
-      class="primary-action"
-      (click)="generateComicNotes()"
-      [disabled]="comicLoading()"
-    >
-      {{ comicLoading() ? 'Generating Comic Notes...' : 'Generate Comic Notes' }}
-    </button>
-
-    @if (comicLoading() || comicMessage() || comicProcessedChunks() > 0 || comicNotesCount() > 0) {
-      <section class="comic-progress">
-        <h2>Comic Notes</h2>
-        <div class="progress-track">
-          <div class="progress-fill" [style.width.%]="comicProgressPercent()"></div>
-        </div>
-        <p class="job-meta">
-          Progress: {{ comicProcessedChunks() }} / {{ comicTotalChunks() || '?' }} chunks
-          ({{ comicProgressPercent() }}%)
-        </p>
-        @if (comicLastSceneId() !== null) {
-          <p class="job-meta">Last Scene Id: {{ comicLastSceneId() }}</p>
-        }
-        @if (comicNotesCount() > 0) {
-          <p class="job-meta">Generated Notes: {{ comicNotesCount() }}</p>
-        }
-        @if (comicMessage()) {
-          <p class="status">{{ comicMessage() }}</p>
-        }
-      </section>
+    @if (docKey()) {
+      <h2 class="book-title">{{ docKey() }}</h2>
     }
 
-    <button
-      type="button"
-      class="primary-action"
-      (click)="generateGroupSummaries()"
-      [disabled]="loading()"
-    >
-      {{ loading() ? 'Generating...' : 'Generate Group Summaries' }}
-    </button>
-
-    <button
-      type="button"
-      class="primary-action secondary-action"
-      (click)="getSlides()"
-      [disabled]="loading()"
-    >
-      Get Slides
+    <button type="button" class="primary-action" (click)="generateAll()" [disabled]="loading()">
+      {{ loading() ? 'Generating...' : 'Generate all' }}
     </button>
 
     @if (message()) {
       <p class="status">{{ message() }}</p>
     }
+
+    @if (ttsMessage()) {
+      <p class="status">{{ ttsMessage() }}</p>
+    }
+
+    <section class="slides-section">
+      <div class="section-heading">
+        @if (slidesLoading()) {
+          <span class="section-status">Loading...</span>
+        }
+      </div>
+
+      @if (slides().length > 0) {
+        <swiper-container
+          #carouselEl
+          class="carousel"
+          slides-per-view="1"
+          space-between="0"
+          grab-cursor="true"
+          resistance-ratio="0.85"
+          (swiperslidechange)="onSlideIndexChange($event)"
+        >
+          @for (slide of slides(); track slide.comicNote?.id ?? $index; let cardIndex = $index) {
+            <swiper-slide class="carousel-slide">
+              <article class="slide-card">
+                <div class="slide-visual">
+                  @if (slideImageUrl(slide); as imageUrl) {
+                    <img
+                      class="slide-image"
+                      [src]="imageSrc(imageUrl)"
+                      [alt]="'Slide ' + (slide.id ?? $index + 1)"
+                      (error)="onImageError(imageUrl, $event)"
+                    />
+                    @if (isFailed(imageUrl)) {
+                      <p class="image-error">
+                        Preview failed (likely private object). Open this URI with an authorized
+                        account.
+                      </p>
+                    }
+                  } @else {
+                    <div class="slide-image slide-image--empty">No image</div>
+                  }
+
+                  @if (shouldShowHeadMarkers(slide, cardIndex)) {
+                    <div class="head-markers-layer" aria-hidden="true">
+                      @if (activeDialogueBubble(slide, cardIndex); as bubble) {
+                        <div
+                          class="speech-bubble"
+                          [style.left.%]="bubble.leftPercent"
+                          [style.top.%]="bubble.topPercent"
+                          [attr.title]="bubble.characterName || 'Character'"
+                        >
+                          <p class="speech-bubble-text">
+                            @for (token of activeDialogueBubbleTokens(slide, cardIndex); track $index) {
+                              @if (token.isWord) {
+                                <span
+                                  class="word"
+                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, bubble.wordStart)"
+                                >
+                                  {{ token.text }}
+                                </span>
+                              } @else {
+                                <span>{{ token.text }}</span>
+                              }
+                            }
+                          </p>
+                        </div>
+                      }
+                    </div>
+                  }
+
+                  <div class="slide-card-body">
+                    <p class="slide-copy">
+                      @for (token of mainNoteTokens(slide); track $index) {
+                        @if (token.isWord) {
+                          <span
+                            class="word"
+                            [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, 0)"
+                          >
+                            {{ token.text }}
+                          </span>
+                        } @else {
+                          <span>{{ token.text }}</span>
+                        }
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div class="tts-controls">
+                  <button
+                    type="button"
+                    class="btn-tts-toggle"
+                    (click)="toggleCardTts(slide, cardIndex)"
+                    [disabled]="(ttsLoading() && !isCardLoading(slide, cardIndex)) || slidesLoading()"
+                    [attr.aria-label]="isCardPlaying(slide, cardIndex) ? 'Pause' : 'Play'"
+                  >
+                    @if (isCardPlaying(slide, cardIndex)) {
+                      <span class="tts-icon tts-icon-pause" aria-hidden="true"></span>
+                    } @else if (isCardLoading(slide, cardIndex)) {
+                      <span class="tts-icon tts-icon-loading" aria-hidden="true"></span>
+                    } @else {
+                      <span class="tts-icon tts-icon-play" aria-hidden="true"></span>
+                    }
+                  </button>
+                </div>
+              </article>
+            </swiper-slide>
+          }
+        </swiper-container>
+
+        @if (slides().length > 1) {
+          <div class="custom-pagination" role="tablist" aria-label="Slides">
+            @for (pageIndex of paginationIndexes(); track pageIndex) {
+              <button
+                type="button"
+                class="dot"
+                [class.dot-active]="currentSlide() === pageIndex"
+                (click)="goToSlide(pageIndex)"
+                [attr.aria-label]="'Go to slide ' + (pageIndex + 1)"
+              ></button>
+            }
+          </div>
+        }
+
+        @if (currentSlidePromptId(); as promptSlideId) {
+          <section class="slide-prompt-panel">
+            <h3>Slide Prompt</h3>
+            @if (isSlidePromptLoading(promptSlideId)) {
+              <p>Loading prompt...</p>
+            } @else if (slidePromptError(promptSlideId)) {
+              <p>{{ slidePromptError(promptSlideId) }}</p>
+            } @else if (slidePromptText(promptSlideId)) {
+              <p>{{ slidePromptText(promptSlideId) }}</p>
+            } @else {
+              <p>No prompt available.</p>
+            }
+
+            @if (currentSlideItem(); as currentSlide) {
+              @if (dialogue(currentSlide).length) {
+                <div class="slide-dialogue-panel">
+                  <h4>Dialog Text</h4>
+                  <ul class="dialogue-list">
+                    @for (line of dialogue(currentSlide); track $index) {
+                      <li>{{ line }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+            }
+          </section>
+        }
+      } @else if (!slidesLoading() && !slidesMessage()) {
+        <p class="status">No slides found.</p>
+      }
+
+      @if (slidesMessage()) {
+        <p class="status">{{ slidesMessage() }}</p>
+      }
+
+      <div class="load-more-actions">
+        <button
+          type="button"
+          class="primary-action"
+          (click)="loadMoreSlides()"
+          [disabled]="loading()"
+        >
+          {{ loading() ? 'Loading More...' : 'Load more' }}
+        </button>
+      </div>
+    </section>
   </section>
+
+  @if (askOpen()) {
+    <button
+      type="button"
+      class="ask-backdrop"
+      (click)="askOpen.set(false)"
+      aria-label="Close ask panel"
+    ></button>
+  }
+
+  @if (!askOpen()) {
+    <button
+      type="button"
+      class="ask-fab"
+      [class.ask-fab-open]="askOpen()"
+      (click)="askOpen.set(!askOpen())"
+      [attr.aria-expanded]="askOpen()"
+      aria-controls="pipeline-ask-panel"
+      aria-label="Open ask panel"
+    >
+      Ask
+    </button>
+  }
+
+  <aside
+    id="pipeline-ask-panel"
+    class="ask-drawer"
+    [class.ask-drawer-open]="askOpen()"
+    [attr.aria-hidden]="!askOpen()"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="ask-drawer-header">
+      <p class="ask-drawer-eyebrow">Ask</p>
+      <button
+        type="button"
+        class="ask-drawer-close"
+        (click)="askOpen.set(false)"
+        aria-label="Close ask panel"
+      >
+        Close
+      </button>
+    </div>
+
+    <app-document-chat [embedded]="true"></app-document-chat>
+  </aside>
 </section>

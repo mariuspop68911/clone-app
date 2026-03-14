@@ -11,6 +11,7 @@
   position: sticky;
   top: 0;
   height: 100dvh;
+  overflow-y: auto;
   background: #ffffff;
 }
 
@@ -79,6 +80,44 @@
   font-size: 0.92rem;
 }
 
+.drawer-doc-item {
+  border-radius: 10px;
+}
+
+.drawer-doc-item-active {
+  background: #f7fbff;
+}
+
+.drawer-doc-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.drawer-expand {
+  width: auto;
+  height: auto;
+  border: 0;
+  background: transparent;
+  padding: 0.35rem 0.1rem 0.35rem 0;
+  cursor: pointer;
+}
+
+.drawer-expand:hover {
+  background: transparent;
+}
+
+.drawer-doc-link {
+  min-width: 0;
+}
+
+.drawer-icon {
+  color: #4d6578;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
 .drawer-docs li a {
   color: #1c1e21;
   text-decoration: none;
@@ -92,6 +131,76 @@
   background: #e7f3ff;
   color: #1877f2;
   font-weight: 700;
+}
+
+.drawer-doc-extra {
+  margin-top: 0.35rem;
+  padding-left: 0.55rem;
+}
+
+.drawer-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #37566f;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 0.35rem 0.1rem 0.35rem 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.drawer-character-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+  max-height: 34rem;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  align-items: start;
+}
+
+.drawer-character-list p {
+  margin: 0;
+  grid-column: 1 / -1;
+}
+
+.drawer-character-card {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+}
+
+.drawer-character-image {
+  display: block;
+  width: 84px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #d7e1ea;
+  background: #edf3f8;
+}
+
+.drawer-character-image--empty {
+  display: grid;
+  place-items: center;
+  color: #5c7286;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.drawer-character-name {
+  margin: 0;
+  color: #17334b;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1.25;
 }
 
 .drawer-docs li span {

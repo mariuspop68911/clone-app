@@ -42,29 +42,6 @@ export interface RagImageGenerateResponse {
   [key: string]: unknown;
 }
 
-export interface RagComicPageNoteResponse {
-  id?: number;
-  docId?: number;
-  chunkId?: number;
-  chunkIndex?: number;
-  previousSceneId?: number;
-  previousLocation?: string;
-  previousMainNotesJson?: string;
-  imagePrompt?: string;
-  charactersInImageJson?: string;
-  segmentsJson?: string;
-  updatedSceneIdMax?: number;
-  rawJson?: string;
-  createdAt?: string;
-  [key: string]: unknown;
-}
-
-export interface RagComicPageItemResponse {
-  comicNote?: RagComicPageNoteResponse;
-  imageUris?: string[];
-  [key: string]: unknown;
-}
-
 export interface RagComicSlideCharacter {
   name?: string;
   appearance?: string | null;
@@ -119,13 +96,10 @@ export interface RagComicNoteResponse {
   [key: string]: unknown;
 }
 
-export interface RagComicBookGenerateRequest {
+export interface RagComicBookGenerateAllRequest {
   docKey: string;
-  limit?: number;
-}
-
-export interface RagComicGroupNotesGenerateRequest {
-  docKey: string;
+  start: number;
+  end: number;
 }
 
 export interface RagComicBookGenerateResponse {
@@ -135,14 +109,70 @@ export interface RagComicBookGenerateResponse {
   processedChunks?: number;
   lastSceneId?: number;
   notes?: RagComicNoteResponse[];
+  comicNotes?: RagComicNoteResponse[] | Record<string, unknown>;
+  groupNotes?: Record<string, unknown>;
+  isLastBatch?: boolean;
   [key: string]: unknown;
 }
 
-export interface RagComicSlidesResponse {
+export interface RagCharacterReferenceImageResponse {
+  characterName?: string;
+  imageUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface RagCharacterReferenceImageListResponse {
   docKey?: string;
   docId?: number;
-  slideCount?: number;
-  slides?: RagComicSlide[];
+  folder?: string;
+  count?: number;
+  characters?: RagCharacterReferenceImageResponse[];
+  [key: string]: unknown;
+}
+
+export interface RagSlidePromptResponse {
+  docKey?: string;
+  docId?: number;
+  slideId?: number;
+  folder?: string;
+  promptText?: string;
+  [key: string]: unknown;
+}
+
+export interface RagSlideHeadCharacter {
+  characterName?: string;
+  declaredOrder?: number;
+  matched?: boolean;
+  pixelX?: number;
+  pixelY?: number;
+  normalizedX?: number;
+  normalizedY?: number;
+  mouthPixelX?: number;
+  mouthPixelY?: number;
+  mouthNormalizedX?: number;
+  mouthNormalizedY?: number;
+  confidence?: number;
+  [key: string]: unknown;
+}
+
+export interface RagSlideHeadsResponse {
+  docKey?: string;
+  docId?: number;
+  slideId?: number;
+  folder?: string;
+  json?: string;
+  [key: string]: unknown;
+}
+
+export interface RagSlideHeadCoordinatesJson {
+  docId?: number;
+  slideId?: number;
+  comicNoteId?: number;
+  imageUri?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  mappingStrategy?: string;
+  characters?: RagSlideHeadCharacter[];
   [key: string]: unknown;
 }
 
@@ -177,15 +207,11 @@ export class RagApiService {
     return this.http.post<RagImageGenerateResponse>(`${this.baseUrl}/image/generate`, req);
   }
 
-  generateComicBook(req: RagComicBookGenerateRequest): Observable<RagComicBookGenerateResponse> {
-    return this.http.post<RagComicBookGenerateResponse>(`${this.baseUrl}/comic-book/generate`, req);
-  }
-
-  generateComicGroupNotes(
-    req: RagComicGroupNotesGenerateRequest
+  generateComicBookAll(
+    req: RagComicBookGenerateAllRequest
   ): Observable<RagComicBookGenerateResponse> {
     return this.http.post<RagComicBookGenerateResponse>(
-      `${this.baseUrl}/comic-book/generate-group-notes`,
+      `${this.baseUrl}/comic-book/generate-all`,
       req
     );
   }
@@ -196,9 +222,21 @@ export class RagApiService {
     );
   }
 
-  getComicSlides(docKey: string): Observable<RagComicSlidesResponse> {
-    return this.http.get<RagComicSlidesResponse>(
-      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/slides`
+  getCharacterReferenceImages(docKey: string): Observable<RagCharacterReferenceImageListResponse> {
+    return this.http.get<RagCharacterReferenceImageListResponse>(
+      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/gcs-reference-characters`
+    );
+  }
+
+  getSlidePrompt(docKey: string, slideId: number): Observable<RagSlidePromptResponse> {
+    return this.http.get<RagSlidePromptResponse>(
+      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/gcs-slide-prompt/${slideId}`
+    );
+  }
+
+  getSlideHeads(docKey: string, slideId: number): Observable<RagSlideHeadsResponse> {
+    return this.http.get<RagSlideHeadsResponse>(
+      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/gcs-slide-heads/${slideId}`
     );
   }
 }

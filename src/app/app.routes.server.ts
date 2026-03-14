@@ -6,14 +6,6 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Server
   },
   {
-    path: 'documents/:docKey/comic-slides',
-    renderMode: RenderMode.Server
-  },
-  {
-    path: 'documents/:docKey/pipeline',
-    renderMode: RenderMode.Server
-  },
-  {
     path: 'documents/:docKey/chat',
     renderMode: RenderMode.Server
   },
