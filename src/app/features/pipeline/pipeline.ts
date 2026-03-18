@@ -74,6 +74,7 @@ interface SlideDialogueBubble extends SlideHeadMarker {
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class PipelineComponent {
+  private static readonly charactersRefreshEvent = 'codex:characters-refresh';
   private static readonly fallbackVoices = ['alloy', 'echo', 'shimmer', 'sage', 'ash', 'coral'];
   private static readonly fallbackMasculineVoices = ['ash', 'echo', 'sage', 'onyx'];
   private static readonly comicBatchSize = 10;
@@ -103,6 +104,7 @@ export class PipelineComponent {
   ttsMessage = signal('');
   ttsLoading = signal(false);
   ttsPlaying = signal(false);
+  autoPlayEnabled = signal(false);
   playingCardKey = signal('');
   activeDialogueCardKey = signal('');
   activeDialogueCharacter = signal('');
@@ -156,6 +158,7 @@ export class PipelineComponent {
       this.ttsMessage.set('');
       this.ttsLoading.set(false);
       this.ttsPlaying.set(false);
+      this.autoPlayEnabled.set(false);
       this.playingCardKey.set('');
       this.activeDialogueCardKey.set('');
       this.activeDialogueCharacter.set('');
@@ -271,6 +274,7 @@ export class PipelineComponent {
     const nextIndex = Math.max(0, Math.floor(rawIndex));
     this.currentSlide.set(nextIndex);
     this.loadCurrentSlidePrompt();
+    this.playCurrentSlideIfAutoPlayEnabled();
   }
 
   goToSlide(index: number): void {
@@ -283,6 +287,7 @@ export class PipelineComponent {
       swiper.slideTo(index);
       this.currentSlide.set(index);
       this.loadCurrentSlidePrompt();
+      this.playCurrentSlideIfAutoPlayEnabled();
     }
   }
 
@@ -333,15 +338,30 @@ export class PipelineComponent {
     return `idx-${index}`;
   }
 
+  currentSlideCardKey(): string {
+    const slide = this.slides()[this.currentSlide()];
+    if (!slide) {
+      return '';
+    }
+    return this.cardKey(slide, this.currentSlide());
+  }
+
   isCardPlaying(item: RagComicSlide, index: number): boolean {
-    return this.ttsPlaying() && this.playingCardKey() === this.cardKey(item, index);
+    const key = this.cardKey(item, index);
+    return (
+      (this.ttsPlaying() && this.playingCardKey() === key) ||
+      (this.autoPlayEnabled() && this.currentSlideCardKey() === key)
+    );
   }
 
   toggleCardTts(item: RagComicSlide, index: number): void {
-    if (this.isCardPlaying(item, index)) {
+    const key = this.cardKey(item, index);
+    if (this.autoPlayEnabled() && this.currentSlideCardKey() === key) {
+      this.autoPlayEnabled.set(false);
       this.stopCardTts();
       return;
     }
+    this.autoPlayEnabled.set(true);
     void this.playCardTts(item, index);
   }
 
@@ -568,7 +588,7 @@ export class PipelineComponent {
 
     this.ragApi.generateComicBookAll({ docKey, start, end }).subscribe({
       next: (response) => {
-        const hasMore = this.shouldShowLoadMore(response);
+        const hasMore = this.shouldShowLoadMore(response, start, end);
         this.loading.set(false);
         this.comicBatchStart.set(start);
         this.comicBatchEnd.set(end);
@@ -576,6 +596,7 @@ export class PipelineComponent {
         this.writeComicBatchState(docKey, { start, end, hasMore });
         this.message.set(`Generated slides for range ${start}-${end}.`);
         this.loadSlides(docKey);
+        this.dispatchCharactersRefresh(docKey);
       },
       error: (err) => {
         const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
@@ -589,8 +610,23 @@ export class PipelineComponent {
     });
   }
 
-  private shouldShowLoadMore(response: RagComicBookGenerateResponse): boolean {
-    return response.isLastBatch !== true;
+  private shouldShowLoadMore(
+    response: RagComicBookGenerateResponse,
+    start: number,
+    end: number
+  ): boolean {
+    if (response.isLastBatch === true) {
+      return false;
+    }
+
+    const requestedChunks = Math.max(0, end - start);
+    const processedChunks = this.toNonNegativeInteger(response.processedChunks);
+
+    if (processedChunks === 0) {
+      return false;
+    }
+
+    return processedChunks >= requestedChunks;
   }
 
   private clampSlideIndex(index: number, slideCount: number): number {
@@ -604,6 +640,32 @@ export class PipelineComponent {
       swiper?.update?.();
       swiper?.slideTo?.(index);
     });
+  }
+
+  private playCurrentSlideIfAutoPlayEnabled(): void {
+    if (!this.autoPlayEnabled()) {
+      return;
+    }
+
+    const index = this.currentSlide();
+    const slide = this.slides()[index];
+    if (!slide) {
+      return;
+    }
+
+    const key = this.cardKey(slide, index);
+    if ((this.ttsPlaying() || this.ttsLoading()) && this.playingCardKey() === key) {
+      return;
+    }
+
+    void this.playCardTts(slide, index);
+  }
+
+  private dispatchCharactersRefresh(docKey: string): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(PipelineComponent.charactersRefreshEvent, { detail: docKey }));
   }
 
   private readComicBatchState(docKey: string): ComicBatchState | null {
@@ -948,7 +1010,14 @@ export class PipelineComponent {
           this.activeDialogueLine.set('');
           this.activeDialogueWordStart.set(0);
         }
-        const blob = await firstValueFrom(this.ttsApi.openAiVoice(segment.text, segment.voice));
+        const blob = await firstValueFrom(
+          this.ttsApi.openAiVoice({
+            text: segment.text,
+            voice: segment.voice,
+            format: 'wav',
+            expressiveness: segment.kind === 'dialogue' ? 'high' : undefined
+          })
+        );
         if (!blob.size) {
           throw new Error('API returned empty audio content.');
         }
@@ -989,6 +1058,13 @@ export class PipelineComponent {
         this.activeHeadCardKey.set('');
         this.ttsCurrentWord.set(-1);
         this.ttsTotalWords.set(0);
+
+        if (this.autoPlayEnabled()) {
+          const nextIndex = index + 1;
+          if (nextIndex < this.slides().length) {
+            this.goToSlide(nextIndex);
+          }
+        }
       }
     } catch (err) {
       console.error('[Pipeline TTS] Playback failed', err);

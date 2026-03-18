@@ -8,6 +8,14 @@ export interface OpenAiTtsGenerateRequest {
   format: 'wav';
 }
 
+export type TtsRequest = {
+  text: string;
+  voice: string;
+  format?: string;
+  expressiveness?: 'low' | 'medium' | 'high';
+  style?: 'neutral' | 'warm' | 'mysterious' | 'suspenseful' | 'solemn' | 'playful';
+};
+
 @Injectable({ providedIn: 'root' })
 export class TtsApiService {
   private readonly baseUrl = '/api/tts';
@@ -37,23 +45,31 @@ export class TtsApiService {
     );
   }
 
-  openAiVoice(text: string, voice = 'alloy'): Observable<Blob> {
-    console.info('[TTS] POST /api/tts (openAiVoice)', {
-      textLength: text?.length ?? 0,
-      voice,
-      format: 'wav'
+  openAiVoice(req: TtsRequest): Observable<Blob> {
+    console.info('[TTS] POST /api/tts/stream (openAiVoice)', {
+      textLength: req.text?.length ?? 0,
+      voice: req.voice,
+      format: req.format ?? 'wav',
+      expressiveness: req.expressiveness ?? 'medium',
+      style: req.style ?? 'neutral'
     });
     return this.http
       .post(
-        `${this.baseUrl}`,
-        { text, voice, format: 'wav' as const },
+        `${this.baseUrl}/stream`,
+        {
+          text: req.text,
+          voice: req.voice,
+          format: req.format ?? 'wav',
+          expressiveness: req.expressiveness,
+          style: req.style
+        },
         {
           responseType: 'blob'
         }
       )
       .pipe(
         tap((blob) => {
-          console.info('[TTS] /api/tts blob received (openAiVoice)', {
+          console.info('[TTS] /api/tts/stream blob received (openAiVoice)', {
             size: blob.size,
             type: blob.type || 'unknown'
           });

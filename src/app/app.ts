@@ -21,6 +21,7 @@ import {
   styleUrl: './app.scss'
 })
 export class App implements OnInit {
+  private static readonly charactersRefreshEvent = 'codex:characters-refresh';
   drawerDocs = signal<RagDocumentResponse[]>([]);
   drawerLoading = signal(false);
   selectedDocKey = signal('');
@@ -42,9 +43,17 @@ export class App implements OnInit {
     }
     this.loadDrawerDocs();
     this.syncSelectedDocFromUrl();
+    window.addEventListener(App.charactersRefreshEvent, this.onCharactersRefresh);
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe(() => this.syncSelectedDocFromUrl());
+  }
+
+  ngOnDestroy(): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+    window.removeEventListener(App.charactersRefreshEvent, this.onCharactersRefresh);
   }
 
   drawerDocKey(doc: RagDocumentResponse): string | null {
@@ -126,6 +135,14 @@ export class App implements OnInit {
     }
   }
 
+  private readonly onCharactersRefresh = (event: Event) => {
+    const docKey = (event as CustomEvent<string | undefined>).detail?.trim() ?? '';
+    if (!docKey) {
+      return;
+    }
+    this.refreshCharacters(docKey);
+  };
+
   private extractDocKeyFromUrl(url: string): string {
     const path = url.split('?')[0]?.split('#')[0] ?? '';
     const match = path.match(/^\/documents\/([^/]+)/);
@@ -166,5 +183,14 @@ export class App implements OnInit {
         }));
       }
     });
+  }
+
+  private refreshCharacters(docKey: string): void {
+    this.drawerCharactersByDocKey.update((current) => {
+      const next = { ...current };
+      delete next[docKey];
+      return next;
+    });
+    this.ensureCharactersLoaded(docKey);
   }
 }

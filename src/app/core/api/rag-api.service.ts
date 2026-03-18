@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Observable, timeout } from 'rxjs';
+import { map, Observable, timeout } from 'rxjs';
 
 export interface RagIngestResponse {
   docKey: string;
@@ -13,6 +13,11 @@ export interface RagDocumentResponse {
   docKey?: string;
   fileName?: string;
   createdAt?: string;
+  [key: string]: unknown;
+}
+
+interface RagDocumentListEnvelope {
+  value?: RagDocumentResponse[];
   [key: string]: unknown;
 }
 
@@ -179,6 +184,7 @@ export interface RagSlideHeadCoordinatesJson {
 @Injectable({ providedIn: 'root' })
 export class RagApiService {
   private readonly baseUrl = '/api/rag';
+  private readonly pipelineBaseUrl = '/api/pipeline';
   private readonly ingestTimeoutMs = 120000;
   private readonly listDocumentsTimeoutMs = 30000;
 
@@ -195,8 +201,16 @@ export class RagApiService {
 
   listDocuments(): Observable<RagDocumentResponse[]> {
     return this.http
-      .get<RagDocumentResponse[]>(`${this.baseUrl}/documents`)
-      .pipe(timeout(this.listDocumentsTimeoutMs));
+      .get<RagDocumentResponse[] | RagDocumentListEnvelope>(`${this.baseUrl}/documents`)
+      .pipe(
+        timeout(this.listDocumentsTimeoutMs),
+        map((response) => {
+          if (Array.isArray(response)) {
+            return response;
+          }
+          return Array.isArray(response?.value) ? response.value : [];
+        })
+      );
   }
 
   askQuestion(req: RagAskRequest): Observable<RagAskResponse> {
@@ -211,7 +225,7 @@ export class RagApiService {
     req: RagComicBookGenerateAllRequest
   ): Observable<RagComicBookGenerateResponse> {
     return this.http.post<RagComicBookGenerateResponse>(
-      `${this.baseUrl}/comic-book/generate-all`,
+      `${this.pipelineBaseUrl}/process_all`,
       req
     );
   }
