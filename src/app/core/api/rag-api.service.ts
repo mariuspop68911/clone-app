@@ -49,6 +49,8 @@ export interface RagImageGenerateResponse {
 
 export interface RagComicSlideCharacter {
   name?: string;
+  characterKey?: string;
+  characterIndex?: number;
   appearance?: string | null;
   [key: string]: unknown;
 }
@@ -72,6 +74,7 @@ export interface RagComicSlideNote {
   chunkId?: number;
   chunkIndex?: number;
   imagePrompt?: string;
+  promptTxt?: string;
   charactersInImage?: string[];
   segments?: RagComicSlideSegment[];
   [key: string]: unknown;
@@ -82,6 +85,8 @@ export interface RagComicSlide {
   comicGroupNoteId?: number;
   comicNoteId?: number;
   naration?: string;
+  promptTxt?: string;
+  charactersInSlide?: RagComicSlideCharacter[];
   comicNote?: RagComicSlideNote;
   imageUrls?: string[];
   [key: string]: unknown;
@@ -181,6 +186,84 @@ export interface RagSlideHeadCoordinatesJson {
   [key: string]: unknown;
 }
 
+export interface RagSlideDialog {
+  id?: number;
+  dialogOrder?: number;
+  speakerCharacterName?: string;
+  speakerCharacterKey?: string;
+  speakerGender?: string;
+  dialogLine?: string;
+  context?: string | null;
+  [key: string]: unknown;
+}
+
+export interface RagSlideDialogsResponse {
+  docKey?: string;
+  docId?: number;
+  slideId?: number;
+  count?: number;
+  dialogs?: RagSlideDialog[];
+  [key: string]: unknown;
+}
+
+interface PipelineCharacterRawResponseItem {
+  id?: number;
+  characterName?: string;
+  characterKey?: string;
+  gender?: string;
+  appearance?: string;
+  alternateNames?: string[];
+  imageUrl?: string;
+  promptTxt?: string;
+  [key: string]: unknown;
+}
+
+interface PipelineCharactersRawResponse {
+  docKey?: string;
+  docId?: number;
+  count?: number;
+  characters?: PipelineCharacterRawResponseItem[];
+  [key: string]: unknown;
+}
+
+interface PipelineSlideRawNote {
+  note_id?: number;
+  chunk_index?: number;
+  location?: string;
+  main_note?: string;
+  importance?: number;
+  [key: string]: unknown;
+}
+
+interface PipelineSlideRawCharacter {
+  character_name?: string;
+  character_key?: string;
+  character_index?: number;
+  [key: string]: unknown;
+}
+
+interface PipelineSlideRaw {
+  id?: number;
+  noteId?: number;
+  chunkIndex?: number;
+  note?: PipelineSlideRawNote;
+  unimportant?: PipelineSlideRawNote[];
+  charactersInSlide?: PipelineSlideRawCharacter[];
+  finalSummary?: string;
+  imagePrompt?: string;
+  imageUrl?: string;
+  promptTxt?: string;
+  [key: string]: unknown;
+}
+
+interface PipelineSlidesResponse {
+  docKey?: string;
+  docId?: number;
+  count?: number;
+  slides?: PipelineSlideRaw[];
+  [key: string]: unknown;
+}
+
 @Injectable({ providedIn: 'root' })
 export class RagApiService {
   private readonly baseUrl = '/api/rag';
@@ -235,26 +318,146 @@ export class RagApiService {
   }
 
   getComicSlidesWithImages(docKey: string): Observable<RagComicSlidesWithImagesResponse> {
-    return this.http.get<RagComicSlidesWithImagesResponse>(
-      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/slides-with-images`
-    );
+    return this.http
+      .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides`)
+      .pipe(map((response) => this.toComicSlidesWithImagesResponse(response)));
   }
 
   getCharacterReferenceImages(docKey: string): Observable<RagCharacterReferenceImageListResponse> {
-    return this.http.get<RagCharacterReferenceImageListResponse>(
-      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/gcs-reference-characters`
-    );
+    return this.http
+      .get<PipelineCharactersRawResponse>(
+        `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/characters_raw`
+      )
+      .pipe(map((response) => this.toCharacterReferenceImageListResponse(response)));
   }
 
   getSlidePrompt(docKey: string, slideId: number): Observable<RagSlidePromptResponse> {
-    return this.http.get<RagSlidePromptResponse>(
-      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/gcs-slide-prompt/${slideId}`
-    );
+    return this.http
+      .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides`)
+      .pipe(
+        map((response) => {
+          const slide = Array.isArray(response.slides)
+            ? response.slides.find((entry) => entry.id === slideId)
+            : null;
+          return {
+            docKey: response.docKey,
+            docId: response.docId,
+            slideId,
+            promptText: this.toTrimmedString(slide?.promptTxt)
+          };
+        })
+      );
   }
 
   getSlideHeads(docKey: string, slideId: number): Observable<RagSlideHeadsResponse> {
     return this.http.get<RagSlideHeadsResponse>(
       `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/gcs-slide-heads/${slideId}`
     );
+  }
+
+  getSlideDialogs(docKey: string, slideId: number): Observable<RagSlideDialogsResponse> {
+    return this.http.get<RagSlideDialogsResponse>(
+      `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides/${slideId}/dialogs`
+    );
+  }
+
+  private toCharacterReferenceImageListResponse(
+    response: PipelineCharactersRawResponse
+  ): RagCharacterReferenceImageListResponse {
+    const characters = Array.isArray(response.characters)
+      ? response.characters.map((character) => ({
+          characterName: this.toTrimmedString(character.characterName),
+          imageUrl: this.toTrimmedString(character.imageUrl),
+          characterKey: this.toTrimmedString(character.characterKey),
+          gender: this.toTrimmedString(character.gender),
+          appearance: this.toTrimmedString(character.appearance),
+          alternateNames: Array.isArray(character.alternateNames)
+            ? character.alternateNames.filter(
+                (name): name is string => typeof name === 'string' && name.trim().length > 0
+              )
+            : [],
+          promptTxt: this.toTrimmedString(character.promptTxt),
+          id: character.id
+        }))
+      : [];
+
+    return {
+      docKey: this.toTrimmedString(response.docKey),
+      docId: response.docId,
+      count: typeof response.count === 'number' ? response.count : characters.length,
+      characters
+    };
+  }
+
+  private toComicSlidesWithImagesResponse(
+    response: PipelineSlidesResponse
+  ): RagComicSlidesWithImagesResponse {
+    const slides = Array.isArray(response.slides)
+      ? response.slides.map((slide) => this.toComicSlide(slide))
+      : [];
+
+    return {
+      docKey: this.toTrimmedString(response.docKey),
+      docId: response.docId,
+      slideCount: typeof response.count === 'number' ? response.count : slides.length,
+      slides
+    };
+  }
+
+  private toComicSlide(slide: PipelineSlideRaw): RagComicSlide {
+    const note = slide.note;
+    const imagePrompt = this.toTrimmedString(slide.imagePrompt);
+    const promptTxt = this.toTrimmedString(slide.promptTxt);
+    const narration =
+      this.toTrimmedString(slide.finalSummary) ??
+      this.toTrimmedString(note?.main_note) ??
+      imagePrompt ??
+      undefined;
+    const imageUrl = this.toTrimmedString(slide.imageUrl);
+    const charactersInImage = Array.isArray(slide.charactersInSlide)
+      ? slide.charactersInSlide
+          .map((character) => this.toTrimmedString(character.character_name))
+          .filter((name): name is string => Boolean(name))
+      : [];
+    const charactersInSlide = Array.isArray(slide.charactersInSlide)
+      ? slide.charactersInSlide.map((character) => ({
+          name: this.toTrimmedString(character.character_name),
+          characterKey: this.toTrimmedString(character.character_key),
+          characterIndex:
+            typeof character.character_index === 'number' ? character.character_index : undefined
+        }))
+      : [];
+
+    return {
+      id: slide.id,
+      comicNoteId: slide.noteId,
+      naration: narration,
+      promptTxt,
+      charactersInSlide,
+      comicNote: {
+        id: slide.noteId ?? note?.note_id,
+        chunkIndex: slide.chunkIndex ?? note?.chunk_index,
+        imagePrompt,
+        promptTxt,
+        charactersInImage,
+        segments: note
+          ? [
+              {
+                location: this.toTrimmedString(note.location),
+                main_note: this.toTrimmedString(note.main_note)
+              }
+            ]
+          : []
+      },
+      imageUrls: imageUrl ? [imageUrl] : []
+    };
+  }
+
+  private toTrimmedString(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
   }
 }

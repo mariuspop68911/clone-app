@@ -56,6 +56,9 @@
                   @if (slideImageUrl(slide); as imageUrl) {
                     <img
                       class="slide-image"
+                      [class.slide-image-zoom-left]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-left'"
+                      [class.slide-image-zoom-center]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-center'"
+                      [class.slide-image-zoom-right]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-right'"
                       [src]="imageSrc(imageUrl)"
                       [alt]="'Slide ' + (slide.id ?? $index + 1)"
                       (error)="onImageError(imageUrl, $event)"
@@ -67,7 +70,12 @@
                       </p>
                     }
                   } @else {
-                    <div class="slide-image slide-image--empty">No image</div>
+                    <div class="slide-image slide-image--empty" aria-label="No image available">
+                      <div class="slide-image-placeholder">
+                        <div class="slide-image-placeholder-art" aria-hidden="true">No image</div>
+                        <p class="slide-image-placeholder-text">Image coming soon</p>
+                      </div>
+                    </div>
                   }
 
                   @if (shouldShowHeadMarkers(slide, cardIndex)) {
@@ -91,6 +99,11 @@
                           [attr.title]="bubble.characterName || 'Character'"
                         >
                           <p class="speech-bubble-text">
+                            @if (bubble.characterName) {
+                              <span class="speech-bubble-speaker speech-bubble-speaker-block">
+                                {{ bubble.characterName }}
+                              </span>
+                            }
                             @for (token of activeDialogueBubbleTokens(slide, cardIndex); track $index) {
                               @if (token.isWord) {
                                 <span
@@ -134,22 +147,43 @@
                     </div>
                   }
 
-                  <div class="slide-card-body">
-                    <p class="slide-copy">
-                      @for (token of mainNoteTokens(slide); track $index) {
-                        @if (token.isWord) {
-                          <span
-                            class="word"
-                            [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, 0)"
-                          >
-                            {{ token.text }}
-                          </span>
-                        } @else {
-                          <span>{{ token.text }}</span>
+                  @if (activeContextText(slide, cardIndex)) {
+                    <div class="slide-card-body slide-card-body-top">
+                      <p class="slide-copy">
+                        @for (token of activeContextTokens(slide, cardIndex); track $index) {
+                          @if (token.isWord) {
+                            <span
+                              class="word"
+                              [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
+                            >
+                              {{ token.text }}
+                            </span>
+                          } @else {
+                            <span>{{ token.text }}</span>
+                          }
                         }
-                      }
-                    </p>
-                  </div>
+                      </p>
+                    </div>
+                  }
+
+                  @if (shouldShowSlideSummary(slide, cardIndex)) {
+                    <div class="slide-card-body">
+                      <p class="slide-copy">
+                        @for (token of mainNoteTokens(slide); track $index) {
+                          @if (token.isWord) {
+                            <span
+                              class="word"
+                              [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, 0)"
+                            >
+                              {{ token.text }}
+                            </span>
+                          } @else {
+                            <span>{{ token.text }}</span>
+                          }
+                        }
+                      </p>
+                    </div>
+                  }
                 </div>
 
                 <div class="tts-controls">
@@ -202,7 +236,17 @@
             }
 
             @if (currentSlideItem(); as currentSlide) {
-              @if (dialogue(currentSlide).length) {
+              @if (isSlideDialogueLoading(currentSlide)) {
+                <div class="slide-dialogue-panel">
+                  <h4>Dialog Text</h4>
+                  <p>Loading dialogs...</p>
+                </div>
+              } @else if (slideDialogueError(currentSlide)) {
+                <div class="slide-dialogue-panel">
+                  <h4>Dialog Text</h4>
+                  <p>{{ slideDialogueError(currentSlide) }}</p>
+                </div>
+              } @else if (dialogue(currentSlide).length) {
                 <div class="slide-dialogue-panel">
                   <h4>Dialog Text</h4>
                   <ul class="dialogue-list">

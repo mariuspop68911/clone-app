@@ -12,6 +12,8 @@ import {
   RagApiService,
   RagComicBookGenerateResponse,
   RagComicSlide,
+  RagSlideDialog,
+  RagSlideDialogsResponse,
   RagSlideHeadCharacter,
   RagSlideHeadCoordinatesJson,
   RagSlideHeadsResponse
@@ -30,23 +32,19 @@ interface CardToken {
 
 interface DialogueEntry {
   character: string;
+  gender: string;
   line: string;
   text: string;
+  context: string;
 }
 
 interface TtsSegment {
-  kind: 'narration' | 'dialogue';
+  kind: 'narration' | 'dialogue' | 'context';
   text: string;
-  voice: string;
   wordStart: number;
   wordCount: number;
   character?: string;
   line?: string;
-}
-
-interface VoiceOption {
-  voice: string;
-  gender: string;
 }
 
 interface ComicBatchState {
@@ -66,6 +64,13 @@ interface SlideDialogueBubble extends SlideHeadMarker {
   wordStart: number;
 }
 
+interface SlideBubbleAnchor {
+  leftPercent: number;
+  topPercent: number;
+}
+
+type ActiveVisualMode = 'none' | 'dialogue' | 'context';
+
 @Component({
   selector: 'app-pipeline',
   imports: [DocumentChatComponent],
@@ -75,19 +80,17 @@ interface SlideDialogueBubble extends SlideHeadMarker {
 })
 export class PipelineComponent {
   private static readonly charactersRefreshEvent = 'codex:characters-refresh';
-  private static readonly fallbackVoices = ['alloy', 'echo', 'shimmer', 'sage', 'ash', 'coral'];
-  private static readonly fallbackMasculineVoices = ['ash', 'echo', 'sage', 'onyx'];
   private static readonly comicBatchSize = 10;
   private static readonly comicBatchStateStorageKey = 'pipeline-comic-batch-state';
   private static readonly highlightLeadSeconds = 1;
+  private static readonly dialogueSpeed = 1;
+  private static readonly narratorCharacterName = 'Narrator';
   private static readonly silentWavDataUrl =
     'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
   private audio: HTMLAudioElement | null = null;
   private currentObjectUrl: string | null = null;
   private playbackToken = 0;
   private onSegmentEnd: (() => void) | null = null;
-  private readonly characterVoiceMap = new Map<string, string>();
-  private characterVoiceCursor = 0;
   private audioUnlocked = false;
   private readonly failedUriMap = signal<Record<string, true>>({});
   private readonly onFirstInteractionBound = () => {
@@ -109,19 +112,23 @@ export class PipelineComponent {
   activeDialogueCardKey = signal('');
   activeDialogueCharacter = signal('');
   activeDialogueLine = signal('');
+  activeContextLine = signal('');
+  activeVisualMode = signal<ActiveVisualMode>('none');
   activeDialogueWordStart = signal(0);
+  summaryHiddenCardKey = signal('');
   ttsCurrentWord = signal(-1);
   ttsTotalWords = signal(0);
   currentSlide = signal(0);
   askOpen = signal(false);
-  availableVoices = signal<string[]>([]);
-  masculineVoices = signal<string[]>([]);
   slides = signal<RagComicSlide[]>([]);
   slidesLoading = signal(false);
   slidesMessage = signal('');
   slidePromptById = signal<Record<number, string>>({});
   slidePromptLoadingById = signal<Record<number, boolean>>({});
   slidePromptErrorById = signal<Record<number, string>>({});
+  slideDialogsById = signal<Record<number, DialogueEntry[]>>({});
+  slideDialogsLoadingById = signal<Record<number, boolean>>({});
+  slideDialogsErrorById = signal<Record<number, string>>({});
   slideHeadsByCardKey = signal<Record<string, SlideHeadMarker[]>>({});
   slideHeadsLoadingByCardKey = signal<Record<string, boolean>>({});
   activeHeadCardKey = signal('');
@@ -143,7 +150,6 @@ export class PipelineComponent {
       this.audio = new Audio();
       window.addEventListener('pointerdown', this.onFirstInteractionBound, { passive: true });
     }
-    void this.loadVoices();
 
     this.route.paramMap.subscribe((params) => {
       const key = params.get('docKey') ?? '';
@@ -163,7 +169,10 @@ export class PipelineComponent {
       this.activeDialogueCardKey.set('');
       this.activeDialogueCharacter.set('');
       this.activeDialogueLine.set('');
+      this.activeContextLine.set('');
+      this.activeVisualMode.set('none');
       this.activeDialogueWordStart.set(0);
+      this.summaryHiddenCardKey.set('');
       this.ttsCurrentWord.set(-1);
       this.ttsTotalWords.set(0);
       this.currentSlide.set(0);
@@ -174,11 +183,12 @@ export class PipelineComponent {
       this.slidePromptById.set({});
       this.slidePromptLoadingById.set({});
       this.slidePromptErrorById.set({});
+      this.slideDialogsById.set({});
+      this.slideDialogsLoadingById.set({});
+      this.slideDialogsErrorById.set({});
       this.slideHeadsByCardKey.set({});
       this.slideHeadsLoadingByCardKey.set({});
       this.activeHeadCardKey.set('');
-      this.characterVoiceMap.clear();
-      this.characterVoiceCursor = 0;
       this.failedUriMap.set({});
       this.stopCardTts();
 
@@ -273,6 +283,7 @@ export class PipelineComponent {
     }
     const nextIndex = Math.max(0, Math.floor(rawIndex));
     this.currentSlide.set(nextIndex);
+    this.summaryHiddenCardKey.set('');
     this.loadCurrentSlidePrompt();
     this.playCurrentSlideIfAutoPlayEnabled();
   }
@@ -286,6 +297,7 @@ export class PipelineComponent {
     if (swiper?.slideTo) {
       swiper.slideTo(index);
       this.currentSlide.set(index);
+      this.summaryHiddenCardKey.set('');
       this.loadCurrentSlidePrompt();
       this.playCurrentSlideIfAutoPlayEnabled();
     }
@@ -315,6 +327,16 @@ export class PipelineComponent {
 
   hasDialogue(slide: RagComicSlide): boolean {
     return this.dialogueEntries(slide).length > 0;
+  }
+
+  isSlideDialogueLoading(slide: RagComicSlide): boolean {
+    const slideId = this.toNullableFiniteNumber(slide.id);
+    return slideId === null ? false : !!this.slideDialogsLoadingById()[slideId];
+  }
+
+  slideDialogueError(slide: RagComicSlide): string {
+    const slideId = this.toNullableFiniteNumber(slide.id);
+    return slideId === null ? '' : this.slideDialogsErrorById()[slideId] ?? '';
   }
 
   imageSrc(uri: string): string {
@@ -371,7 +393,10 @@ export class PipelineComponent {
 
   shouldShowHeadMarkers(item: RagComicSlide, index: number): boolean {
     const key = this.cardKey(item, index);
-    return this.activeHeadCardKey() === key && this.headMarkers(item, index).length > 0;
+    return (
+      this.activeDialogueCardKey() === key &&
+      (this.headMarkers(item, index).length > 0 || this.activeDialogueBubble(item, index) !== null)
+    );
   }
 
   headMarkers(item: RagComicSlide, index: number): SlideHeadMarker[] {
@@ -380,7 +405,7 @@ export class PipelineComponent {
 
   activeDialogueBubble(item: RagComicSlide, index: number): SlideDialogueBubble | null {
     const key = this.cardKey(item, index);
-    if (this.activeHeadCardKey() !== key || this.activeDialogueCardKey() !== key) {
+    if (this.activeVisualMode() !== 'dialogue' || this.activeDialogueCardKey() !== key) {
       return null;
     }
 
@@ -389,16 +414,15 @@ export class PipelineComponent {
       return null;
     }
 
-    const marker = this.findMarkerForCharacter(
-      this.headMarkers(item, index),
-      this.activeDialogueCharacter()
-    );
-    if (!marker) {
+    const anchor = this.dialogueBubbleAnchor(item, this.activeDialogueCharacter(), line);
+    if (!anchor) {
       return null;
     }
 
     return {
-      ...marker,
+      characterName: this.activeDialogueCharacter().trim(),
+      leftPercent: anchor.leftPercent,
+      topPercent: anchor.topPercent,
       line,
       wordStart: this.activeDialogueWordStart()
     };
@@ -408,6 +432,25 @@ export class PipelineComponent {
     return this.tokens(this.mainNote(item));
   }
 
+  shouldShowSlideSummary(item: RagComicSlide, index: number): boolean {
+    return this.summaryHiddenCardKey() !== this.cardKey(item, index);
+  }
+
+  dialogueZoomClass(item: RagComicSlide, index: number): string {
+    const bubble = this.activeDialogueBubble(item, index);
+    if (!bubble) {
+      return '';
+    }
+
+    if (bubble.leftPercent <= 35) {
+      return 'slide-image-zoom-left';
+    }
+    if (bubble.leftPercent >= 65) {
+      return 'slide-image-zoom-right';
+    }
+    return 'slide-image-zoom-center';
+  }
+
   activeDialogueBubbleTokens(item: RagComicSlide, index: number): CardToken[] {
     const bubble = this.activeDialogueBubble(item, index);
     return bubble ? this.tokens(bubble.line) : [];
@@ -415,7 +458,7 @@ export class PipelineComponent {
 
   activeDialogueFallbackLine(item: RagComicSlide, index: number): string {
     const key = this.cardKey(item, index);
-    if (this.activeDialogueCardKey() !== key) {
+    if (this.activeVisualMode() !== 'dialogue' || this.activeDialogueCardKey() !== key) {
       return '';
     }
     if (this.activeDialogueBubble(item, index)) {
@@ -431,7 +474,11 @@ export class PipelineComponent {
 
   activeDialogueFallbackSpeaker(item: RagComicSlide, index: number): string {
     const key = this.cardKey(item, index);
-    if (this.activeDialogueCardKey() !== key || this.activeDialogueBubble(item, index)) {
+    if (
+      this.activeVisualMode() !== 'dialogue' ||
+      this.activeDialogueCardKey() !== key ||
+      this.activeDialogueBubble(item, index)
+    ) {
       return '';
     }
     return this.activeDialogueCharacter().trim();
@@ -439,7 +486,11 @@ export class PipelineComponent {
 
   activeDialogueFallbackText(item: RagComicSlide, index: number): string {
     const key = this.cardKey(item, index);
-    if (this.activeDialogueCardKey() !== key || this.activeDialogueBubble(item, index)) {
+    if (
+      this.activeVisualMode() !== 'dialogue' ||
+      this.activeDialogueCardKey() !== key ||
+      this.activeDialogueBubble(item, index)
+    ) {
       return '';
     }
     return this.activeDialogueLine().trim();
@@ -447,6 +498,18 @@ export class PipelineComponent {
 
   activeDialogueFallbackTokens(item: RagComicSlide, index: number): CardToken[] {
     return this.tokens(this.activeDialogueFallbackText(item, index));
+  }
+
+  activeContextText(item: RagComicSlide, index: number): string {
+    const key = this.cardKey(item, index);
+    if (this.activeVisualMode() !== 'context' || this.activeDialogueCardKey() !== key) {
+      return '';
+    }
+    return this.activeContextLine().trim();
+  }
+
+  activeContextTokens(item: RagComicSlide, index: number): CardToken[] {
+    return this.tokens(this.activeContextText(item, index));
   }
 
   isTokenActive(item: RagComicSlide, index: number, tokenWordIndex: number, offset: number): boolean {
@@ -483,7 +546,7 @@ export class PipelineComponent {
     if (slideId === null) {
       return '';
     }
-    return this.slidePromptById()[slideId] ?? '';
+    return this.slidePromptById()[slideId] ?? this.promptTextForSlideId(slideId);
   }
 
   slidePromptError(slideId: number | null): string {
@@ -523,11 +586,13 @@ export class PipelineComponent {
       next: (response) => {
         const nextSlides = Array.isArray(response.slides) ? response.slides : [];
         this.slides.set(nextSlides);
+        this.syncSlidePrompts(nextSlides);
         this.slidesLoading.set(false);
         const nextIndex = this.clampSlideIndex(preservedSlide, nextSlides.length);
         this.currentSlide.set(nextIndex);
         this.syncSwiperSlide(nextIndex);
         this.loadCurrentSlidePrompt();
+        void this.loadCurrentSlideDialogs();
       },
       error: (err) => {
         const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
@@ -542,44 +607,23 @@ export class PipelineComponent {
     });
   }
 
-  private fetchSlidePrompt(docKey: string, slideId: number): void {
-    if (this.slidePromptById()[slideId] || this.slidePromptLoadingById()[slideId]) {
-      return;
-    }
-
-    this.slidePromptLoadingById.update((current) => ({ ...current, [slideId]: true }));
-    this.slidePromptErrorById.update((current) => ({ ...current, [slideId]: '' }));
-
-    this.ragApi.getSlidePrompt(docKey, slideId).subscribe({
-      next: (response) => {
-        this.slidePromptById.update((current) => ({
-          ...current,
-          [slideId]: (response.promptText ?? '').trim()
-        }));
-        this.slidePromptLoadingById.update((current) => ({ ...current, [slideId]: false }));
-      },
-      error: (err) => {
-        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
-        const backendMessage =
-          typeof err?.error === 'string'
-            ? err.error
-            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-        this.slidePromptErrorById.update((current) => ({
-          ...current,
-          [slideId]: `Failed to load prompt (${status}): ${backendMessage}`
-        }));
-        this.slidePromptLoadingById.update((current) => ({ ...current, [slideId]: false }));
-      }
-    });
-  }
-
   private loadCurrentSlidePrompt(): void {
     const slideId = this.currentSlidePromptId();
-    const key = this.docKey().trim();
-    if (slideId === null || !key) {
+    if (slideId === null) {
       return;
     }
-    this.fetchSlidePrompt(key, slideId);
+    const promptText = this.promptTextForSlideId(slideId);
+    this.slidePromptById.update((current) =>
+      promptText ? { ...current, [slideId]: promptText } : current
+    );
+  }
+
+  private async loadCurrentSlideDialogs(): Promise<void> {
+    const slide = this.currentSlideItem();
+    if (!slide) {
+      return;
+    }
+    await this.ensureSlideDialogsLoaded(slide);
   }
 
   private generateAllBatch(docKey: string, start: number, end: number): void {
@@ -723,10 +767,14 @@ export class PipelineComponent {
     this.slidePromptById.set({});
     this.slidePromptLoadingById.set({});
     this.slidePromptErrorById.set({});
+    this.slideDialogsById.set({});
+    this.slideDialogsLoadingById.set({});
+    this.slideDialogsErrorById.set({});
     this.slideHeadsByCardKey.set({});
     this.slideHeadsLoadingByCardKey.set({});
     this.activeHeadCardKey.set('');
     this.currentSlide.set(0);
+    this.summaryHiddenCardKey.set('');
     this.failedUriMap.set({});
     this.stopCardTts();
     this.writeComicBatchState(docKey, {
@@ -737,24 +785,136 @@ export class PipelineComponent {
   }
 
   private dialogueEntries(item: RagComicSlide): DialogueEntry[] {
-    const segments = Array.isArray(item.comicNote?.segments) ? item.comicNote.segments : [];
-    return segments
-      .flatMap((segment) => (Array.isArray(segment.dialogue) ? segment.dialogue : []))
-      .map((entry) => this.dialogueLine(entry))
-      .filter((entry) => entry.text.length > 0);
+    const slideId = this.toNullableFiniteNumber(item.id);
+    if (slideId === null) {
+      return [];
+    }
+    return this.slideDialogsById()[slideId] ?? [];
   }
 
-  private dialogueLine(entry: unknown): DialogueEntry {
-    if (!entry || typeof entry !== 'object') {
-      return { character: '', line: '', text: '' };
+  private syncSlidePrompts(slides: RagComicSlide[]): void {
+    const nextPrompts = slides.reduce<Record<number, string>>((acc, slide) => {
+      const slideId = this.toNullableFiniteNumber(slide.id);
+      const promptText = this.promptTextForSlide(slide);
+      if (slideId !== null && promptText) {
+        acc[slideId] = promptText;
+      }
+      return acc;
+    }, {});
+
+    this.slidePromptById.set(nextPrompts);
+    this.slidePromptLoadingById.set({});
+    this.slidePromptErrorById.set({});
+  }
+
+  private promptTextForSlideId(slideId: number): string {
+    const slide = this.slides().find((entry) => this.toNullableFiniteNumber(entry.id) === slideId);
+    return slide ? this.promptTextForSlide(slide) : '';
+  }
+
+  private promptTextForSlide(slide: RagComicSlide): string {
+    const directPrompt = typeof slide.promptTxt === 'string' ? slide.promptTxt.trim() : '';
+    if (directPrompt) {
+      return directPrompt;
     }
-    const asRecord = entry as Record<string, unknown>;
-    const character = typeof asRecord['character'] === 'string' ? asRecord['character'].trim() : '';
-    const line = typeof asRecord['line'] === 'string' ? asRecord['line'].trim() : '';
+
+    const notePrompt = typeof slide.comicNote?.promptTxt === 'string' ? slide.comicNote.promptTxt.trim() : '';
+    if (notePrompt) {
+      return notePrompt;
+    }
+
+    return '';
+  }
+
+  private dialogueBubbleAnchor(
+    item: RagComicSlide,
+    characterName: string,
+    line: string
+  ): SlideBubbleAnchor | null {
+    const orderedCharacters = this.orderedSlideCharacters(item);
+    if (!orderedCharacters.length) {
+      return null;
+    }
+
+    const normalizedCharacter = this.normalizeCharacterName(characterName);
+    const speakerIndex = orderedCharacters.findIndex((entry) => {
+      const normalizedEntry = this.normalizeCharacterName(entry.name ?? '');
+      return (
+        normalizedEntry.length > 0 &&
+        (normalizedEntry === normalizedCharacter ||
+          normalizedEntry.includes(normalizedCharacter) ||
+          normalizedCharacter.includes(normalizedEntry))
+      );
+    });
+
+    const resolvedIndex = speakerIndex >= 0 ? speakerIndex : 0;
+    return this.anchorForCharacterCount(orderedCharacters.length, resolvedIndex, line);
+  }
+
+  private orderedSlideCharacters(item: RagComicSlide): Array<{
+    name?: string;
+    characterKey?: string;
+    characterIndex?: number;
+  }> {
+    const characters = Array.isArray(item.charactersInSlide) ? item.charactersInSlide.slice() : [];
+    return characters.sort(
+      (a, b) =>
+        this.toNonNegativeInteger(a.characterIndex) - this.toNonNegativeInteger(b.characterIndex)
+    );
+  }
+
+  private anchorForCharacterCount(count: number, index: number, seedText: string): SlideBubbleAnchor {
+    const jitter = this.dialogueVerticalJitter(seedText);
+    if (count <= 1) {
+      return { leftPercent: 50, topPercent: 44 + jitter };
+    }
+    if (count === 2) {
+      return index <= 0
+        ? { leftPercent: 35, topPercent: 44 + jitter }
+        : { leftPercent: 65, topPercent: 44 + jitter };
+    }
+
+    const slots: SlideBubbleAnchor[] = [
+      { leftPercent: 31, topPercent: 45 + jitter },
+      { leftPercent: 50, topPercent: 42 + jitter },
+      { leftPercent: 69, topPercent: 45 + jitter }
+    ];
+    return slots[Math.max(0, Math.min(index, slots.length - 1))];
+  }
+
+  private dialogueVerticalJitter(seedText: string): number {
+    const normalized = seedText.trim().toLowerCase();
+    if (!normalized) {
+      return 0;
+    }
+
+    let hash = 0;
+    for (let i = 0; i < normalized.length; i += 1) {
+      hash = (hash * 31 + normalized.charCodeAt(i)) % 1000;
+    }
+
+    return (hash / 1000) * 4 - 2;
+  }
+
+  private dialogueLine(entry: RagSlideDialog): DialogueEntry {
+    const character =
+      typeof entry.speakerCharacterName === 'string' ? entry.speakerCharacterName.trim() : '';
+    const gender = typeof entry.speakerGender === 'string' ? entry.speakerGender.trim().toLowerCase() : '';
+    const line = typeof entry.dialogLine === 'string' ? entry.dialogLine.trim() : '';
+    const context = typeof entry.context === 'string' ? entry.context.trim() : '';
     if (character && line) {
-      return { character, line, text: `${character}: ${line}` };
+      return { character, gender, line, text: `${character}: ${line}`, context };
     }
-    return { character: '', line, text: line };
+    return { character: '', gender, line, text: line, context };
+  }
+
+  private toDialogueEntries(response: RagSlideDialogsResponse): DialogueEntry[] {
+    const dialogs = Array.isArray(response.dialogs) ? response.dialogs : [];
+    return dialogs
+      .slice()
+      .sort((a, b) => this.toNonNegativeInteger(a.dialogOrder) - this.toNonNegativeInteger(b.dialogOrder))
+      .map((entry) => this.dialogueLine(entry))
+      .filter((entry) => entry.text.length > 0);
   }
 
   private cardTextForTts(item: RagComicSlide): string {
@@ -782,7 +942,6 @@ export class PipelineComponent {
       wordStart = this.pushSentenceSegments(segments, {
         kind: 'narration',
         text: main,
-        voice: this.narratorVoice(),
         wordStart
       });
     }
@@ -794,11 +953,17 @@ export class PipelineComponent {
       wordStart = this.pushSentenceSegments(segments, {
         kind: 'dialogue',
         text: entry.line || entry.text,
-        voice: this.voiceForCharacter(entry.character),
         wordStart,
         character: entry.character,
         line: entry.line || entry.text
       });
+      if (entry.context) {
+        wordStart = this.pushSentenceSegments(segments, {
+          kind: 'context',
+          text: entry.context,
+          wordStart
+        });
+      }
     }
 
     if (!segments.length) {
@@ -807,7 +972,6 @@ export class PipelineComponent {
         this.pushSentenceSegments(segments, {
           kind: 'narration',
           text: fallback,
-          voice: this.narratorVoice(),
           wordStart: 0
         });
       }
@@ -856,96 +1020,6 @@ export class PipelineComponent {
     return (matches ?? [trimmed]).map((part) => part.trim()).filter(Boolean);
   }
 
-  private narratorVoice(): string {
-    const voices = this.availableVoices();
-    return voices[0] ?? PipelineComponent.fallbackVoices[0];
-  }
-
-  private voiceForCharacter(character: string): string {
-    const normalized = character.trim().toLowerCase();
-    if (!normalized) {
-      return this.narratorVoice();
-    }
-
-    const existing = this.characterVoiceMap.get(normalized);
-    if (existing) {
-      return existing;
-    }
-
-    const narrator = this.narratorVoice();
-    const masculine = this.masculineVoices();
-    const selectable = masculine.filter((voice) => voice !== narrator);
-    const pool = selectable.length ? selectable : masculine;
-    if (!pool.length) {
-      return narrator;
-    }
-
-    const voice = pool[this.characterVoiceCursor % pool.length];
-    this.characterVoiceCursor += 1;
-    this.characterVoiceMap.set(normalized, voice);
-    return voice;
-  }
-
-  private async loadVoices(): Promise<void> {
-    try {
-      const payload = await firstValueFrom(this.ttsApi.listOpenAiVoices());
-      const normalized = this.normalizeVoices(payload);
-      const all = normalized.all.length ? normalized.all : [...PipelineComponent.fallbackVoices];
-      const masculine = normalized.male.length
-        ? normalized.male
-        : PipelineComponent.fallbackMasculineVoices.filter((voice) => all.includes(voice));
-
-      this.availableVoices.set(all);
-      this.masculineVoices.set(masculine.length ? masculine : [all[0]]);
-    } catch {
-      this.availableVoices.set([...PipelineComponent.fallbackVoices]);
-      this.masculineVoices.set([...PipelineComponent.fallbackMasculineVoices]);
-    }
-  }
-
-  private normalizeVoices(payload: unknown): { all: string[]; male: string[] } {
-    const values = Array.isArray(payload)
-      ? payload
-      : payload &&
-            typeof payload === 'object' &&
-            Array.isArray((payload as Record<string, unknown>)['voices'])
-        ? ((payload as Record<string, unknown>)['voices'] as unknown[])
-        : [];
-
-    const options: VoiceOption[] = [];
-    for (const entry of values) {
-      if (typeof entry === 'string' && entry.trim()) {
-        options.push({ voice: entry.trim(), gender: '' });
-        continue;
-      }
-
-      if (entry && typeof entry === 'object') {
-        const record = entry as Record<string, unknown>;
-        const charId = record['charId'];
-        const voice = record['voice'];
-        const id = record['id'];
-        const gender = typeof record['gender'] === 'string' ? record['gender'].trim().toLowerCase() : '';
-        if (typeof voice === 'string' && voice.trim()) {
-          options.push({ voice: voice.trim(), gender });
-        } else if (typeof charId === 'string' && charId.trim()) {
-          options.push({ voice: charId.trim(), gender });
-        } else if (typeof id === 'string' && id.trim()) {
-          options.push({ voice: id.trim(), gender });
-        }
-      }
-    }
-
-    const all = Array.from(new Set(options.map((option) => option.voice)));
-    const male = Array.from(
-      new Set(
-        options
-          .filter((option) => option.gender === 'male' || option.gender === 'masculine')
-          .map((option) => option.voice)
-      )
-    );
-    return { all, male };
-  }
-
   private async playCardTts(item: RagComicSlide, index: number): Promise<void> {
     const key = this.cardKey(item, index);
     this.playingCardKey.set(key);
@@ -954,18 +1028,21 @@ export class PipelineComponent {
     this.activeDialogueCardKey.set('');
     this.activeDialogueCharacter.set('');
     this.activeDialogueLine.set('');
-
-    const segments = this.cardSegmentsForTts(item);
-    if (!segments.length) {
-      this.ttsMessage.set('No text available for TTS on this card.');
-      return;
-    }
+    this.activeContextLine.set('');
+    this.activeVisualMode.set('none');
 
     if (!this.audio) {
       this.ttsMessage.set('Audio playback is only available in the browser.');
       return;
     }
     await this.ensureAudioUnlocked();
+    await this.ensureSlideDialogsLoaded(item);
+
+    const segments = this.cardSegmentsForTts(item);
+    if (!segments.length) {
+      this.ttsMessage.set('No text available for TTS on this card.');
+      return;
+    }
 
     this.stopCardTts();
     const token = ++this.playbackToken;
@@ -975,47 +1052,46 @@ export class PipelineComponent {
     this.ttsTotalWords.set(segments.reduce((sum, segment) => sum + segment.wordCount, 0));
 
     try {
-      if (this.hasDialogue(item)) {
-        await this.ensureSlideHeadsLoaded(item, index);
-        if (token !== this.playbackToken) {
-          return;
-        }
-        if (this.headMarkers(item, index).length) {
-          this.activeHeadCardKey.set(key);
-        }
-      }
-
       for (let i = 0; i < segments.length; i += 1) {
         if (token !== this.playbackToken) {
           return;
         }
         const segment = segments[i];
         if (segment.kind === 'dialogue') {
-          const matchingMarker = this.findMarkerForCharacter(
-            this.headMarkers(item, index),
-            segment.character ?? ''
-          );
           this.activeDialogueCardKey.set(key);
           this.activeDialogueCharacter.set(segment.character ?? '');
           this.activeDialogueLine.set(segment.line ?? segment.text);
           this.activeDialogueWordStart.set(segment.wordStart);
-          if (matchingMarker) {
-            this.activeHeadCardKey.set(key);
-          } else {
-            this.activeHeadCardKey.set('');
-          }
+          this.activeVisualMode.set('dialogue');
+          this.activeHeadCardKey.set('');
+          this.activeContextLine.set('');
+          this.summaryHiddenCardKey.set(key);
+        } else if (segment.kind === 'context') {
+          this.activeDialogueCardKey.set(key);
+          this.activeDialogueCharacter.set('');
+          this.activeDialogueLine.set('');
+          this.activeDialogueWordStart.set(segment.wordStart);
+          this.activeHeadCardKey.set('');
+          this.activeContextLine.set(segment.text);
+          this.activeVisualMode.set('context');
         } else {
           this.activeDialogueCardKey.set('');
           this.activeDialogueCharacter.set('');
           this.activeDialogueLine.set('');
+          this.activeContextLine.set('');
           this.activeDialogueWordStart.set(0);
+          this.activeVisualMode.set('none');
         }
         const blob = await firstValueFrom(
-          this.ttsApi.openAiVoice({
+          this.ttsApi.generateOpenAiTts({
             text: segment.text,
-            voice: segment.voice,
-            format: 'wav',
-            expressiveness: segment.kind === 'dialogue' ? 'high' : undefined
+            characterName:
+              segment.kind === 'dialogue'
+                ? segment.character || PipelineComponent.narratorCharacterName
+                : PipelineComponent.narratorCharacterName,
+            speed: segment.kind === 'dialogue' ? PipelineComponent.dialogueSpeed : undefined,
+            expressiveness: segment.kind === 'dialogue' ? 'high' : undefined,
+            format: 'wav'
           })
         );
         if (!blob.size) {
@@ -1054,6 +1130,8 @@ export class PipelineComponent {
         this.activeDialogueCardKey.set('');
         this.activeDialogueCharacter.set('');
         this.activeDialogueLine.set('');
+        this.activeContextLine.set('');
+        this.activeVisualMode.set('none');
         this.activeDialogueWordStart.set(0);
         this.activeHeadCardKey.set('');
         this.ttsCurrentWord.set(-1);
@@ -1074,6 +1152,8 @@ export class PipelineComponent {
       this.activeDialogueCardKey.set('');
       this.activeDialogueCharacter.set('');
       this.activeDialogueLine.set('');
+      this.activeContextLine.set('');
+      this.activeVisualMode.set('none');
       this.activeDialogueWordStart.set(0);
       this.activeHeadCardKey.set('');
       this.ttsCurrentWord.set(-1);
@@ -1099,6 +1179,8 @@ export class PipelineComponent {
     this.activeDialogueCardKey.set('');
     this.activeDialogueCharacter.set('');
     this.activeDialogueLine.set('');
+    this.activeContextLine.set('');
+    this.activeVisualMode.set('none');
     this.activeDialogueWordStart.set(0);
     this.activeHeadCardKey.set('');
     this.ttsCurrentWord.set(-1);
@@ -1132,6 +1214,35 @@ export class PipelineComponent {
       this.slideHeadsByCardKey.update((current) => ({ ...current, [key]: [] }));
     } finally {
       this.slideHeadsLoadingByCardKey.update((current) => ({ ...current, [key]: false }));
+    }
+  }
+
+  private async ensureSlideDialogsLoaded(item: RagComicSlide): Promise<void> {
+    const docKey = this.docKey().trim();
+    const slideId = this.toNullableFiniteNumber(item.id);
+    if (!docKey || slideId === null) {
+      return;
+    }
+
+    if (this.slideDialogsById()[slideId] || this.slideDialogsLoadingById()[slideId]) {
+      return;
+    }
+
+    this.slideDialogsLoadingById.update((current) => ({ ...current, [slideId]: true }));
+    this.slideDialogsErrorById.update((current) => ({ ...current, [slideId]: '' }));
+
+    try {
+      const response = await firstValueFrom(this.ragApi.getSlideDialogs(docKey, slideId));
+      const entries = this.toDialogueEntries(response);
+      this.slideDialogsById.update((current) => ({ ...current, [slideId]: entries }));
+    } catch (err) {
+      this.slideDialogsById.update((current) => ({ ...current, [slideId]: [] }));
+      this.slideDialogsErrorById.update((current) => ({
+        ...current,
+        [slideId]: `Failed to load dialogs: ${this.readApiError(err)}`
+      }));
+    } finally {
+      this.slideDialogsLoadingById.update((current) => ({ ...current, [slideId]: false }));
     }
   }
 

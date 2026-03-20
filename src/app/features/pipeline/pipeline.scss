@@ -103,13 +103,40 @@
   width: 100%;
   background: #edf3f8;
   object-fit: cover;
+  transition: transform 420ms ease, transform-origin 420ms ease;
 }
 
 .slide-image--empty {
   display: grid;
   place-items: center;
-  color: #5c7286;
-  font-weight: 600;
+  min-height: 22rem;
+  padding: 1rem;
+  background: linear-gradient(180deg, #b9d7e8 0%, #eef5fa 100%);
+  color: #24465e;
+}
+
+.slide-image-placeholder {
+  width: min(82%, 14rem);
+  display: grid;
+  gap: 0.7rem;
+  justify-items: center;
+}
+
+.slide-image-placeholder-art {
+  width: 100%;
+  padding: 1.35rem 0.9rem;
+  border: 2px dashed rgba(36, 70, 94, 0.35);
+  border-radius: 16px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.slide-image-placeholder-text {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 800;
 }
 
 .carousel {
@@ -130,17 +157,33 @@
   position: relative;
   border: 1px solid #dde3eb;
   border-radius: 10px;
-  overflow: hidden;
+  overflow: visible;
   background: #fff;
   margin-bottom: 0.35rem;
 }
 
 .slide-visual {
   position: relative;
+  overflow: visible;
 }
 
 .slide-image {
   height: auto;
+}
+
+.slide-image-zoom-left {
+  transform: scale(1.16);
+  transform-origin: 26% 54%;
+}
+
+.slide-image-zoom-center {
+  transform: scale(1.16);
+  transform-origin: 50% 52%;
+}
+
+.slide-image-zoom-right {
+  transform: scale(1.16);
+  transform-origin: 74% 54%;
 }
 
 .head-markers-layer {
@@ -150,56 +193,19 @@
   pointer-events: none;
 }
 
-.mouth-marker {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  padding: 0.18rem 0.42rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(16, 37, 52, 0.18);
-  color: #102534;
-  font-size: 0.55rem;
-  font-weight: 800;
-  line-height: 1;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
-}
-
-.mouth-marker-x {
-  color: #ba2222;
-  font-size: 0.68rem;
-  line-height: 1;
-}
-
-.mouth-marker-name {
-  max-width: 6.5rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .speech-bubble {
   position: absolute;
-  width: min(16.5rem, calc(100% - 1.25rem));
+  width: fit-content;
   max-width: 16.5rem;
-  transform: translate(-50%, 3.35rem);
+  min-width: 5.5rem;
+  transform: translate(-50%, 5.9rem);
   padding: 1rem 1.15rem 0.95rem;
   border: 2px solid #111111;
   border-radius: 50% 50% 48% 52% / 42% 42% 58% 58%;
   background: #ffffff;
   color: #111111;
-  font-family: 'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', 'Trebuchet MS', sans-serif;
-  font-size: 0.58rem;
-  font-weight: 700;
-  font-style: italic;
-  line-height: 1.02;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
-  text-wrap: pretty;
   isolation: isolate;
-  z-index: 1;
+  z-index: 6;
   box-shadow:
     1px 2px 0 rgba(0, 0, 0, 0.18);
 }
@@ -218,17 +224,32 @@
 
 .speech-bubble-text {
   margin: 0;
+  font-family: 'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', 'Trebuchet MS', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
   text-align: center;
+  text-transform: uppercase;
   max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
   hyphens: auto;
+  text-wrap: pretty;
 }
 
 .speech-bubble-speaker {
+  font-size: 0.58rem;
   font-weight: 900;
+  font-style: italic;
   color: #000000;
   letter-spacing: 0.03em;
+}
+
+.speech-bubble-speaker-block {
+  display: block;
+  margin-bottom: 0.28rem;
 }
 
 .slide-card-body {
@@ -245,6 +266,11 @@
   color: #1e2b34;
   font-family: 'Comic Sans MS', 'Chalkboard SE', 'Marker Felt', 'Trebuchet MS', sans-serif;
   text-transform: uppercase;
+}
+
+.slide-card-body-top {
+  top: 0.8rem;
+  bottom: auto;
 }
 
 .slide-copy {
@@ -513,10 +539,19 @@
 
 @media (max-width: 720px) {
   .speech-bubble {
-    width: min(12.5rem, calc(100% - 0.8rem));
+    width: fit-content;
     max-width: 12.5rem;
+    min-width: 4.8rem;
+    transform: translate(-50%, 5.1rem);
     padding: 0.8rem 0.9rem 0.75rem;
-    font-size: 0.52rem;
+  }
+
+  .speech-bubble-text {
+    font-size: 0.66rem;
+  }
+
+  .speech-bubble-speaker {
+    font-size: 0.54rem;
   }
 
   .slide-card-body {
@@ -526,8 +561,17 @@
     padding: 0.4rem 0.55rem 0.5rem;
   }
 
+  .slide-card-body-top {
+    top: 0.55rem;
+    bottom: auto;
+  }
+
   .slide-copy {
     font-size: 0.66rem;
+  }
+
+  .slide-image--empty {
+    min-height: 18rem;
   }
 
   .ask-fab {

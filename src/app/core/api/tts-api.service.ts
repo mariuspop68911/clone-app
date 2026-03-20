@@ -4,13 +4,18 @@ import { Observable, tap } from 'rxjs';
 
 export interface OpenAiTtsGenerateRequest {
   text: string;
-  voice: string;
+  voice?: string;
+  characterName?: string;
+  speed?: number;
+  expressiveness?: 'low' | 'medium' | 'high';
   format: 'wav';
 }
 
 export type TtsRequest = {
   text: string;
-  voice: string;
+  voice?: string;
+  characterName?: string;
+  speed?: number;
   format?: string;
   expressiveness?: 'low' | 'medium' | 'high';
   style?: 'neutral' | 'warm' | 'mysterious' | 'suspenseful' | 'solemn' | 'playful';
@@ -33,6 +38,9 @@ export class TtsApiService {
     console.info('[TTS] POST /api/tts', {
       textLength: req.text?.length ?? 0,
       voice: req.voice,
+      characterName: req.characterName,
+      speed: req.speed,
+      expressiveness: req.expressiveness,
       format: req.format
     });
     return this.http.post(`${this.baseUrl}`, req, { responseType: 'blob' }).pipe(
@@ -49,6 +57,8 @@ export class TtsApiService {
     console.info('[TTS] POST /api/tts/stream (openAiVoice)', {
       textLength: req.text?.length ?? 0,
       voice: req.voice,
+      characterName: req.characterName,
+      speed: req.speed,
       format: req.format ?? 'wav',
       expressiveness: req.expressiveness ?? 'medium',
       style: req.style ?? 'neutral'
@@ -59,6 +69,8 @@ export class TtsApiService {
         {
           text: req.text,
           voice: req.voice,
+          characterName: req.characterName,
+          speed: req.speed,
           format: req.format ?? 'wav',
           expressiveness: req.expressiveness,
           style: req.style
