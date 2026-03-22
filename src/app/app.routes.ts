@@ -1,3 +1,6 @@
+import { BooksBrowseComponent } from './features/books-browse';
+import { BookReaderComponent } from './features/book-reader';
+import { BooksSearchComponent } from './features/books-search';
 import { Routes } from '@angular/router';
 import { DocumentDetailsComponent } from './features/document-details';
 import { DocumentChatComponent } from './features/document-chat';
@@ -6,11 +9,14 @@ import { ImportComponent } from './features/import';
 import { TtsOpenAiComponent } from './features/tts-openai';
 
 export const routes: Routes = [
-  { path: '', redirectTo: 'documents', pathMatch: 'full' },
+  { path: '', redirectTo: 'books', pathMatch: 'full' },
+  { path: 'books', component: BooksSearchComponent },
+  { path: 'browse', component: BooksBrowseComponent },
+  { path: 'books/:editionId', component: BookReaderComponent },
   { path: 'import', component: ImportComponent },
   { path: 'tts/openai', component: TtsOpenAiComponent },
   { path: 'documents', component: DocumentsComponent },
   { path: 'documents/:docKey/chat', component: DocumentChatComponent },
   { path: 'documents/:docKey', component: DocumentDetailsComponent },
-  { path: '**', redirectTo: 'documents' }
+  { path: '**', redirectTo: 'books' }
 ];

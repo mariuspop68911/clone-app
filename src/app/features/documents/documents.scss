@@ -9,6 +9,23 @@
   border: 1px solid #dde3eb;
   border-radius: 12px;
   padding: 1.2rem 1.2rem 1.4rem;
+  box-shadow: 0 18px 40px rgba(15, 30, 45, 0.06);
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #1877f2;
 }
 
 h1 {
@@ -59,6 +76,10 @@ h1 {
   gap: 0.9rem;
 }
 
+.doc-card-shell {
+  position: relative;
+}
+
 .doc-card {
   display: block;
   border: 1px solid #dde3eb;
@@ -94,8 +115,48 @@ h1 {
   word-break: break-word;
 }
 
+.doc-delete {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: #d7263d;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(215, 38, 61, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.92);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.doc-card-shell:hover .doc-delete,
+.doc-card-shell:focus-within .doc-delete {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.doc-delete:disabled {
+  opacity: 0.75;
+  cursor: progress;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
 @media (max-width: 720px) {
   .docs-page {
     padding-top: 1.25rem;
+  }
+
+  .panel-head {
+    display: grid;
+    gap: 0.75rem;
   }
 }

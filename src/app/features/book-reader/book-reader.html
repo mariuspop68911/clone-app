@@ -1,0 +1,55 @@
+<section class="reader-page">
+  <a class="back-link" routerLink="/books">Back to Search</a>
+
+  @if (loading()) {
+    <p class="message">Loading book...</p>
+  } @else {
+    @if (book(); as currentBook) {
+      <header class="reader-hero">
+        <div class="reader-copy">
+          <p class="eyebrow">Reader</p>
+          <h1>{{ currentBook.title }}</h1>
+          <p class="subtitle">
+            {{ currentBook.authors.length ? currentBook.authors.join(', ') : 'Author not listed' }}
+          </p>
+          @if (currentBook.totalPages) {
+            <p class="subtitle">{{ currentBook.totalPages }} page{{ currentBook.totalPages === 1 ? '' : 's' }}</p>
+          }
+        </div>
+
+        <div class="reader-actions">
+          @if (currentBook.readUrl) {
+            <a [href]="currentBook.readUrl" target="_blank" rel="noreferrer">Open source page</a>
+          }
+          @if (currentBook.pdfUrl) {
+            <a [href]="currentBook.pdfUrl" target="_blank" rel="noreferrer">PDF</a>
+          }
+          @if (currentBook.epubUrl) {
+            <a [href]="currentBook.epubUrl" target="_blank" rel="noreferrer">EPUB</a>
+          }
+          @if (currentBook.textUrl) {
+            <a [href]="currentBook.textUrl" target="_blank" rel="noreferrer">Text</a>
+          }
+        </div>
+      </header>
+
+      @if (message()) {
+        <p class="message">{{ message() }}</p>
+      }
+
+      @if (embedUrl()) {
+        <div class="reader-frame-shell">
+          <iframe
+            class="reader-frame"
+            title="Book reader"
+            [src]="embedUrl()"
+            loading="lazy"
+            allowfullscreen
+          ></iframe>
+        </div>
+      }
+    } @else if (message()) {
+      <p class="message">{{ message() }}</p>
+    }
+  }
+</section>

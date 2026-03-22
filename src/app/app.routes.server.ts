@@ -6,6 +6,10 @@ export const serverRoutes: ServerRoute[] = [
     renderMode: RenderMode.Server
   },
   {
+    path: 'books/:editionId',
+    renderMode: RenderMode.Server
+  },
+  {
     path: 'documents/:docKey/chat',
     renderMode: RenderMode.Server
   },

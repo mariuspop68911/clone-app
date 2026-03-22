@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { map, Observable, timeout } from 'rxjs';
+import { concat, EMPTY, map, Observable, of, switchMap, timeout } from 'rxjs';
 
 export interface RagIngestResponse {
   docKey: string;
@@ -25,6 +25,7 @@ export interface RagAskRequest {
   question: string;
   docKey: string;
   topK?: number;
+  languageCode?: string;
 }
 
 export interface RagAskResponse {
@@ -96,6 +97,9 @@ export interface RagComicSlidesWithImagesResponse {
   docKey?: string;
   docId?: number;
   folder?: string;
+  lastLimit?: number;
+  count?: number;
+  returnedCount?: number;
   slideCount?: number;
   slides?: RagComicSlide[];
   [key: string]: unknown;
@@ -118,6 +122,9 @@ export interface RagComicBookGenerateResponse {
   limit?: number;
   processedChunks?: number;
   lastSceneId?: number;
+  charactersSavedCount?: number;
+  slidesSavedCount?: number;
+  slides?: RagComicSlidesWithImagesResponse;
   notes?: RagComicNoteResponse[];
   comicNotes?: RagComicNoteResponse[] | Record<string, unknown>;
   groupNotes?: Record<string, unknown>;
@@ -244,8 +251,10 @@ interface PipelineSlideRawCharacter {
 
 interface PipelineSlideRaw {
   id?: number;
+  chunkId?: number;
   noteId?: number;
   chunkIndex?: number;
+  chunkIndexes?: number[];
   note?: PipelineSlideRawNote;
   unimportant?: PipelineSlideRawNote[];
   charactersInSlide?: PipelineSlideRawCharacter[];
@@ -259,8 +268,26 @@ interface PipelineSlideRaw {
 interface PipelineSlidesResponse {
   docKey?: string;
   docId?: number;
+  lastLimit?: number;
   count?: number;
+  returnedCount?: number;
   slides?: PipelineSlideRaw[];
+  [key: string]: unknown;
+}
+
+interface PipelineProcessAllResponse {
+  docKey?: string;
+  docId?: number;
+  limit?: number;
+  processedChunks?: number;
+  lastSceneId?: number;
+  charactersSavedCount?: number;
+  slidesSavedCount?: number;
+  slides?: PipelineSlidesResponse;
+  notes?: RagComicNoteResponse[];
+  comicNotes?: RagComicNoteResponse[] | Record<string, unknown>;
+  groupNotes?: Record<string, unknown>;
+  isLastBatch?: boolean;
   [key: string]: unknown;
 }
 
@@ -307,20 +334,51 @@ export class RagApiService {
   generateComicBookAll(
     req: RagComicBookGenerateAllRequest
   ): Observable<RagComicBookGenerateResponse> {
-    return this.http.post<RagComicBookGenerateResponse>(
-      `${this.pipelineBaseUrl}/process_all`,
-      req
-    );
+    return this.http
+      .post<PipelineProcessAllResponse>(`${this.pipelineBaseUrl}/process_all`, req)
+      .pipe(map((response) => this.toComicBookGenerateResponse(response)));
   }
 
   resetComicBook(docKey: string): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/reset`);
   }
 
-  getComicSlidesWithImages(docKey: string): Observable<RagComicSlidesWithImagesResponse> {
+  resetPipelineDocument(docKey: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/reset`
+    );
+  }
+
+  getComicSlidesWithImages(
+    docKey: string,
+    languageCode?: string
+  ): Observable<RagComicSlidesWithImagesResponse> {
+    const encodedDocKey = encodeURIComponent(docKey);
+
     return this.http
-      .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides`)
-      .pipe(map((response) => this.toComicSlidesWithImagesResponse(response)));
+      .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodedDocKey}/slides`, {
+        params: this.slideParams(languageCode, 0, 10)
+      })
+      .pipe(
+        switchMap((firstResponse) =>
+          concat(
+            of(this.toComicSlidesWithImagesResponse(firstResponse)),
+            this.shouldFetchRemainingSlides(firstResponse)
+              ? this.http
+                  .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodedDocKey}/slides`, {
+                    params: this.slideParams(languageCode, 10)
+                  })
+                  .pipe(
+                    map((restResponse) =>
+                      this.toComicSlidesWithImagesResponse(
+                        this.mergeSlidesResponses(firstResponse, restResponse)
+                      )
+                    )
+                  )
+              : EMPTY
+          )
+        )
+      );
   }
 
   getCharacterReferenceImages(docKey: string): Observable<RagCharacterReferenceImageListResponse> {
@@ -331,9 +389,11 @@ export class RagApiService {
       .pipe(map((response) => this.toCharacterReferenceImageListResponse(response)));
   }
 
-  getSlidePrompt(docKey: string, slideId: number): Observable<RagSlidePromptResponse> {
+  getSlidePrompt(docKey: string, slideId: number, languageCode?: string): Observable<RagSlidePromptResponse> {
     return this.http
-      .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides`)
+      .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides`, {
+        params: this.languageParams(languageCode, true)
+      })
       .pipe(
         map((response) => {
           const slide = Array.isArray(response.slides)
@@ -355,10 +415,81 @@ export class RagApiService {
     );
   }
 
-  getSlideDialogs(docKey: string, slideId: number): Observable<RagSlideDialogsResponse> {
+  getSlideDialogs(
+    docKey: string,
+    slideId: number,
+    languageCode?: string
+  ): Observable<RagSlideDialogsResponse> {
     return this.http.get<RagSlideDialogsResponse>(
-      `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides/${slideId}/dialogs`
+      `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides/${slideId}/dialogs`,
+      {
+        params: this.languageParams(languageCode)
+      }
     );
+  }
+
+  private languageParams(languageCode?: string, includePromptTxt?: boolean): HttpParams | undefined {
+    const normalized = typeof languageCode === 'string' ? languageCode.trim().toLowerCase() : '';
+    let params = normalized ? new HttpParams().set('lang', normalized) : undefined;
+
+    if (includePromptTxt) {
+      params = (params ?? new HttpParams()).set('includePromptTxt', 'true');
+    }
+
+    return params;
+  }
+
+  private slideParams(
+    languageCode?: string,
+    start?: number,
+    end?: number,
+    includePromptTxt?: boolean
+  ): HttpParams | undefined {
+    let params = this.languageParams(languageCode, includePromptTxt);
+
+    if (typeof start === 'number' && Number.isFinite(start)) {
+      params = (params ?? new HttpParams()).set('start', Math.max(0, Math.floor(start)));
+    }
+
+    if (typeof end === 'number' && Number.isFinite(end)) {
+      params = (params ?? new HttpParams()).set('end', Math.max(0, Math.floor(end)));
+    }
+
+    return params;
+  }
+
+  private shouldFetchRemainingSlides(response: PipelineSlidesResponse): boolean {
+    const totalCount = typeof response.count === 'number' ? response.count : 0;
+    const returnedCount =
+      typeof response.returnedCount === 'number'
+        ? response.returnedCount
+        : Array.isArray(response.slides)
+          ? response.slides.length
+          : 0;
+
+    return totalCount > returnedCount;
+  }
+
+  private mergeSlidesResponses(
+    firstResponse: PipelineSlidesResponse,
+    restResponse: PipelineSlidesResponse
+  ): PipelineSlidesResponse {
+    const firstSlides = Array.isArray(firstResponse.slides) ? firstResponse.slides : [];
+    const restSlides = Array.isArray(restResponse.slides) ? restResponse.slides : [];
+
+    return {
+      ...restResponse,
+      docKey: this.toTrimmedString(firstResponse.docKey) ?? this.toTrimmedString(restResponse.docKey),
+      docId: firstResponse.docId ?? restResponse.docId,
+      count:
+        typeof restResponse.count === 'number'
+          ? restResponse.count
+          : typeof firstResponse.count === 'number'
+            ? firstResponse.count
+            : firstSlides.length + restSlides.length,
+      returnedCount: firstSlides.length + restSlides.length,
+      slides: [...firstSlides, ...restSlides]
+    };
   }
 
   private toCharacterReferenceImageListResponse(
@@ -399,8 +530,36 @@ export class RagApiService {
     return {
       docKey: this.toTrimmedString(response.docKey),
       docId: response.docId,
+      lastLimit:
+        typeof response.lastLimit === 'number' && Number.isFinite(response.lastLimit)
+          ? response.lastLimit
+          : undefined,
+      count: typeof response.count === 'number' ? response.count : slides.length,
+      returnedCount:
+        typeof response.returnedCount === 'number' ? response.returnedCount : slides.length,
       slideCount: typeof response.count === 'number' ? response.count : slides.length,
       slides
+    };
+  }
+
+  private toComicBookGenerateResponse(
+    response: PipelineProcessAllResponse
+  ): RagComicBookGenerateResponse {
+    return {
+      docKey: this.toTrimmedString(response.docKey),
+      docId: response.docId,
+      limit: response.limit,
+      processedChunks: response.processedChunks,
+      lastSceneId: response.lastSceneId,
+      charactersSavedCount: response.charactersSavedCount,
+      slidesSavedCount: response.slidesSavedCount,
+      slides: response.slides
+        ? this.toComicSlidesWithImagesResponse(response.slides)
+        : undefined,
+      notes: response.notes,
+      comicNotes: response.comicNotes,
+      groupNotes: response.groupNotes,
+      isLastBatch: response.isLastBatch
     };
   }
 

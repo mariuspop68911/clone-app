@@ -1,23 +1,34 @@
 <section class="import-page">
   <h1>Import Document</h1>
 
+  @if (sourceLabel()) {
+    <p class="source-label">{{ sourceLabel() }}</p>
+  }
+
   <label>
     Doc Key
     <input [(ngModel)]="docKey" placeholder="e.g. doc-001" />
   </label>
 
-  <label>
-    File
-    <input
-      type="file"
-      accept=".pdf,application/pdf"
-      (change)="onFileChange($event)"
+  @if (!reviewFile()) {
+    <label>
+      File
+      <input
+        type="file"
+        accept=".pdf,application/pdf"
+        (change)="onFileChange($event)"
+        [disabled]="loading()"
+      />
+    </label>
+  } @else {
+    <app-pdf-page-review
+      [file]="reviewFile()"
+      [externalPages]="reviewPages()"
+      [busy]="loading()"
+      (cancelReview)="cancelReview()"
+      (confirmSelectionRequested)="onConfirmSelection($event)"
     />
-  </label>
-
-  <button type="button" (click)="submit()" [disabled]="loading()">
-    {{ loading() ? 'Importing...' : 'Import' }}
-  </button>
+  }
 
   <p class="msg">{{ message() }}</p>
 </section>

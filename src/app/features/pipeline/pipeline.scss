@@ -136,7 +136,6 @@
 .slide-image-placeholder-text {
   margin: 0;
   font-size: 0.68rem;
-  font-weight: 800;
 }
 
 .carousel {
@@ -206,8 +205,7 @@
   color: #111111;
   isolation: isolate;
   z-index: 6;
-  box-shadow:
-    1px 2px 0 rgba(0, 0, 0, 0.18);
+  box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.18);
 }
 
 .speech-bubble-fallback {
@@ -243,8 +241,6 @@
   font-size: 0.58rem;
   font-weight: 900;
   font-style: italic;
-  color: #000000;
-  letter-spacing: 0.03em;
 }
 
 .speech-bubble-speaker-block {

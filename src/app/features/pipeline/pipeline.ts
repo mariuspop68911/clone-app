@@ -31,6 +31,7 @@ interface CardToken {
 }
 
 interface DialogueEntry {
+  id: number | null;
   character: string;
   gender: string;
   line: string;
@@ -43,6 +44,7 @@ interface TtsSegment {
   text: string;
   wordStart: number;
   wordCount: number;
+  entityId?: number;
   character?: string;
   line?: string;
 }
@@ -83,6 +85,8 @@ export class PipelineComponent {
   private static readonly comicBatchSize = 10;
   private static readonly comicBatchStateStorageKey = 'pipeline-comic-batch-state';
   private static readonly highlightLeadSeconds = 1;
+  private static readonly ttsPrefetchConcurrency = 3;
+  private static readonly defaultLanguage = 'en';
   private static readonly dialogueSpeed = 1;
   private static readonly narratorCharacterName = 'Narrator';
   private static readonly silentWavDataUrl =
@@ -92,6 +96,7 @@ export class PipelineComponent {
   private playbackToken = 0;
   private onSegmentEnd: (() => void) | null = null;
   private audioUnlocked = false;
+  private generateAllStartedAt = 0;
   private readonly failedUriMap = signal<Record<string, true>>({});
   private readonly onFirstInteractionBound = () => {
     void this.ensureAudioUnlocked();
@@ -118,6 +123,7 @@ export class PipelineComponent {
   summaryHiddenCardKey = signal('');
   ttsCurrentWord = signal(-1);
   ttsTotalWords = signal(0);
+  selectedLanguage = signal(PipelineComponent.defaultLanguage);
   currentSlide = signal(0);
   askOpen = signal(false);
   slides = signal<RagComicSlide[]>([]);
@@ -217,6 +223,13 @@ export class PipelineComponent {
     }
 
     this.loading.set(true);
+    this.generateAllStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    console.info('[Pipeline] Generate all requested', {
+      docKey: key,
+      start: 0,
+      end: PipelineComponent.comicBatchSize,
+      startedAt: new Date().toISOString()
+    });
     this.message.set('');
     this.comicBatchStart.set(0);
     this.comicBatchEnd.set(PipelineComponent.comicBatchSize);
@@ -300,6 +313,29 @@ export class PipelineComponent {
       this.summaryHiddenCardKey.set('');
       this.loadCurrentSlidePrompt();
       this.playCurrentSlideIfAutoPlayEnabled();
+    }
+  }
+
+  setLanguage(languageCode: string): void {
+    const normalized = this.normalizeLanguage(languageCode);
+    if (normalized === this.selectedLanguage()) {
+      return;
+    }
+
+    this.selectedLanguage.set(normalized);
+    this.stopCardTts();
+    this.currentSlide.set(0);
+    this.summaryHiddenCardKey.set('');
+    this.slidePromptById.set({});
+    this.slidePromptLoadingById.set({});
+    this.slidePromptErrorById.set({});
+    this.slideDialogsById.set({});
+    this.slideDialogsLoadingById.set({});
+    this.slideDialogsErrorById.set({});
+
+    const key = this.docKey().trim();
+    if (key) {
+      this.loadSlides(key);
     }
   }
 
@@ -577,24 +613,59 @@ export class PipelineComponent {
   }
 
   private loadSlides(docKey: string): void {
-    const preservedSlide = this.currentSlide();
+    const loadStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this.slidesLoading.set(true);
     this.slidesMessage.set('');
     this.failedUriMap.set({});
+    console.info('[Pipeline] Slide reload started', {
+      docKey,
+      languageCode: this.selectedLanguage(),
+      startedAt: new Date().toISOString()
+    });
 
-    this.ragApi.getComicSlidesWithImages(docKey).subscribe({
+    this.ragApi.getComicSlidesWithImages(docKey, this.selectedLanguage()).subscribe({
       next: (response) => {
         const nextSlides = Array.isArray(response.slides) ? response.slides : [];
+        const totalCount = typeof response.count === 'number' ? response.count : nextSlides.length;
+        const returnedCount =
+          typeof response.returnedCount === 'number' ? response.returnedCount : nextSlides.length;
+        const backendLastLimit =
+          typeof response.lastLimit === 'number' && Number.isFinite(response.lastLimit)
+            ? response.lastLimit
+            : null;
+        const nextCursor = backendLastLimit !== null ? backendLastLimit : returnedCount;
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
         this.slides.set(nextSlides);
         this.syncSlidePrompts(nextSlides);
-        this.slidesLoading.set(false);
-        const nextIndex = this.clampSlideIndex(preservedSlide, nextSlides.length);
+        this.slidesLoading.set(totalCount > returnedCount);
+        this.comicBatchStart.set(Math.max(0, nextCursor - PipelineComponent.comicBatchSize));
+        this.comicBatchEnd.set(nextCursor);
+        this.showLoadMoreSlide.set(totalCount > returnedCount);
+        this.writeComicBatchState(docKey, {
+          start: Math.max(0, nextCursor - PipelineComponent.comicBatchSize),
+          end: nextCursor,
+          hasMore: totalCount > returnedCount
+        });
+        const nextIndex = this.clampSlideIndex(this.currentSlide(), nextSlides.length);
         this.currentSlide.set(nextIndex);
         this.syncSwiperSlide(nextIndex);
         this.loadCurrentSlidePrompt();
         void this.loadCurrentSlideDialogs();
+        console.info('[Pipeline] Slide reload finished', {
+          docKey,
+          languageCode: this.selectedLanguage(),
+          slideCount: nextSlides.length,
+          totalCount,
+          returnedCount,
+          lastLimit: backendLastLimit,
+          nextCursor,
+          elapsedMs: Math.round(elapsedMs)
+        });
       },
       error: (err) => {
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
         const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
         const backendMessage =
           typeof err?.error === 'string'
@@ -603,6 +674,16 @@ export class PipelineComponent {
         this.slides.set([]);
         this.slidesLoading.set(false);
         this.slidesMessage.set(`Failed to get slides (${status}): ${backendMessage}`);
+        console.warn('[Pipeline] Slide reload failed', {
+          docKey,
+          languageCode: this.selectedLanguage(),
+          elapsedMs: Math.round(elapsedMs),
+          status,
+          backendMessage
+        });
+      },
+      complete: () => {
+        this.slidesLoading.set(false);
       }
     });
   }
@@ -627,22 +708,46 @@ export class PipelineComponent {
   }
 
   private generateAllBatch(docKey: string, start: number, end: number): void {
+    const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this.loading.set(true);
     this.message.set('');
 
     this.ragApi.generateComicBookAll({ docKey, start, end }).subscribe({
       next: (response) => {
+        const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const requestElapsedMs = finishedAt - requestStartedAt;
+        const fullElapsedMs = finishedAt - this.generateAllStartedAt;
         const hasMore = this.shouldShowLoadMore(response, start, end);
+        const processedChunks = this.toNonNegativeInteger(response.processedChunks);
+        const backendLastLimit = this.toNullableFiniteNumber(response.slides?.['lastLimit']);
+        const nextCursor =
+          backendLastLimit !== null && backendLastLimit >= start
+            ? backendLastLimit
+            : start + processedChunks;
         this.loading.set(false);
         this.comicBatchStart.set(start);
-        this.comicBatchEnd.set(end);
+        this.comicBatchEnd.set(nextCursor);
         this.showLoadMoreSlide.set(hasMore);
-        this.writeComicBatchState(docKey, { start, end, hasMore });
+        this.writeComicBatchState(docKey, { start, end: nextCursor, hasMore });
         this.message.set(`Generated slides for range ${start}-${end}.`);
-        this.loadSlides(docKey);
+        console.info('[Pipeline] Generate all response received', {
+          docKey,
+          start,
+          end,
+          nextCursor,
+          requestElapsedMs: Math.round(requestElapsedMs),
+          fullElapsedMs: Math.round(fullElapsedMs),
+          slidesSavedCount: response.slidesSavedCount,
+          slidesReturned: Array.isArray(response.slides?.slides) ? response.slides.slides.length : 0,
+          charactersSavedCount: response.charactersSavedCount,
+          isLastBatch: response.isLastBatch ?? null
+        });
+        this.appendGeneratedSlides(response);
         this.dispatchCharactersRefresh(docKey);
       },
       error: (err) => {
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - requestStartedAt;
         const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
         const backendMessage =
           typeof err?.error === 'string'
@@ -650,6 +755,14 @@ export class PipelineComponent {
             : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
         this.loading.set(false);
         this.message.set(`Failed to generate all (${status}): ${backendMessage}`);
+        console.warn('[Pipeline] Generate all failed', {
+          docKey,
+          start,
+          end,
+          elapsedMs: Math.round(elapsedMs),
+          status,
+          backendMessage
+        });
       }
     });
   }
@@ -676,6 +789,39 @@ export class PipelineComponent {
   private clampSlideIndex(index: number, slideCount: number): number {
     const maxIndex = Math.max(0, slideCount - 1);
     return Math.max(0, Math.min(index, maxIndex));
+  }
+
+  private appendGeneratedSlides(response: RagComicBookGenerateResponse): void {
+    const generatedSlides = Array.isArray(response.slides?.slides) ? response.slides.slides : [];
+    if (!generatedSlides.length) {
+      return;
+    }
+
+    const combinedSlides = [...this.slides(), ...generatedSlides];
+    const nextIndex = this.clampSlideIndex(this.currentSlide(), combinedSlides.length);
+    const nextPrompts = { ...this.slidePromptById() };
+
+    for (const slide of generatedSlides) {
+      const slideId = this.toNullableFiniteNumber(slide.id);
+      const promptText = this.promptTextForSlide(slide);
+      if (slideId !== null && promptText) {
+        nextPrompts[slideId] = promptText;
+      }
+    }
+
+    this.slides.set(combinedSlides);
+    this.slidePromptById.set(nextPrompts);
+    this.slidePromptLoadingById.set({});
+    this.slidePromptErrorById.set({});
+    this.currentSlide.set(nextIndex);
+    this.syncSwiperSlide(nextIndex);
+    this.loadCurrentSlidePrompt();
+    void this.loadCurrentSlideDialogs();
+    console.info('[Pipeline] Slides appended from process_all response', {
+      appendedCount: generatedSlides.length,
+      totalCount: combinedSlides.length,
+      currentSlide: nextIndex
+    });
   }
 
   private syncSwiperSlide(index: number): void {
@@ -897,15 +1043,16 @@ export class PipelineComponent {
   }
 
   private dialogueLine(entry: RagSlideDialog): DialogueEntry {
+    const id = this.toNullableFiniteNumber(entry.id);
     const character =
       typeof entry.speakerCharacterName === 'string' ? entry.speakerCharacterName.trim() : '';
     const gender = typeof entry.speakerGender === 'string' ? entry.speakerGender.trim().toLowerCase() : '';
     const line = typeof entry.dialogLine === 'string' ? entry.dialogLine.trim() : '';
     const context = typeof entry.context === 'string' ? entry.context.trim() : '';
     if (character && line) {
-      return { character, gender, line, text: `${character}: ${line}`, context };
+      return { id, character, gender, line, text: `${character}: ${line}`, context };
     }
-    return { character: '', gender, line, text: line, context };
+    return { id, character: '', gender, line, text: line, context };
   }
 
   private toDialogueEntries(response: RagSlideDialogsResponse): DialogueEntry[] {
@@ -938,11 +1085,13 @@ export class PipelineComponent {
     let wordStart = 0;
 
     const main = this.mainNote(item).trim();
+    const slideEntityId = this.toNullableFiniteNumber(item.id) ?? this.toNullableFiniteNumber(item.comicNote?.id);
     if (main) {
       wordStart = this.pushSentenceSegments(segments, {
         kind: 'narration',
         text: main,
-        wordStart
+        wordStart,
+        entityId: slideEntityId ?? undefined
       });
     }
 
@@ -954,6 +1103,7 @@ export class PipelineComponent {
         kind: 'dialogue',
         text: entry.line || entry.text,
         wordStart,
+        entityId: entry.id ?? undefined,
         character: entry.character,
         line: entry.line || entry.text
       });
@@ -1050,12 +1200,41 @@ export class PipelineComponent {
     this.ttsPlaying.set(true);
     this.ttsCurrentWord.set(-1);
     this.ttsTotalWords.set(segments.reduce((sum, segment) => sum + segment.wordCount, 0));
+    const segmentAudioPromises = new Map<number, Promise<Blob>>();
+    let nextSegmentToRequest = 0;
+
+    const queueSegmentAudio = (segmentIndex: number): Promise<Blob> | null => {
+      if (segmentIndex < 0 || segmentIndex >= segments.length) {
+        return null;
+      }
+      const existing = segmentAudioPromises.get(segmentIndex);
+      if (existing) {
+        return existing;
+      }
+      const promise = this.requestTtsSegmentAudio(segments[segmentIndex]);
+      segmentAudioPromises.set(segmentIndex, promise);
+      return promise;
+    };
+
+    const fillSegmentAudioQueue = (): void => {
+      while (
+        token === this.playbackToken &&
+        nextSegmentToRequest < segments.length &&
+        segmentAudioPromises.size < PipelineComponent.ttsPrefetchConcurrency
+      ) {
+        queueSegmentAudio(nextSegmentToRequest);
+        nextSegmentToRequest += 1;
+      }
+    };
 
     try {
+      fillSegmentAudioQueue();
+
       for (let i = 0; i < segments.length; i += 1) {
         if (token !== this.playbackToken) {
           return;
         }
+        fillSegmentAudioQueue();
         const segment = segments[i];
         if (segment.kind === 'dialogue') {
           this.activeDialogueCardKey.set(key);
@@ -1082,24 +1261,19 @@ export class PipelineComponent {
           this.activeDialogueWordStart.set(0);
           this.activeVisualMode.set('none');
         }
-        const blob = await firstValueFrom(
-          this.ttsApi.generateOpenAiTts({
-            text: segment.text,
-            characterName:
-              segment.kind === 'dialogue'
-                ? segment.character || PipelineComponent.narratorCharacterName
-                : PipelineComponent.narratorCharacterName,
-            speed: segment.kind === 'dialogue' ? PipelineComponent.dialogueSpeed : undefined,
-            expressiveness: segment.kind === 'dialogue' ? 'high' : undefined,
-            format: 'wav'
-          })
-        );
+        const queuedBlobPromise = queueSegmentAudio(i);
+        if (!queuedBlobPromise) {
+          throw new Error('Missing audio queue entry.');
+        }
+        const blob = await queuedBlobPromise;
         if (!blob.size) {
           throw new Error('API returned empty audio content.');
         }
         if (token !== this.playbackToken) {
           return;
         }
+        segmentAudioPromises.delete(i);
+        fillSegmentAudioQueue();
 
         this.clearObjectUrl();
         this.currentObjectUrl = URL.createObjectURL(blob);
@@ -1232,7 +1406,9 @@ export class PipelineComponent {
     this.slideDialogsErrorById.update((current) => ({ ...current, [slideId]: '' }));
 
     try {
-      const response = await firstValueFrom(this.ragApi.getSlideDialogs(docKey, slideId));
+      const response = await firstValueFrom(
+        this.ragApi.getSlideDialogs(docKey, slideId, this.selectedLanguage())
+      );
       const entries = this.toDialogueEntries(response);
       this.slideDialogsById.update((current) => ({ ...current, [slideId]: entries }));
     } catch (err) {
@@ -1401,6 +1577,26 @@ export class PipelineComponent {
     });
   }
 
+  private async requestTtsSegmentAudio(segment: TtsSegment): Promise<Blob> {
+    const docKey = this.docKey().trim();
+    return firstValueFrom(
+      this.ttsApi.generateOpenAiTts({
+        text: segment.text,
+        characterName:
+          segment.kind === 'dialogue'
+            ? segment.character || PipelineComponent.narratorCharacterName
+            : PipelineComponent.narratorCharacterName,
+        languageCode: this.selectedLanguage() === 'ro' ? 'ro' : undefined,
+        docKey: docKey || undefined,
+        entityType: segment.kind === 'dialogue' ? 'dialog' : 'slide_summary',
+        entityId: segment.entityId,
+        speed: segment.kind === 'dialogue' ? PipelineComponent.dialogueSpeed : undefined,
+        expressiveness: segment.kind === 'dialogue' ? 'high' : undefined,
+        format: 'mp3'
+      })
+    );
+  }
+
   private async ensureAudioUnlocked(): Promise<void> {
     if (this.audioUnlocked || !this.audio) {
       return;
@@ -1495,5 +1691,9 @@ export class PipelineComponent {
       return value;
     }
     return null;
+  }
+
+  private normalizeLanguage(value: string): string {
+    return value.trim().toLowerCase() === 'ro' ? 'ro' : PipelineComponent.defaultLanguage;
   }
 }

@@ -1,0 +1,67 @@
+<section class="books-page">
+  <header class="books-hero">
+    <p class="eyebrow">Browse</p>
+    <h1>Browse Books</h1>
+    <p class="subtitle">
+      Explore fully readable books grouped into horizontal category shelves.
+    </p>
+  </header>
+
+  <section class="books-results">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Browse</p>
+        <h2>Browse</h2>
+        <p class="section-copy">Discover readable books by category.</p>
+      </div>
+      <button type="button" class="refresh-button" (click)="loadBrowseBooks()" [disabled]="browseLoading()">
+        {{ browseLoading() ? 'Refreshing...' : 'Refresh' }}
+      </button>
+    </div>
+
+    @if (browseMessage()) {
+      <p class="message">{{ browseMessage() }}</p>
+    }
+
+    @if (browseCategories().length) {
+      <div class="browse-categories">
+        @for (category of browseCategories(); track category.key) {
+          <section class="browse-category">
+            <div class="category-head">
+              <div>
+                <h3>{{ category.label }}</h3>
+                <p class="category-meta">{{ category.count }} books</p>
+              </div>
+            </div>
+
+            <div class="browse-row">
+              @for (book of category.books; track book.id) {
+                <article class="book-card browse-card">
+                  <div class="book-cover">
+                    @if (book.coverUrl) {
+                      <img [src]="book.coverUrl" [alt]="'Cover for ' + book.title" loading="lazy" />
+                    } @else {
+                      <div class="cover-fallback">No Cover</div>
+                    }
+                  </div>
+
+                  <div class="book-body">
+                    <h2>{{ book.title }}</h2>
+                    <p class="book-authors">{{ bookSubtitle(book) }}</p>
+                    <p class="meta">{{ bookMeta(book) || 'Metadata limited for this result' }}</p>
+                    <div class="book-actions">
+                      <a class="book-link" [routerLink]="['/books', book.editionId]">Go to book</a>
+                      <a class="book-link book-link-secondary" [routerLink]="['/import']" [queryParams]="{ editionId: book.editionId }">
+                        Create Comic
+                      </a>
+                    </div>
+                  </div>
+                </article>
+              }
+            </div>
+          </section>
+        }
+      </div>
+    }
+  </section>
+</section>

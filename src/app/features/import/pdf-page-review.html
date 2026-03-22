@@ -1,0 +1,113 @@
+<section class="review-shell">
+  <div class="review-header">
+    <div>
+      <h2>Review Pages</h2>
+      <p class="review-subtitle">Select pages, delete them from the ingest set, then confirm.</p>
+    </div>
+
+    <div class="review-actions">
+      <button type="button" class="secondary-action" (click)="cancelReview.emit()" [disabled]="busy">
+        <span class="action-label">Choose Another File</span>
+      </button>
+      <button
+        type="button"
+        class="danger-action"
+        (click)="deleteSelectedPages()"
+        [disabled]="busy || !selectedPages().length"
+      >
+        <span class="action-label">Delete Selected</span>
+      </button>
+      <button
+        type="button"
+        class="secondary-action"
+        (click)="restoreAllPages()"
+        [disabled]="busy || includedCount() === pages().length"
+      >
+        <span class="action-label">Restore All</span>
+      </button>
+      <button
+        type="button"
+        class="primary-action"
+        (click)="submitSelection()"
+        [disabled]="busy || loading() || !pages().length"
+      >
+        <span class="action-label">{{ busy ? 'Importing...' : 'Confirm and Import' }}</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="review-meta">
+    <p>Included pages: {{ includedCount() }} / {{ pages().length }}</p>
+    @if (excludedPagesLabel()) {
+      <p>Excluded pages: {{ excludedPagesLabel() }}</p>
+    }
+  </div>
+
+  @if (loading()) {
+    <p class="review-status">Loading PDF preview...</p>
+  } @else if (message()) {
+    <p class="review-status">{{ message() }}</p>
+  }
+
+  @if (pages().length) {
+    <div class="review-workspace">
+      <aside class="page-strip">
+        @for (page of pages(); track trackPage($index, page)) {
+          <div
+            class="page-thumb"
+            [class.page-thumb-active]="isActivePage(page.pageNumber)"
+            [class.page-thumb-excluded]="!page.included"
+          >
+            <button
+              type="button"
+              class="page-thumb-main"
+              (click)="setActivePage(page.pageNumber)"
+            >
+              <span class="page-number">Page {{ page.pageNumber }}</span>
+              <img [src]="page.thumbnailUrl" [alt]="'Preview of page ' + page.pageNumber" />
+            </button>
+
+            <button
+              type="button"
+              class="page-thumb-select"
+              (click)="toggleSelection(page.pageNumber)"
+              [disabled]="busy || !page.included"
+            >
+              {{ isSelected(page.pageNumber) ? 'Unselect' : 'Select' }}
+            </button>
+          </div>
+        }
+      </aside>
+
+      @if (activePage(); as currentPage) {
+        <section class="page-stage">
+          <div class="page-stage-head">
+            <div>
+              <h3>Page {{ currentPage.pageNumber }}</h3>
+              <p class="page-stage-meta">
+                {{ currentPage.included ? 'Included in import' : 'Excluded from import' }}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              class="secondary-action"
+              (click)="toggleCurrentPageIncluded()"
+              [disabled]="busy"
+            >
+              {{ isCurrentPageIncluded() ? 'Exclude This Page' : 'Restore This Page' }}
+            </button>
+          </div>
+
+          <div class="page-stage-image-shell">
+            <img [src]="currentPage.fullPageUrl" [alt]="'Full preview of page ' + currentPage.pageNumber" />
+          </div>
+
+          <p class="page-stage-text">
+            {{ currentPage.textSnippet || 'This page is a scanned image page. The preview above shows the actual content from the same PDF source used by the reader.' }}
+          </p>
+        </section>
+      }
+    </div>
+  }
+</section>

@@ -16,6 +16,7 @@ interface ChatMessage {
 })
 export class DocumentChatComponent {
   @Input() embedded = false;
+  @Input() languageCode = 'en';
   docKey = signal('');
   input = '';
   loading = signal(false);
@@ -60,7 +61,14 @@ export class DocumentChatComponent {
     this.input = '';
     this.loading.set(true);
 
-    this.ragApi.askQuestion({ question, docKey: key, topK: 5 }).subscribe({
+    this.ragApi
+      .askQuestion({
+        question,
+        docKey: key,
+        topK: 5,
+        languageCode: this.languageCode.trim().toLowerCase() || 'en'
+      })
+      .subscribe({
       next: (response) => {
         const answer =
           typeof response?.answer === 'string' && response.answer.trim()

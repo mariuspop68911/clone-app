@@ -6,15 +6,23 @@ export interface OpenAiTtsGenerateRequest {
   text: string;
   voice?: string;
   characterName?: string;
+  languageCode?: string;
+  docKey?: string;
+  entityType?: 'slide_summary' | 'dialog';
+  entityId?: number;
   speed?: number;
   expressiveness?: 'low' | 'medium' | 'high';
-  format: 'wav';
+  format: 'mp3' | 'wav';
 }
 
 export type TtsRequest = {
   text: string;
   voice?: string;
   characterName?: string;
+  languageCode?: string;
+  docKey?: string;
+  entityType?: 'slide_summary' | 'dialog';
+  entityId?: number;
   speed?: number;
   format?: string;
   expressiveness?: 'low' | 'medium' | 'high';
@@ -39,6 +47,10 @@ export class TtsApiService {
       textLength: req.text?.length ?? 0,
       voice: req.voice,
       characterName: req.characterName,
+      languageCode: req.languageCode,
+      docKey: req.docKey,
+      entityType: req.entityType,
+      entityId: req.entityId,
       speed: req.speed,
       expressiveness: req.expressiveness,
       format: req.format
@@ -58,8 +70,12 @@ export class TtsApiService {
       textLength: req.text?.length ?? 0,
       voice: req.voice,
       characterName: req.characterName,
+      languageCode: req.languageCode,
+      docKey: req.docKey,
+      entityType: req.entityType,
+      entityId: req.entityId,
       speed: req.speed,
-      format: req.format ?? 'wav',
+      format: req.format ?? 'mp3',
       expressiveness: req.expressiveness ?? 'medium',
       style: req.style ?? 'neutral'
     });
@@ -70,8 +86,12 @@ export class TtsApiService {
           text: req.text,
           voice: req.voice,
           characterName: req.characterName,
+          languageCode: req.languageCode,
+          docKey: req.docKey,
+          entityType: req.entityType,
+          entityId: req.entityId,
           speed: req.speed,
-          format: req.format ?? 'wav',
+          format: req.format ?? 'mp3',
           expressiveness: req.expressiveness,
           style: req.style
         },

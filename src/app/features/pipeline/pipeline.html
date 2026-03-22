@@ -22,6 +22,26 @@
       >
         {{ clearing() ? 'Clearing...' : 'Clear' }}
       </button>
+
+      <button
+        type="button"
+        [class.primary-action]="selectedLanguage() === 'en'"
+        [class.secondary-action]="selectedLanguage() !== 'en'"
+        (click)="setLanguage('en')"
+        [disabled]="loading() || clearing()"
+      >
+        ENG
+      </button>
+
+      <button
+        type="button"
+        [class.primary-action]="selectedLanguage() === 'ro'"
+        [class.secondary-action]="selectedLanguage() !== 'ro'"
+        (click)="setLanguage('ro')"
+        [disabled]="loading() || clearing()"
+      >
+        RO
+      </button>
     </div>
 
     @if (message()) {
@@ -324,6 +344,6 @@
       </button>
     </div>
 
-    <app-document-chat [embedded]="true"></app-document-chat>
+    <app-document-chat [embedded]="true" [languageCode]="selectedLanguage()"></app-document-chat>
   </aside>
 </section>

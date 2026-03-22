@@ -22,6 +22,7 @@ import {
 })
 export class App implements OnInit {
   private static readonly charactersRefreshEvent = 'codex:characters-refresh';
+  private static readonly documentsRefreshEvent = 'codex:documents-refresh';
   drawerDocs = signal<RagDocumentResponse[]>([]);
   drawerLoading = signal(false);
   selectedDocKey = signal('');
@@ -44,6 +45,7 @@ export class App implements OnInit {
     this.loadDrawerDocs();
     this.syncSelectedDocFromUrl();
     window.addEventListener(App.charactersRefreshEvent, this.onCharactersRefresh);
+    window.addEventListener(App.documentsRefreshEvent, this.onDocumentsRefresh);
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe(() => this.syncSelectedDocFromUrl());
@@ -54,6 +56,7 @@ export class App implements OnInit {
       return;
     }
     window.removeEventListener(App.charactersRefreshEvent, this.onCharactersRefresh);
+    window.removeEventListener(App.documentsRefreshEvent, this.onDocumentsRefresh);
   }
 
   drawerDocKey(doc: RagDocumentResponse): string | null {
@@ -143,6 +146,10 @@ export class App implements OnInit {
     this.refreshCharacters(docKey);
   };
 
+  private readonly onDocumentsRefresh = () => {
+    this.loadDrawerDocs();
+  };
+
   private extractDocKeyFromUrl(url: string): string {
     const path = url.split('?')[0]?.split('#')[0] ?? '';
     const match = path.match(/^\/documents\/([^/]+)/);
@@ -158,18 +165,32 @@ export class App implements OnInit {
       return;
     }
 
+    const loadStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this.drawerCharacterLoadingByDocKey.update((current) => ({ ...current, [docKey]: true }));
     this.drawerCharacterErrorByDocKey.update((current) => ({ ...current, [docKey]: '' }));
+    console.info('[App] Character reload started', {
+      docKey,
+      startedAt: new Date().toISOString()
+    });
 
     this.ragApi.getCharacterReferenceImages(docKey).subscribe({
       next: (response) => {
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
         this.drawerCharactersByDocKey.update((current) => ({
           ...current,
           [docKey]: Array.isArray(response.characters) ? response.characters : []
         }));
         this.drawerCharacterLoadingByDocKey.update((current) => ({ ...current, [docKey]: false }));
+        console.info('[App] Character reload finished', {
+          docKey,
+          count: Array.isArray(response.characters) ? response.characters.length : 0,
+          elapsedMs: Math.round(elapsedMs)
+        });
       },
       error: (err) => {
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
         const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
         const backendMessage =
           typeof err?.error === 'string'
@@ -181,6 +202,12 @@ export class App implements OnInit {
           ...current,
           [docKey]: `Failed to load characters (${status}): ${backendMessage}`
         }));
+        console.warn('[App] Character reload failed', {
+          docKey,
+          elapsedMs: Math.round(elapsedMs),
+          status,
+          backendMessage
+        });
       }
     });
   }

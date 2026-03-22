@@ -10,9 +10,11 @@ import { RagApiService, RagDocumentResponse } from '../../core/api/rag-api.servi
   styleUrl: './documents.scss'
 })
 export class DocumentsComponent implements OnInit {
+  private static readonly documentsRefreshEvent = 'codex:documents-refresh';
   docs = signal<RagDocumentResponse[]>([]);
   loading = signal(false);
   message = signal('');
+  deletingDocKey = signal('');
 
   constructor(
     private readonly ragApi: RagApiService,
@@ -56,6 +58,39 @@ export class DocumentsComponent implements OnInit {
     return null;
   }
 
+  deleteDocument(event: Event, doc: RagDocumentResponse): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const docKey = this.docKeyForRoute(doc);
+    if (!docKey || this.deletingDocKey()) {
+      return;
+    }
+
+    this.deletingDocKey.set(docKey);
+    this.message.set('');
+
+    this.ragApi.resetPipelineDocument(docKey).subscribe({
+      next: () => {
+        this.docs.update((current) =>
+          current.filter((entry) => this.docKeyForRoute(entry) !== docKey)
+        );
+        this.deletingDocKey.set('');
+        this.message.set(`Deleted document "${docKey}".`);
+        this.dispatchDocumentsRefresh();
+      },
+      error: (err) => {
+        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+        const backendMessage =
+          typeof err?.error === 'string'
+            ? err.error
+            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
+        this.deletingDocKey.set('');
+        this.message.set(`Deleting document failed (${status}): ${backendMessage}`);
+      }
+    });
+  }
+
   private loadDocuments(): void {
     this.loading.set(true);
     this.message.set('');
@@ -78,5 +113,12 @@ export class DocumentsComponent implements OnInit {
         this.loading.set(false);
       }
     });
+  }
+
+  private dispatchDocumentsRefresh(): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+    window.dispatchEvent(new CustomEvent(DocumentsComponent.documentsRefreshEvent));
   }
 }
