@@ -14,18 +14,15 @@
         <h2>Browse</h2>
         <p class="section-copy">Discover readable books by category.</p>
       </div>
-      <button type="button" class="refresh-button" (click)="loadBrowseBooks()" [disabled]="browseLoading()">
-        {{ browseLoading() ? 'Refreshing...' : 'Refresh' }}
-      </button>
     </div>
 
     @if (browseMessage()) {
       <p class="message">{{ browseMessage() }}</p>
     }
 
-    @if (browseCategories().length) {
+    @if (categories().length) {
       <div class="browse-categories">
-        @for (category of browseCategories(); track category.key) {
+        @for (category of categories(); track category.key) {
           <section class="browse-category">
             <div class="category-head">
               <div>
@@ -34,7 +31,7 @@
               </div>
             </div>
 
-            <div class="browse-row">
+            <div class="browse-swiper">
               @for (book of category.books; track book.id) {
                 <article class="book-card browse-card">
                   <div class="book-cover">
@@ -57,6 +54,21 @@
                     </div>
                   </div>
                 </article>
+              }
+
+              @if (category.hasMore) {
+                <button
+                  type="button"
+                  class="load-more-card"
+                  (click)="loadMore(category.key)"
+                  [disabled]="category.loadingMore"
+                >
+                  <span class="load-more-eyebrow">More</span>
+                  <span class="load-more-title">
+                    {{ category.loadingMore ? 'Loading...' : 'Load More' }}
+                  </span>
+                  <span class="load-more-copy">Append more {{ category.label }} books</span>
+                </button>
               }
             </div>
           </section>

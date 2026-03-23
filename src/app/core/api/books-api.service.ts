@@ -28,6 +28,16 @@ export interface BrowseBooksResponse {
   categories: BrowseBooksCategory[];
 }
 
+export interface BrowseCategoryPageResponse {
+  key: string;
+  label: string;
+  offset: number;
+  limit: number;
+  count: number;
+  hasMore: boolean;
+  books: BookSearchResult[];
+}
+
 export interface BookReaderData {
   editionId: string;
   title: string;
@@ -74,6 +84,21 @@ export class BooksApiService {
   browseReadableBooks(limit = 20): Observable<BrowseBooksResponse> {
     const params = new HttpParams().set('limit', limit);
     return this.http.get<BrowseBooksResponse>(`${this.baseUrl}/browse`, { params });
+  }
+
+  browseCategoryPage(
+    categoryKey: string,
+    limit = 10,
+    offset = 0
+  ): Observable<BrowseCategoryPageResponse> {
+    const params = new HttpParams()
+      .set('limit', limit)
+      .set('offset', offset);
+
+    return this.http.get<BrowseCategoryPageResponse>(
+      `${this.baseUrl}/browse/${encodeURIComponent(categoryKey.trim())}`,
+      { params }
+    );
   }
 
   getBookReader(editionId: string): Observable<BookReaderData> {

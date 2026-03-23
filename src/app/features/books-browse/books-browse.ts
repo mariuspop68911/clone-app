@@ -8,6 +8,12 @@ import {
   BrowseBooksResponse
 } from '../../core/api/books-api.service';
 
+interface BrowseCategoryViewModel extends BrowseBooksCategory {
+  offset: number;
+  hasMore: boolean;
+  loadingMore: boolean;
+}
+
 @Component({
   selector: 'app-books-browse',
   imports: [RouterLink],
@@ -15,7 +21,9 @@ import {
   styleUrl: './books-browse.scss'
 })
 export class BooksBrowseComponent implements OnInit {
-  browseData = signal<BrowseBooksResponse | null>(null);
+  private static readonly browsePageSize = 10;
+
+  categories = signal<BrowseCategoryViewModel[]>([]);
   browseLoading = signal(false);
   browseMessage = signal('');
 
@@ -37,7 +45,7 @@ export class BooksBrowseComponent implements OnInit {
 
     this.booksApi.browseReadableBooks(20).subscribe({
       next: (results) => {
-        this.browseData.set(results);
+        this.categories.set(this.toCategoryViewModels(results));
         this.browseLoading.set(false);
         if (!results.categories?.length) {
           this.browseMessage.set('No browse books available right now.');
@@ -55,8 +63,44 @@ export class BooksBrowseComponent implements OnInit {
     });
   }
 
-  browseCategories(): BrowseBooksCategory[] {
-    return this.browseData()?.categories ?? [];
+  loadMore(categoryKey: string): void {
+    const category = this.categories().find((entry) => entry.key === categoryKey);
+    if (!category || category.loadingMore || !category.hasMore) {
+      return;
+    }
+
+    this.patchCategory(categoryKey, { loadingMore: true });
+
+    this.booksApi
+      .browseCategoryPage(categoryKey, BooksBrowseComponent.browsePageSize, category.offset)
+      .subscribe({
+        next: (response) => {
+          this.categories.update((current) =>
+            current.map((entry) =>
+              entry.key === categoryKey
+                ? {
+                    ...entry,
+                    label: response.label || entry.label,
+                    books: [...entry.books, ...response.books],
+                    count: entry.count + response.count,
+                    offset: response.offset + response.count,
+                    hasMore: response.hasMore,
+                    loadingMore: false
+                  }
+                : entry
+            )
+          );
+        },
+        error: (err) => {
+          const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+          const backendMessage =
+            typeof err?.error === 'string'
+              ? err.error
+              : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
+          this.browseMessage.set(`Load more failed (${status}): ${backendMessage}`);
+          this.patchCategory(categoryKey, { loadingMore: false });
+        }
+      });
   }
 
   bookSubtitle(book: BookSearchResult): string {
@@ -72,5 +116,31 @@ export class BooksBrowseComponent implements OnInit {
       parts.push(`${book.totalPages} page${book.totalPages === 1 ? '' : 's'}`);
     }
     return parts.join(' | ');
+  }
+
+  private toCategoryViewModels(results: BrowseBooksResponse): BrowseCategoryViewModel[] {
+    const pageSize = results.booksPerCategory || 20;
+    return (results.categories ?? []).map((category) => ({
+      ...category,
+      offset: category.books.length,
+      hasMore: category.books.length >= pageSize,
+      loadingMore: false
+    }));
+  }
+
+  private patchCategory(
+    categoryKey: string,
+    patch: Partial<Pick<BrowseCategoryViewModel, 'loadingMore' | 'hasMore' | 'offset'>>
+  ): void {
+    this.categories.update((current) =>
+      current.map((entry) =>
+        entry.key === categoryKey
+          ? {
+              ...entry,
+              ...patch
+            }
+          : entry
+      )
+    );
   }
 }
