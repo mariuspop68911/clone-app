@@ -6,29 +6,46 @@
   }
 
   <label>
-    Doc Key
-    <input [(ngModel)]="docKey" placeholder="e.g. doc-001" />
+    Document name
+    <input [(ngModel)]="docKey" placeholder="Automatically set from the PDF name" />
   </label>
 
-  @if (!reviewFile()) {
+  @if (!selectedFile) {
     <label>
       File
       <input
         type="file"
         accept=".pdf,application/pdf"
         (change)="onFileChange($event)"
-        [disabled]="loading()"
+        [disabled]="loading() || ingestActive()"
       />
     </label>
+  } @else if (!reviewFile()) {
+    <app-import-mode-selector
+      [selectedMode]="ingestMode()"
+      [busy]="loading() || ingestActive()"
+      (selectedModeChange)="setIngestMode($event)"
+      (confirmRequested)="onModeConfirmed()"
+      (cancelRequested)="cancelReview()"
+    />
   } @else {
     <app-pdf-page-review
       [file]="reviewFile()"
       [externalPages]="reviewPages()"
-      [busy]="loading()"
+      [busy]="loading() || ingestActive()"
+      [selectedMode]="ingestMode()"
+      [showModePicker]="false"
       (cancelReview)="cancelReview()"
+      (selectedModeChange)="setIngestMode($event)"
       (confirmSelectionRequested)="onConfirmSelection($event)"
     />
   }
 
-  <p class="msg">{{ message() }}</p>
+  @if (shouldShowIngestProgress()) {
+    <app-ingest-progress [status]="ingestStatus()"></app-ingest-progress>
+  }
+
+  @if (message() && (!ingestStatus() || !ingestActive())) {
+    <p class="msg">{{ message() }}</p>
+  }
 </section>

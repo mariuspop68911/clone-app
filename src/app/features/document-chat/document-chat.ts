@@ -1,4 +1,4 @@
-import { Component, Input, signal } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RagApiService } from '../../core/api/rag-api.service';
@@ -17,6 +17,8 @@ interface ChatMessage {
 export class DocumentChatComponent {
   @Input() embedded = false;
   @Input() languageCode = 'en';
+  @Input() requestedQuestion = '';
+  @Input() requestKey = 0;
   docKey = signal('');
   input = '';
   loading = signal(false);
@@ -44,8 +46,26 @@ export class DocumentChatComponent {
     });
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (
+      changes['requestKey'] &&
+      !changes['requestKey'].firstChange &&
+      this.requestedQuestion.trim()
+    ) {
+      queueMicrotask(() => this.submitQuestion(this.requestedQuestion));
+    }
+  }
+
+  ask(question: string): void {
+    this.submitQuestion(question);
+  }
+
   send(): void {
-    const question = this.input.trim();
+    this.submitQuestion(this.input);
+  }
+
+  private submitQuestion(rawQuestion: string): void {
+    const question = rawQuestion.trim();
     const key = this.docKey().trim();
 
     if (!key) {

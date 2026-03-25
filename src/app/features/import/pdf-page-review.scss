@@ -30,6 +30,12 @@
   color: #374151;
 }
 
+.mode-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .review-status {
   margin: 0;
 }
@@ -143,6 +149,12 @@
   height: auto;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
   background: #fff;
+}
+
+.page-stage-placeholder {
+  margin: 0;
+  color: #4b5563;
+  text-align: center;
 }
 
 .page-stage-text {

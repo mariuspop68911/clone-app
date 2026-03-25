@@ -3,15 +3,24 @@ import {
   Component,
   ElementRef,
   ViewChild,
+  effect,
+  inject,
   signal
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { DomSanitizer, SafeHtml, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { DocumentChatComponent } from '../document-chat';
 import {
   RagApiService,
   RagComicBookGenerateResponse,
   RagComicSlide,
+  RagDocumentResponse,
+  RagIngestMode,
+  RagLearningPipelineChapter,
+  RagLearningPipelineContextResponse,
+  RagLearnSlide,
+  RagLearnSlidesResponse,
   RagSlideDialog,
   RagSlideDialogsResponse,
   RagSlideHeadCharacter,
@@ -19,8 +28,13 @@ import {
   RagSlideHeadsResponse
 } from '../../core/api/rag-api.service';
 import { TtsApiService } from '../../core/api/tts-api.service';
+import { ImageViewerModalComponent } from './image-viewer-modal';
+import { LearningExplainService } from './learning-explain.service';
+import { PipelineChaptersSidebarComponent } from './pipeline-chapters-sidebar';
+import { AppShellUiService } from '../../app-shell-ui.service';
 import { register } from 'swiper/element/bundle';
 import { firstValueFrom } from 'rxjs';
+import { marked } from 'marked';
 
 register();
 
@@ -49,7 +63,7 @@ interface TtsSegment {
   line?: string;
 }
 
-interface ComicBatchState {
+interface StoredSlideBatchState {
   start: number;
   end: number;
   hasMore: boolean;
@@ -71,11 +85,22 @@ interface SlideBubbleAnchor {
   topPercent: number;
 }
 
+interface SourcePreviewPage {
+  pageNumber: number;
+  pdfUrl: string;
+  trustedPdfUrl: SafeResourceUrl;
+}
+
 type ActiveVisualMode = 'none' | 'dialogue' | 'context';
+type PipelineViewMode = 'comic' | 'learning';
 
 @Component({
   selector: 'app-pipeline',
-  imports: [DocumentChatComponent],
+  imports: [
+    DocumentChatComponent,
+    PipelineChaptersSidebarComponent,
+    ImageViewerModalComponent
+  ],
   templateUrl: './pipeline.html',
   styleUrl: './pipeline.scss',
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -83,7 +108,7 @@ type ActiveVisualMode = 'none' | 'dialogue' | 'context';
 export class PipelineComponent {
   private static readonly charactersRefreshEvent = 'codex:characters-refresh';
   private static readonly comicBatchSize = 10;
-  private static readonly comicBatchStateStorageKey = 'pipeline-comic-batch-state';
+  private static readonly learningBatchStateStorageKey = 'pipeline-learning-batch-state';
   private static readonly highlightLeadSeconds = 1;
   private static readonly ttsPrefetchConcurrency = 3;
   private static readonly defaultLanguage = 'en';
@@ -93,6 +118,9 @@ export class PipelineComponent {
     'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
   private audio: HTMLAudioElement | null = null;
   private currentObjectUrl: string | null = null;
+  private sourcePdfLoadToken = 0;
+  private loadedSourceSignature = '';
+  private lastAutoLoadTriggerKey = '';
   private playbackToken = 0;
   private onSegmentEnd: (() => void) | null = null;
   private audioUnlocked = false;
@@ -101,14 +129,18 @@ export class PipelineComponent {
   private readonly onFirstInteractionBound = () => {
     void this.ensureAudioUnlocked();
   };
+  private readonly learningExplainService = inject(LearningExplainService);
+  private readonly appShellUi = inject(AppShellUiService);
 
   docKey = signal('');
+  viewMode = signal<PipelineViewMode>('comic');
   loading = signal(false);
   clearing = signal(false);
   message = signal('');
-  comicBatchStart = signal(0);
-  comicBatchEnd = signal(PipelineComponent.comicBatchSize);
   showLoadMoreSlide = signal(false);
+  learningBatchStart = signal(0);
+  learningBatchEnd = signal(PipelineComponent.comicBatchSize);
+  showLoadMoreLearningSlide = signal(false);
   ttsMessage = signal('');
   ttsLoading = signal(false);
   ttsPlaying = signal(false);
@@ -126,7 +158,12 @@ export class PipelineComponent {
   selectedLanguage = signal(PipelineComponent.defaultLanguage);
   currentSlide = signal(0);
   askOpen = signal(false);
+  sourceOpen = signal(false);
+  chaptersDrawerOpen = signal(false);
+  explainOpen = this.learningExplainService.panelOpen;
+  documentMode = signal<RagIngestMode | null>(null);
   slides = signal<RagComicSlide[]>([]);
+  learningSlides = signal<RagLearnSlide[]>([]);
   slidesLoading = signal(false);
   slidesMessage = signal('');
   slidePromptById = signal<Record<number, string>>({});
@@ -138,6 +175,29 @@ export class PipelineComponent {
   slideHeadsByCardKey = signal<Record<string, SlideHeadMarker[]>>({});
   slideHeadsLoadingByCardKey = signal<Record<string, boolean>>({});
   activeHeadCardKey = signal('');
+  sourcePages = signal<SourcePreviewPage[]>([]);
+  sourceLoading = signal(false);
+  sourceMessage = signal('');
+  docId = signal<number | null>(null);
+  learningContext = signal<RagLearningPipelineContextResponse | null>(null);
+  learningContextLoading = signal(false);
+  learningContextError = signal('');
+  imageViewerOpen = signal(false);
+  imageViewerUrl = signal('');
+  imageViewerAlt = signal('Image preview');
+  imageViewerZoom = signal(1);
+  askRequestedQuestion = signal('');
+  askRequestKey = signal(0);
+  explainSelectionVisible = this.learningExplainService.selectionVisible;
+  explainSelectionText = this.learningExplainService.selectionText;
+  explainSelectionChunkId = this.learningExplainService.selectionChunkId;
+  explainSelectionButtonTop = this.learningExplainService.selectionButtonTop;
+  explainSelectionButtonLeft = this.learningExplainService.selectionButtonLeft;
+  explanationLoading = this.learningExplainService.loading;
+  explanationSummary = this.learningExplainService.summary;
+  explanationText = this.learningExplainService.text;
+  explanationChunkId = this.learningExplainService.chunkId;
+  explanationMessage = this.learningExplainService.message;
   @ViewChild('carouselEl') private carouselElement?: ElementRef<{
     swiper?: {
       activeIndex?: number;
@@ -150,8 +210,15 @@ export class PipelineComponent {
   constructor(
     private readonly route: ActivatedRoute,
     private readonly ragApi: RagApiService,
-    private readonly ttsApi: TtsApiService
+    private readonly ttsApi: TtsApiService,
+    private readonly sanitizer: DomSanitizer
   ) {
+    effect(() => {
+      this.appShellUi.setBrowseButtonVisible(
+        !(this.askOpen() || this.sourceOpen() || this.explainOpen() || this.chaptersDrawerOpen())
+      );
+    });
+
     if (typeof window !== 'undefined') {
       this.audio = new Audio();
       window.addEventListener('pointerdown', this.onFirstInteractionBound, { passive: true });
@@ -160,13 +227,18 @@ export class PipelineComponent {
     this.route.paramMap.subscribe((params) => {
       const key = params.get('docKey') ?? '';
       this.docKey.set(key);
+      this.viewMode.set('comic');
       this.loading.set(false);
       this.clearing.set(false);
       this.message.set('');
-      const batchState = this.readComicBatchState(key);
-      this.comicBatchStart.set(batchState?.start ?? 0);
-      this.comicBatchEnd.set(batchState?.end ?? PipelineComponent.comicBatchSize);
-      this.showLoadMoreSlide.set(batchState?.hasMore ?? false);
+      const learningBatchState = this.readBatchState(
+        key,
+        PipelineComponent.learningBatchStateStorageKey
+      );
+      this.showLoadMoreSlide.set(false);
+      this.learningBatchStart.set(learningBatchState?.start ?? 0);
+      this.learningBatchEnd.set(learningBatchState?.end ?? PipelineComponent.comicBatchSize);
+      this.showLoadMoreLearningSlide.set(learningBatchState?.hasMore ?? false);
       this.ttsMessage.set('');
       this.ttsLoading.set(false);
       this.ttsPlaying.set(false);
@@ -183,7 +255,12 @@ export class PipelineComponent {
       this.ttsTotalWords.set(0);
       this.currentSlide.set(0);
       this.askOpen.set(false);
+      this.sourceOpen.set(false);
+      this.chaptersDrawerOpen.set(false);
+      this.learningExplainService.reset();
+      this.documentMode.set(null);
       this.slides.set([]);
+      this.learningSlides.set([]);
       this.slidesLoading.set(false);
       this.slidesMessage.set('');
       this.slidePromptById.set({});
@@ -195,16 +272,31 @@ export class PipelineComponent {
       this.slideHeadsByCardKey.set({});
       this.slideHeadsLoadingByCardKey.set({});
       this.activeHeadCardKey.set('');
+      this.sourcePages.set([]);
+      this.sourceLoading.set(false);
+      this.sourceMessage.set('');
+      this.docId.set(null);
+      this.learningContext.set(null);
+      this.learningContextLoading.set(false);
+      this.learningContextError.set('');
+      this.imageViewerOpen.set(false);
+      this.imageViewerUrl.set('');
+      this.imageViewerAlt.set('Image preview');
+      this.imageViewerZoom.set(1);
+      this.loadedSourceSignature = '';
+      this.lastAutoLoadTriggerKey = '';
       this.failedUriMap.set({});
       this.stopCardTts();
 
       if (key.trim()) {
-        this.loadSlides(key);
+        this.loadDocumentMode(key);
+        this.loadContextAndSlides(key);
       }
     });
   }
 
   ngOnDestroy(): void {
+    this.appShellUi.setBrowseButtonVisible(true);
     if (typeof window !== 'undefined') {
       window.removeEventListener('pointerdown', this.onFirstInteractionBound);
     }
@@ -222,24 +314,44 @@ export class PipelineComponent {
       return;
     }
 
+    this.viewMode.set('comic');
     this.loading.set(true);
     this.generateAllStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     console.info('[Pipeline] Generate all requested', {
       docKey: key,
-      start: 0,
-      end: PipelineComponent.comicBatchSize,
       startedAt: new Date().toISOString()
     });
-    this.message.set('');
-    this.comicBatchStart.set(0);
-    this.comicBatchEnd.set(PipelineComponent.comicBatchSize);
+    this.message.set('Processing next chapters...');
+    this.lastAutoLoadTriggerKey = '';
     this.showLoadMoreSlide.set(false);
-    this.writeComicBatchState(key, {
+    this.generateAllBatch(key);
+  }
+
+  generateLearning(): void {
+    const key = this.docKey().trim();
+    if (!key) {
+      this.message.set('Missing docKey.');
+      return;
+    }
+    if (this.loading() || this.clearing()) {
+      return;
+    }
+
+    this.viewMode.set('learning');
+    this.loading.set(true);
+    this.message.set('');
+    this.lastAutoLoadTriggerKey = '';
+    this.currentSlide.set(0);
+    this.learningSlides.set([]);
+    this.learningBatchStart.set(0);
+    this.learningBatchEnd.set(PipelineComponent.comicBatchSize);
+    this.showLoadMoreLearningSlide.set(false);
+    this.writeBatchState(key, PipelineComponent.learningBatchStateStorageKey, {
       start: 0,
       end: PipelineComponent.comicBatchSize,
       hasMore: false
     });
-    this.generateAllBatch(key, 0, PipelineComponent.comicBatchSize);
+    this.generateLearningBatch(key, 0, PipelineComponent.comicBatchSize);
   }
 
   loadMoreSlides(): void {
@@ -252,9 +364,18 @@ export class PipelineComponent {
       return;
     }
 
-    const nextStart = this.comicBatchEnd();
-    const nextEnd = nextStart + PipelineComponent.comicBatchSize;
-    this.generateAllBatch(key, nextStart, nextEnd);
+    if (this.viewMode() === 'learning') {
+      const nextStart = this.learningBatchEnd();
+      const nextEnd = nextStart + PipelineComponent.comicBatchSize;
+      this.generateLearningBatch(key, nextStart, nextEnd);
+      return;
+    }
+
+    if (!this.showLoadMoreSlide()) {
+      return;
+    }
+
+    this.generateAllBatch(key);
   }
 
   clearSlides(): void {
@@ -288,6 +409,77 @@ export class PipelineComponent {
     });
   }
 
+  clearLearningSlides(): void {
+    const key = this.docKey().trim();
+    if (!key) {
+      this.message.set('Missing docKey.');
+      return;
+    }
+    if (this.loading() || this.clearing()) {
+      return;
+    }
+
+    this.clearing.set(true);
+    this.message.set('');
+
+    this.ragApi.resetLearningSlides(key).subscribe({
+      next: () => {
+        this.clearing.set(false);
+        this.resetLearningSlideState(key);
+        this.message.set('Learning slide data cleared.');
+      },
+      error: (err) => {
+        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+        const backendMessage =
+          typeof err?.error === 'string'
+            ? err.error
+            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
+        this.clearing.set(false);
+        this.message.set(`Failed to clear learning slides (${status}): ${backendMessage}`);
+      }
+    });
+  }
+
+  private maybeAutoLoadMoreAfterSlideAdvance(nextIndex: number): void {
+    const docKey = this.docKey().trim();
+    if (!docKey || this.loading() || this.clearing()) {
+      return;
+    }
+
+    const currentBatchStart =
+      Math.floor(nextIndex / PipelineComponent.comicBatchSize) * PipelineComponent.comicBatchSize;
+    const triggerIndex = currentBatchStart + 1;
+    if (nextIndex < triggerIndex) {
+      return;
+    }
+
+    if (this.viewMode() === 'learning') {
+      const nextStart = currentBatchStart + PipelineComponent.comicBatchSize;
+      const nextEnd = nextStart + PipelineComponent.comicBatchSize;
+      const triggerKey = `learning:${currentBatchStart}`;
+      if (this.lastAutoLoadTriggerKey === triggerKey || this.learningSlides().length > nextStart) {
+        return;
+      }
+
+      this.lastAutoLoadTriggerKey = triggerKey;
+      this.generateLearningBatch(docKey, nextStart, nextEnd);
+      return;
+    }
+
+    if (!this.showLoadMoreSlide()) {
+      return;
+    }
+
+    const remainingSlides = this.slides().length - nextIndex - 1;
+    const triggerKey = `comic:${this.slides().length}`;
+    if (this.lastAutoLoadTriggerKey === triggerKey || remainingSlides > 1) {
+      return;
+    }
+
+    this.lastAutoLoadTriggerKey = triggerKey;
+    this.generateAllBatch(docKey);
+  }
+
   onSlideIndexChange(event: Event): void {
     const target = event.target as { swiper?: { activeIndex?: number; realIndex?: number } } | null;
     const rawIndex = target?.swiper?.realIndex ?? target?.swiper?.activeIndex;
@@ -297,13 +489,18 @@ export class PipelineComponent {
     const nextIndex = Math.max(0, Math.floor(rawIndex));
     this.currentSlide.set(nextIndex);
     this.summaryHiddenCardKey.set('');
+    this.learningExplainService.hideSelectionButton();
     this.loadCurrentSlidePrompt();
     this.playCurrentSlideIfAutoPlayEnabled();
+    this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
+    if (this.viewMode() === 'learning') {
+      void this.loadSourcePagesForCurrentSlide();
+    }
   }
 
   goToSlide(index: number): void {
-    const items = this.slides();
-    if (index < 0 || index >= items.length) {
+    const itemsLength = this.visibleSlideCount();
+    if (index < 0 || index >= itemsLength) {
       return;
     }
     const swiper = this.carouselElement?.nativeElement?.swiper;
@@ -311,9 +508,55 @@ export class PipelineComponent {
       swiper.slideTo(index);
       this.currentSlide.set(index);
       this.summaryHiddenCardKey.set('');
+      this.learningExplainService.hideSelectionButton();
       this.loadCurrentSlidePrompt();
       this.playCurrentSlideIfAutoPlayEnabled();
+      if (this.viewMode() === 'learning') {
+        void this.loadSourcePagesForCurrentSlide();
+      }
     }
+  }
+
+  chapterItems(): RagLearningPipelineChapter[] {
+    return this.learningContext()?.chapters ?? [];
+  }
+
+  activeChapterIndex(): number | null {
+    const chapters = this.chapterItems();
+    if (!chapters.length) {
+      return null;
+    }
+
+    const current = this.currentChapterSignal();
+    if (current === null) {
+      return null;
+    }
+
+    const nextIndex = chapters.findIndex((chapter) => chapter === current);
+    return nextIndex >= 0 ? nextIndex : null;
+  }
+
+  availableChapterIndexes(): number[] {
+    const chapters = this.chapterItems();
+    if (!chapters.length) {
+      return [];
+    }
+
+    return chapters.reduce<number[]>((indexes, chapter, index) => {
+      if (this.findSlideIndexForChapter(chapter) !== null) {
+        indexes.push(index);
+      }
+      return indexes;
+    }, []);
+  }
+
+  goToChapter(chapter: RagLearningPipelineChapter): void {
+    const nextIndex = this.findSlideIndexForChapter(chapter);
+    if (nextIndex === null) {
+      return;
+    }
+    this.chaptersDrawerOpen.set(false);
+    this.goToSlide(nextIndex);
   }
 
   setLanguage(languageCode: string): void {
@@ -335,8 +578,32 @@ export class PipelineComponent {
 
     const key = this.docKey().trim();
     if (key) {
-      this.loadSlides(key);
+      this.loadContextAndSlides(key);
     }
+  }
+
+  openImageViewer(imageUrl: string, alt: string): void {
+    this.imageViewerUrl.set(this.imageSrc(imageUrl));
+    this.imageViewerAlt.set(alt);
+    this.imageViewerZoom.set(1);
+    this.imageViewerOpen.set(true);
+  }
+
+  closeImageViewer(): void {
+    this.imageViewerOpen.set(false);
+    this.imageViewerZoom.set(1);
+  }
+
+  zoomInImageViewer(): void {
+    this.imageViewerZoom.update((current) => Math.min(4, Math.round((current + 0.25) * 100) / 100));
+  }
+
+  zoomOutImageViewer(): void {
+    this.imageViewerZoom.update((current) => Math.max(0.5, Math.round((current - 0.25) * 100) / 100));
+  }
+
+  resetImageViewerZoom(): void {
+    this.imageViewerZoom.set(1);
   }
 
   slideImageUrl(slide: RagComicSlide): string | null {
@@ -421,6 +688,30 @@ export class PipelineComponent {
     }
     this.autoPlayEnabled.set(true);
     void this.playCardTts(item, index);
+  }
+
+  isLearningCardPlaying(index: number): boolean {
+    const key = this.learningCardKey(index);
+    return (
+      (this.ttsPlaying() && this.playingCardKey() === key) ||
+      (this.autoPlayEnabled() && this.viewMode() === 'learning' && this.currentSlide() === index)
+    );
+  }
+
+  toggleLearningTts(item: RagLearnSlide, index: number): void {
+    const key = this.learningCardKey(index);
+    if (this.autoPlayEnabled() && this.viewMode() === 'learning' && this.currentSlide() === index) {
+      this.autoPlayEnabled.set(false);
+      this.stopCardTts();
+      return;
+    }
+
+    this.autoPlayEnabled.set(true);
+    void this.playLearningCardTts(item, index);
+  }
+
+  isLearningCardLoading(index: number): boolean {
+    return this.ttsLoading() && this.playingCardKey() === this.learningCardKey(index);
   }
 
   isCardLoading(item: RagComicSlide, index: number): boolean {
@@ -600,22 +891,289 @@ export class PipelineComponent {
   }
 
   currentSlidePromptId(): number | null {
+    if (this.viewMode() !== 'comic') {
+      return null;
+    }
     const slide = this.slides()[this.currentSlide()];
     return this.toNullableFiniteNumber(slide?.id);
   }
 
   currentSlideItem(): RagComicSlide | null {
+    if (this.viewMode() !== 'comic') {
+      return null;
+    }
     return this.slides()[this.currentSlide()] ?? null;
   }
 
+  currentLearningSlide(): RagLearnSlide | null {
+    if (this.viewMode() !== 'learning') {
+      return null;
+    }
+    return this.learningSlides()[this.currentSlide()] ?? null;
+  }
+
   paginationIndexes(): number[] {
-    return Array.from({ length: this.slides().length }, (_, index) => index);
+    return Array.from({ length: this.visibleSlideCount() }, (_, index) => index);
+  }
+
+  visibleSlideCount(): number {
+    return this.viewMode() === 'learning' ? this.learningSlides().length : this.slides().length;
+  }
+
+  shouldShowLoadMoreSlides(): boolean {
+    return this.viewMode() === 'learning' ? this.showLoadMoreLearningSlide() : this.showLoadMoreSlide();
+  }
+
+  learningSummary(slide: RagLearnSlide | null): string {
+    if (!slide || typeof slide.summary !== 'string') {
+      return 'No summary available.';
+    }
+    const summary = slide.summary.trim();
+    return summary || 'No summary available.';
+  }
+
+  learningTitle(slide: RagLearnSlide | null): string {
+    if (!slide || typeof slide.title !== 'string') {
+      return 'Learning summary';
+    }
+    const title = slide.title.trim();
+    return title || 'Learning summary';
+  }
+
+  learningSummaryTokens(slide: RagLearnSlide | null): CardToken[] {
+    return this.tokens(this.learningSummaryPlainText(slide));
+  }
+
+  learningSummaryMarkdown(slide: RagLearnSlide | null): string {
+    const summary = this.learningSummary(slide);
+    return this.escapeHtmlForMarkdown(this.normalizeLearningSummaryMarkdown(summary));
+  }
+
+  learningSummaryHtml(slide: RagLearnSlide | null): SafeHtml {
+    const normalizedSummary = this.normalizeLearningSummaryMarkdown(this.learningSummary(slide));
+    const askableExpressions: string[] = [];
+    const markdownWithPlaceholders = normalizedSummary.replace(/\*\*([^*]+?)\*\*/g, (match, rawExpression: string) => {
+      const expression = rawExpression.trim();
+      if (!expression) {
+        return match;
+      }
+
+      const placeholder = `ASKABLE_EXPRESSION_${askableExpressions.length}`;
+      askableExpressions.push(expression);
+      return placeholder;
+    });
+
+    const parsedHtml = marked.parse(this.escapeHtmlForMarkdown(markdownWithPlaceholders));
+    let html = typeof parsedHtml === 'string' ? parsedHtml : '';
+
+    askableExpressions.forEach((expression, index) => {
+      html = html.replace(
+        `ASKABLE_EXPRESSION_${index}`,
+        this.askableExpressionButtonHtml(expression)
+      );
+    });
+
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
+  learningSummaryPlainText(slide: RagLearnSlide | null): string {
+    return this.stripMarkdownForPlainText(this.learningSummary(slide));
+  }
+
+  onLearningSummaryPointerDown(event: MouseEvent | PointerEvent): void {
+    event.stopPropagation();
+  }
+
+  onLearningSummaryClick(event: MouseEvent): void {
+    const encodedExpression = this.findAskExpressionFromEvent(event);
+    if (!encodedExpression) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  onLearningSummaryMouseUp(event: MouseEvent, slide: RagLearnSlide): void {
+    const encodedExpression = this.findAskExpressionFromEvent(event);
+    if (encodedExpression) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const expression = this.decodeAskExpression(encodedExpression);
+      if (expression) {
+        this.askAboutExpression(expression);
+      }
+      return;
+    }
+
+    queueMicrotask(() => {
+      this.learningExplainService.updateSelectionFromMouseUp(
+        event,
+        this.toNullableFiniteNumber(slide.chunkId)
+      );
+    });
+  }
+
+  triggerSelectionExplain(): void {
+    this.learningExplainService.triggerSelectionExplain(this.docKey(), () => {
+      this.askOpen.set(false);
+      this.sourceOpen.set(false);
+    });
+  }
+
+  explainFullSummary(slide: RagLearnSlide): void {
+    this.learningExplainService.explainSummary(
+      this.docKey(),
+      this.toNullableFiniteNumber(slide.chunkId),
+      this.learningSummaryPlainText(slide),
+      () => {
+        this.askOpen.set(false);
+        this.sourceOpen.set(false);
+      }
+    );
+  }
+
+  private askAboutExpression(expression: string): void {
+    const normalizedExpression = expression.trim().replace(/\s+/g, ' ');
+    if (!normalizedExpression) {
+      return;
+    }
+
+    this.learningExplainService.hideSelectionButton();
+    this.sourceOpen.set(false);
+    this.chaptersDrawerOpen.set(false);
+    this.learningExplainService.closePanel();
+    this.askOpen.set(true);
+    this.askRequestedQuestion.set(`What is ${normalizedExpression}`);
+    this.askRequestKey.update((current) => current + 1);
+  }
+
+  learningImageUrl(slide: RagLearnSlide | null): string | null {
+    if (!slide) {
+      return null;
+    }
+
+    const directCandidates = [
+      slide.imageUrl,
+      slide['image_url'],
+      slide['imageUri'],
+      slide['image_uri']
+    ];
+
+    for (const candidate of directCandidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+
+    const imageUrls = slide['imageUrls'];
+    if (Array.isArray(imageUrls)) {
+      const firstUrl = imageUrls.find(
+        (value): value is string => typeof value === 'string' && value.trim().length > 0
+      );
+      if (firstUrl) {
+        return firstUrl.trim();
+      }
+    }
+
+    return null;
+  }
+
+  learningSourcePagesText(slide: RagLearnSlide | null): string {
+    const pages = this.learningSourcePages(slide);
+    return pages.join(', ');
+  }
+
+  learningSourcePages(slide: RagLearnSlide | null): number[] {
+    if (!slide || !Array.isArray(slide.sourcePageNumbers)) {
+      return [];
+    }
+    return slide.sourcePageNumbers.filter((value, index, array) => value > 0 && array.indexOf(value) === index);
+  }
+
+  isLearningTokenActive(index: number, tokenWordIndex: number): boolean {
+    if (tokenWordIndex < 0 || !this.isLearningCardPlaying(index)) {
+      return false;
+    }
+    return this.ttsCurrentWord() === tokenWordIndex;
+  }
+
+  shouldShowLearningActions(): boolean {
+    const mode = this.documentMode();
+    return (
+      mode === 'Learning Mode' || mode === 'Action Mode' || mode === 'Extraction Mode'
+    );
+  }
+
+  shouldShowStoryActions(): boolean {
+    const mode = this.documentMode();
+    return !mode || mode === 'Story Mode';
+  }
+
+  canShowSourceButton(): boolean {
+    return this.shouldShowLearningActions() && this.viewMode() === 'learning' && this.visibleSourcePageNumbers().length > 0;
+  }
+
+  visibleSourcePageNumbers(): number[] {
+    const slide = this.currentLearningSlide();
+    if (!slide || !Array.isArray(slide.sourcePageNumbers)) {
+      return [];
+    }
+    return slide.sourcePageNumbers.filter((value, index, array) => value > 0 && array.indexOf(value) === index);
+  }
+
+  toggleChaptersDrawer(): void {
+    const nextOpen = !this.chaptersDrawerOpen();
+    this.askOpen.set(false);
+    this.explainOpen.set(false);
+    this.sourceOpen.set(false);
+    this.chaptersDrawerOpen.set(nextOpen);
+  }
+
+  toggleSourcePanel(): void {
+    const nextOpen = !this.sourceOpen();
+    this.learningExplainService.hideSelectionButton();
+    this.askOpen.set(false);
+    this.explainOpen.set(false);
+    this.chaptersDrawerOpen.set(false);
+    this.sourceOpen.set(nextOpen);
+    if (nextOpen && !this.sourcePages().length) {
+      void this.loadSourcePagesForCurrentSlide();
+    }
+  }
+
+  private loadContextAndSlides(docKey: string): void {
+    const normalizedDocKey = docKey.trim();
+    if (!normalizedDocKey) {
+      return;
+    }
+
+    this.learningContextLoading.set(true);
+    this.learningContextError.set('');
+    this.learningContext.set(null);
+
+    this.ragApi.getLearningPipelineContext(normalizedDocKey).subscribe({
+      next: (response) => {
+        this.learningContext.set(response);
+        this.docId.set(this.toNullableFiniteNumber(response.docId));
+        this.learningContextLoading.set(false);
+        this.loadSlides(normalizedDocKey);
+      },
+      error: (err) => {
+        this.learningContext.set(null);
+        this.learningContextError.set(`Failed to load chapters: ${this.readApiError(err)}`);
+        this.learningContextLoading.set(false);
+        this.loadSlides(normalizedDocKey);
+      }
+    });
   }
 
   private loadSlides(docKey: string): void {
     const loadStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this.slidesLoading.set(true);
     this.slidesMessage.set('');
+    this.lastAutoLoadTriggerKey = '';
     this.failedUriMap.set({});
     console.info('[Pipeline] Slide reload started', {
       docKey,
@@ -626,6 +1184,11 @@ export class PipelineComponent {
     this.ragApi.getComicSlidesWithImages(docKey, this.selectedLanguage()).subscribe({
       next: (response) => {
         const nextSlides = Array.isArray(response.slides) ? response.slides : [];
+        if (!nextSlides.length) {
+          this.loadLearningSlidesFallback(docKey, loadStartedAt);
+          return;
+        }
+
         const totalCount = typeof response.count === 'number' ? response.count : nextSlides.length;
         const returnedCount =
           typeof response.returnedCount === 'number' ? response.returnedCount : nextSlides.length;
@@ -636,17 +1199,13 @@ export class PipelineComponent {
         const nextCursor = backendLastLimit !== null ? backendLastLimit : returnedCount;
         const elapsedMs =
           (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
+        this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
         this.slides.set(nextSlides);
+        this.learningSlides.set([]);
+        this.viewMode.set('comic');
         this.syncSlidePrompts(nextSlides);
         this.slidesLoading.set(totalCount > returnedCount);
-        this.comicBatchStart.set(Math.max(0, nextCursor - PipelineComponent.comicBatchSize));
-        this.comicBatchEnd.set(nextCursor);
         this.showLoadMoreSlide.set(totalCount > returnedCount);
-        this.writeComicBatchState(docKey, {
-          start: Math.max(0, nextCursor - PipelineComponent.comicBatchSize),
-          end: nextCursor,
-          hasMore: totalCount > returnedCount
-        });
         const nextIndex = this.clampSlideIndex(this.currentSlide(), nextSlides.length);
         this.currentSlide.set(nextIndex);
         this.syncSwiperSlide(nextIndex);
@@ -688,6 +1247,260 @@ export class PipelineComponent {
     });
   }
 
+  private currentChapterSignal(): RagLearningPipelineChapter | null {
+    const chapters = this.chapterItems();
+    if (!chapters.length) {
+      return null;
+    }
+
+    const items = this.viewMode() === 'learning' ? this.learningSlides() : this.slides();
+    const currentIndex = this.currentSlide();
+    if (currentIndex < 0 || currentIndex >= items.length) {
+      return null;
+    }
+
+    return this.viewMode() === 'learning'
+      ? this.chapterForLearningSlide(items[currentIndex] as RagLearnSlide, chapters)
+      : this.chapterForComicSlide(items[currentIndex] as RagComicSlide, chapters);
+  }
+
+  private findSlideIndexForChapter(chapter: RagLearningPipelineChapter): number | null {
+    const items = this.viewMode() === 'learning' ? this.learningSlides() : this.slides();
+    if (!items.length) {
+      return null;
+    }
+
+    const matchIndex =
+      this.viewMode() === 'learning'
+        ? (items as RagLearnSlide[]).findIndex((slide) => this.slideMatchesChapter(slide, chapter))
+        : (items as RagComicSlide[]).findIndex((slide) => this.slideMatchesChapter(slide, chapter));
+
+    return matchIndex >= 0 ? matchIndex : null;
+  }
+
+  private chapterForLearningSlide(
+    slide: RagLearnSlide | null | undefined,
+    chapters: RagLearningPipelineChapter[]
+  ): RagLearningPipelineChapter | null {
+    if (!slide) {
+      return null;
+    }
+    return chapters.find((chapter) => this.slideMatchesChapter(slide, chapter)) ?? null;
+  }
+
+  private chapterForComicSlide(
+    slide: RagComicSlide | null | undefined,
+    chapters: RagLearningPipelineChapter[]
+  ): RagLearningPipelineChapter | null {
+    if (!slide) {
+      return null;
+    }
+    return chapters.find((chapter) => this.slideMatchesChapter(slide, chapter)) ?? null;
+  }
+
+  private slideMatchesChapter(
+    slide: RagLearnSlide | RagComicSlide,
+    chapter: RagLearningPipelineChapter
+  ): boolean {
+    const chunkValues = this.slideChunkIndexes(slide);
+    const pageValues = this.slidePageNumbers(slide);
+    return (
+      this.matchesChapterRange(chunkValues, chapter.startChunkIndex, chapter.endChunkIndex) ||
+      this.matchesChapterRange(pageValues, chapter.startPageNumber, chapter.endPageNumber)
+    );
+  }
+
+  private slideChunkIndexes(slide: RagLearnSlide | RagComicSlide): number[] {
+    if ('sourcePageNumbers' in slide) {
+      const values = [
+        ...(Array.isArray(slide.chunkIndexes) ? slide.chunkIndexes : []),
+        typeof slide.chunkIndex === 'number' ? slide.chunkIndex : null
+      ];
+      return values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    }
+
+    const comicNote = slide.comicNote as { chunkIndex?: number } | undefined;
+    const chunkIndex = comicNote?.chunkIndex;
+    return typeof chunkIndex === 'number' && Number.isFinite(chunkIndex) ? [chunkIndex] : [];
+  }
+
+  private slidePageNumbers(slide: RagLearnSlide | RagComicSlide): number[] {
+    if ('sourcePageNumbers' in slide && Array.isArray(slide.sourcePageNumbers)) {
+      return slide.sourcePageNumbers.filter(
+        (value): value is number => typeof value === 'number' && Number.isFinite(value)
+      );
+    }
+    return [];
+  }
+
+  private matchesChapterRange(values: number[], start?: number, end?: number): boolean {
+    if (!values.length) {
+      return false;
+    }
+
+    const normalizedStart = typeof start === 'number' && Number.isFinite(start) ? start : null;
+    const normalizedEnd = typeof end === 'number' && Number.isFinite(end) ? end : null;
+    if (normalizedStart === null && normalizedEnd === null) {
+      return false;
+    }
+
+    return values.some((value) => {
+      if (normalizedStart !== null && value < normalizedStart) {
+        return false;
+      }
+      if (normalizedEnd !== null && value > normalizedEnd) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  private loadDocumentMode(docKey: string): void {
+    this.ragApi.listDocuments().subscribe({
+      next: (docs) => {
+        const normalizedDocKey = docKey.trim();
+        const match = (docs ?? []).find((doc: RagDocumentResponse) => {
+          const candidate = typeof doc.docKey === 'string' ? doc.docKey.trim() : '';
+          return candidate === normalizedDocKey;
+        });
+        const mode = typeof match?.['mode'] === 'string' ? match['mode'].trim() : '';
+        this.documentMode.set(this.toDocumentMode(mode));
+      },
+      error: () => {
+        this.documentMode.set(null);
+      }
+    });
+  }
+
+  private async loadSourcePagesForCurrentSlide(): Promise<void> {
+    const docId = this.docId();
+    const sourcePageNumbers = this.visibleSourcePageNumbers();
+    if (docId === null || !sourcePageNumbers.length) {
+      this.sourcePages.set([]);
+      this.sourceMessage.set('No source pages for this slide.');
+      this.sourceLoading.set(false);
+      this.loadedSourceSignature = '';
+      return;
+    }
+
+    const signature = `${docId}|${sourcePageNumbers.join(',')}`;
+    if (signature === this.loadedSourceSignature && this.sourcePages().length) {
+      this.sourceLoading.set(false);
+      this.sourceMessage.set('');
+      return;
+    }
+
+    const token = ++this.sourcePdfLoadToken;
+    this.sourceLoading.set(true);
+    this.sourceMessage.set('');
+
+    try {
+      const baseUrl = this.ragApi.getDocumentPdfUrl(docId);
+      const renderedPages: SourcePreviewPage[] = sourcePageNumbers.map((pageNumber) => ({
+        pageNumber,
+        pdfUrl: `${baseUrl}#page=${pageNumber}&view=FitH&navpanes=0&pagemode=none`,
+        trustedPdfUrl: this.sanitizer.bypassSecurityTrustResourceUrl(
+          `${baseUrl}#page=${pageNumber}&view=FitH&navpanes=0&pagemode=none`
+        )
+      }));
+
+      if (token !== this.sourcePdfLoadToken) {
+        return;
+      }
+
+      this.sourcePages.set(renderedPages);
+      this.loadedSourceSignature = signature;
+      this.sourceMessage.set(renderedPages.length ? '' : 'No source pages available.');
+    } catch (err) {
+      console.error('[Pipeline] Failed to load source pages', err);
+      this.sourcePages.set([]);
+      this.loadedSourceSignature = '';
+      this.sourceMessage.set(`Failed to load source pages: ${this.readApiError(err)}`);
+    } finally {
+      if (token === this.sourcePdfLoadToken) {
+        this.sourceLoading.set(false);
+      }
+    }
+  }
+
+  private loadLearningSlidesFallback(docKey: string, loadStartedAt: number): void {
+    this.ragApi.getLearningSlides(docKey).subscribe({
+      next: (response) => {
+        const nextSlides = Array.isArray(response.slides) ? response.slides : [];
+        const totalCount = typeof response.count === 'number' ? response.count : nextSlides.length;
+        const returnedCount =
+          typeof response.returnedCount === 'number' ? response.returnedCount : nextSlides.length;
+        const backendLastLimit =
+          typeof response.lastLimit === 'number' && Number.isFinite(response.lastLimit)
+            ? response.lastLimit
+            : null;
+        const nextCursor = backendLastLimit !== null ? backendLastLimit : returnedCount;
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
+
+        this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
+        this.slides.set([]);
+        this.learningSlides.set(nextSlides);
+        this.viewMode.set('learning');
+        this.slidePromptById.set({});
+        this.slidePromptLoadingById.set({});
+        this.slidePromptErrorById.set({});
+        this.slideDialogsById.set({});
+        this.slideDialogsLoadingById.set({});
+        this.slideDialogsErrorById.set({});
+        this.learningBatchStart.set(Math.max(0, nextCursor - PipelineComponent.comicBatchSize));
+        this.learningBatchEnd.set(nextCursor);
+        this.showLoadMoreLearningSlide.set(totalCount > returnedCount);
+        this.writeBatchState(docKey, PipelineComponent.learningBatchStateStorageKey, {
+          start: Math.max(0, nextCursor - PipelineComponent.comicBatchSize),
+          end: nextCursor,
+          hasMore: totalCount > returnedCount
+        });
+        const nextIndex = this.clampSlideIndex(this.currentSlide(), nextSlides.length);
+        this.currentSlide.set(nextIndex);
+        this.syncSwiperSlide(nextIndex);
+        this.slidesLoading.set(totalCount > returnedCount);
+        this.slidesMessage.set(nextSlides.length ? '' : 'No slides found.');
+        if (nextSlides.length) {
+          void this.loadSourcePagesForCurrentSlide();
+        }
+        console.info('[Pipeline] Learning slide fallback finished', {
+          docKey,
+          slideCount: nextSlides.length,
+          totalCount,
+          returnedCount,
+          lastLimit: backendLastLimit,
+          nextCursor,
+          elapsedMs: Math.round(elapsedMs)
+        });
+      },
+      error: (err) => {
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
+        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+        const backendMessage =
+          typeof err?.error === 'string'
+            ? err.error
+            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
+        this.slides.set([]);
+        this.learningSlides.set([]);
+        this.viewMode.set('comic');
+        this.slidesLoading.set(false);
+        this.slidesMessage.set(`Failed to get slides (${status}): ${backendMessage}`);
+        console.warn('[Pipeline] Learning slide fallback failed', {
+          docKey,
+          elapsedMs: Math.round(elapsedMs),
+          status,
+          backendMessage
+        });
+      },
+      complete: () => {
+        this.slidesLoading.set(false);
+      }
+    });
+  }
+
+
   private loadCurrentSlidePrompt(): void {
     const slideId = this.currentSlidePromptId();
     if (slideId === null) {
@@ -707,36 +1520,27 @@ export class PipelineComponent {
     await this.ensureSlideDialogsLoaded(slide);
   }
 
-  private generateAllBatch(docKey: string, start: number, end: number): void {
+  private generateAllBatch(docKey: string): void {
     const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this.loading.set(true);
-    this.message.set('');
+    this.message.set('Processing next chapters...');
 
-    this.ragApi.generateComicBookAll({ docKey, start, end }).subscribe({
+    this.ragApi.generateComicBookAll({ docKey }).subscribe({
       next: (response) => {
         const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
         const requestElapsedMs = finishedAt - requestStartedAt;
         const fullElapsedMs = finishedAt - this.generateAllStartedAt;
-        const hasMore = this.shouldShowLoadMore(response, start, end);
-        const processedChunks = this.toNonNegativeInteger(response.processedChunks);
-        const backendLastLimit = this.toNullableFiniteNumber(response.slides?.['lastLimit']);
-        const nextCursor =
-          backendLastLimit !== null && backendLastLimit >= start
-            ? backendLastLimit
-            : start + processedChunks;
+        const hasMore = this.shouldShowLoadMore(response);
         this.loading.set(false);
-        this.comicBatchStart.set(start);
-        this.comicBatchEnd.set(nextCursor);
+        this.viewMode.set('comic');
         this.showLoadMoreSlide.set(hasMore);
-        this.writeComicBatchState(docKey, { start, end: nextCursor, hasMore });
-        this.message.set(`Generated slides for range ${start}-${end}.`);
+        this.message.set('Generated characters, slides, dialogs, and images.');
         console.info('[Pipeline] Generate all response received', {
           docKey,
-          start,
-          end,
-          nextCursor,
           requestElapsedMs: Math.round(requestElapsedMs),
           fullElapsedMs: Math.round(fullElapsedMs),
+          processedChunks: response.processedChunks ?? null,
+          lastLimit: response.slides?.lastLimit ?? null,
           slidesSavedCount: response.slidesSavedCount,
           slidesReturned: Array.isArray(response.slides?.slides) ? response.slides.slides.length : 0,
           charactersSavedCount: response.charactersSavedCount,
@@ -757,8 +1561,6 @@ export class PipelineComponent {
         this.message.set(`Failed to generate all (${status}): ${backendMessage}`);
         console.warn('[Pipeline] Generate all failed', {
           docKey,
-          start,
-          end,
           elapsedMs: Math.round(elapsedMs),
           status,
           backendMessage
@@ -767,23 +1569,96 @@ export class PipelineComponent {
     });
   }
 
-  private shouldShowLoadMore(
-    response: RagComicBookGenerateResponse,
-    start: number,
-    end: number
-  ): boolean {
+  private generateLearningBatch(docKey: string, start: number, end: number): void {
+    const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.loading.set(true);
+    this.message.set('');
+
+    this.ragApi.generateLearningSlides({ docKey }).subscribe({
+      next: (response) => {
+        const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const requestElapsedMs = finishedAt - requestStartedAt;
+        const hasMore = this.shouldShowLoadMoreForLearning(response);
+        const returnedCount = Array.isArray(response.slides) ? response.slides.length : 0;
+        const backendLastLimit = this.toNullableFiniteNumber(response.lastLimit);
+        this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
+        const nextCursor =
+          backendLastLimit !== null && backendLastLimit >= start
+            ? backendLastLimit
+            : start + returnedCount;
+        this.loading.set(false);
+        this.viewMode.set('learning');
+        this.learningBatchStart.set(start);
+        this.learningBatchEnd.set(nextCursor);
+        this.showLoadMoreLearningSlide.set(hasMore);
+        this.writeBatchState(docKey, PipelineComponent.learningBatchStateStorageKey, {
+          start,
+          end: nextCursor,
+          hasMore
+        });
+        this.message.set('Generated learning slides.');
+        this.appendLearningSlides(response);
+        if (Array.isArray(response.slides) && response.slides.length) {
+          void this.loadSourcePagesForCurrentSlide();
+        }
+        console.info('[Pipeline] Generate learning response received', {
+          docKey,
+          nextCursor,
+          requestElapsedMs: Math.round(requestElapsedMs),
+          returnedCount,
+          totalCount: response.count ?? null,
+          lastLimit: response.lastLimit ?? null
+        });
+      },
+      error: (err) => {
+        const elapsedMs =
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - requestStartedAt;
+        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+        const backendMessage =
+          typeof err?.error === 'string'
+            ? err.error
+            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
+        this.loading.set(false);
+        this.message.set(`Failed to generate learning (${status}): ${backendMessage}`);
+        console.warn('[Pipeline] Generate learning failed', {
+          docKey,
+          elapsedMs: Math.round(elapsedMs),
+          status,
+          backendMessage
+        });
+      }
+    });
+  }
+
+  private shouldShowLoadMore(response: RagComicBookGenerateResponse): boolean {
     if (response.isLastBatch === true) {
       return false;
     }
 
-    const requestedChunks = Math.max(0, end - start);
+    if (response.isLastBatch === false) {
+      return true;
+    }
+
+    const returnedSlides = Array.isArray(response.slides?.slides) ? response.slides.slides.length : 0;
     const processedChunks = this.toNonNegativeInteger(response.processedChunks);
 
-    if (processedChunks === 0) {
+    return returnedSlides > 0 || processedChunks > 0;
+  }
+
+  private shouldShowLoadMoreForLearning(response: RagLearnSlidesResponse): boolean {
+    const returnedCount = Array.isArray(response.slides) ? response.slides.length : 0;
+
+    if (returnedCount === 0) {
       return false;
     }
 
-    return processedChunks >= requestedChunks;
+    const totalCount = this.toNullableFiniteNumber(response.count);
+    const lastLimit = this.toNullableFiniteNumber(response.lastLimit);
+    if (totalCount !== null && lastLimit !== null) {
+      return totalCount > lastLimit;
+    }
+
+    return returnedCount >= PipelineComponent.comicBatchSize;
   }
 
   private clampSlideIndex(index: number, slideCount: number): number {
@@ -824,6 +1699,58 @@ export class PipelineComponent {
     });
   }
 
+  private appendLearningSlides(response: RagLearnSlidesResponse): void {
+    const generatedSlides = Array.isArray(response.slides) ? response.slides : [];
+    if (!generatedSlides.length) {
+      return;
+    }
+
+    const combinedSlides = [...this.learningSlides(), ...generatedSlides];
+    const nextIndex = this.clampSlideIndex(this.currentSlide(), combinedSlides.length);
+    this.learningSlides.set(combinedSlides);
+    this.currentSlide.set(nextIndex);
+    this.syncSwiperSlide(nextIndex);
+    console.info('[Pipeline] Learning slides appended', {
+      appendedCount: generatedSlides.length,
+      totalCount: combinedSlides.length,
+      currentSlide: nextIndex
+    });
+  }
+
+  private appendFetchedLearningSlides(fetchedSlides: RagLearnSlide[]): void {
+    if (!fetchedSlides.length) {
+      return;
+    }
+
+    const existingKeys = new Set(
+      this.learningSlides().map((slide, index) => {
+        const id = this.toNullableFiniteNumber(slide.id);
+        return id !== null ? `id-${id}` : `idx-${index}-${slide.title ?? ''}-${slide.summary ?? ''}`;
+      })
+    );
+
+    const dedupedSlides = fetchedSlides.filter((slide, index) => {
+      const id = this.toNullableFiniteNumber(slide.id);
+      const key =
+        id !== null ? `id-${id}` : `idx-${index}-${slide.title ?? ''}-${slide.summary ?? ''}`;
+      if (existingKeys.has(key)) {
+        return false;
+      }
+      existingKeys.add(key);
+      return true;
+    });
+
+    if (!dedupedSlides.length) {
+      return;
+    }
+
+    const combinedSlides = [...this.learningSlides(), ...dedupedSlides];
+    const nextIndex = this.clampSlideIndex(this.currentSlide(), combinedSlides.length);
+    this.learningSlides.set(combinedSlides);
+    this.currentSlide.set(nextIndex);
+    this.syncSwiperSlide(nextIndex);
+  }
+
   private syncSwiperSlide(index: number): void {
     setTimeout(() => {
       const swiper = this.carouselElement?.nativeElement?.swiper;
@@ -834,6 +1761,22 @@ export class PipelineComponent {
 
   private playCurrentSlideIfAutoPlayEnabled(): void {
     if (!this.autoPlayEnabled()) {
+      return;
+    }
+
+    if (this.viewMode() === 'learning') {
+      const index = this.currentSlide();
+      const slide = this.learningSlides()[index];
+      if (!slide) {
+        return;
+      }
+
+      const key = this.learningCardKey(index);
+      if ((this.ttsPlaying() || this.ttsLoading()) && this.playingCardKey() === key) {
+        return;
+      }
+
+      void this.playLearningCardTts(slide, index);
       return;
     }
 
@@ -858,18 +1801,18 @@ export class PipelineComponent {
     window.dispatchEvent(new CustomEvent(PipelineComponent.charactersRefreshEvent, { detail: docKey }));
   }
 
-  private readComicBatchState(docKey: string): ComicBatchState | null {
+  private readBatchState(docKey: string, storageKey: string): StoredSlideBatchState | null {
     if (!docKey || typeof window === 'undefined') {
       return null;
     }
 
     try {
-      const rawValue = window.localStorage.getItem(PipelineComponent.comicBatchStateStorageKey);
+      const rawValue = window.localStorage.getItem(storageKey);
       if (!rawValue) {
         return null;
       }
 
-      const entries = JSON.parse(rawValue) as Record<string, ComicBatchState | undefined>;
+      const entries = JSON.parse(rawValue) as Record<string, StoredSlideBatchState | undefined>;
       const state = entries[docKey];
       if (!state) {
         return null;
@@ -885,29 +1828,28 @@ export class PipelineComponent {
     }
   }
 
-  private writeComicBatchState(docKey: string, state: ComicBatchState): void {
+  private writeBatchState(docKey: string, storageKey: string, state: StoredSlideBatchState): void {
     if (!docKey || typeof window === 'undefined') {
       return;
     }
 
     try {
-      const rawValue = window.localStorage.getItem(PipelineComponent.comicBatchStateStorageKey);
-      const entries = rawValue ? (JSON.parse(rawValue) as Record<string, ComicBatchState>) : {};
+      const rawValue = window.localStorage.getItem(storageKey);
+      const entries = rawValue ? (JSON.parse(rawValue) as Record<string, StoredSlideBatchState>) : {};
       entries[docKey] = state;
-      window.localStorage.setItem(
-        PipelineComponent.comicBatchStateStorageKey,
-        JSON.stringify(entries)
-      );
+      window.localStorage.setItem(storageKey, JSON.stringify(entries));
     } catch {
       // Ignore persistence failures and keep runtime state only.
     }
   }
 
   private resetSlideState(docKey: string): void {
-    this.comicBatchStart.set(0);
-    this.comicBatchEnd.set(PipelineComponent.comicBatchSize);
     this.showLoadMoreSlide.set(false);
+    this.learningBatchStart.set(0);
+    this.learningBatchEnd.set(PipelineComponent.comicBatchSize);
+    this.showLoadMoreLearningSlide.set(false);
     this.slides.set([]);
+    this.learningSlides.set([]);
     this.slidesLoading.set(false);
     this.slidesMessage.set('');
     this.slidePromptById.set({});
@@ -920,10 +1862,26 @@ export class PipelineComponent {
     this.slideHeadsLoadingByCardKey.set({});
     this.activeHeadCardKey.set('');
     this.currentSlide.set(0);
+    this.viewMode.set('comic');
     this.summaryHiddenCardKey.set('');
     this.failedUriMap.set({});
     this.stopCardTts();
-    this.writeComicBatchState(docKey, {
+    this.writeBatchState(docKey, PipelineComponent.learningBatchStateStorageKey, {
+      start: 0,
+      end: PipelineComponent.comicBatchSize,
+      hasMore: false
+    });
+  }
+
+  private resetLearningSlideState(docKey: string): void {
+    this.learningBatchStart.set(0);
+    this.learningBatchEnd.set(PipelineComponent.comicBatchSize);
+    this.showLoadMoreLearningSlide.set(false);
+    this.learningSlides.set([]);
+    this.currentSlide.set(0);
+    this.viewMode.set('comic');
+    this.stopCardTts();
+    this.writeBatchState(docKey, PipelineComponent.learningBatchStateStorageKey, {
       start: 0,
       end: PipelineComponent.comicBatchSize,
       hasMore: false
@@ -1170,6 +2128,29 @@ export class PipelineComponent {
     return (matches ?? [trimmed]).map((part) => part.trim()).filter(Boolean);
   }
 
+  private learningCardKey(index: number): string {
+    return `learning-${index}`;
+  }
+
+  private learningTextForTts(item: RagLearnSlide): string {
+    return this.learningSummaryPlainText(item);
+  }
+
+  private learningSegmentsForTts(item: RagLearnSlide): TtsSegment[] {
+    const segments: TtsSegment[] = [];
+    const summary = this.learningTextForTts(item);
+
+    if (summary) {
+      this.pushSentenceSegments(segments, {
+        kind: 'narration',
+        text: summary,
+        wordStart: 0
+      });
+    }
+
+    return segments;
+  }
+
   private async playCardTts(item: RagComicSlide, index: number): Promise<void> {
     const key = this.cardKey(item, index);
     this.playingCardKey.set(key);
@@ -1330,6 +2311,133 @@ export class PipelineComponent {
       this.activeVisualMode.set('none');
       this.activeDialogueWordStart.set(0);
       this.activeHeadCardKey.set('');
+      this.ttsCurrentWord.set(-1);
+      this.ttsTotalWords.set(0);
+    }
+  }
+
+  private async playLearningCardTts(item: RagLearnSlide, index: number): Promise<void> {
+    const key = this.learningCardKey(index);
+    this.playingCardKey.set(key);
+    this.ttsMessage.set('');
+    this.activeHeadCardKey.set('');
+    this.activeDialogueCardKey.set('');
+    this.activeDialogueCharacter.set('');
+    this.activeDialogueLine.set('');
+    this.activeContextLine.set('');
+    this.activeVisualMode.set('none');
+
+    if (!this.audio) {
+      this.ttsMessage.set('Audio playback is only available in the browser.');
+      return;
+    }
+
+    await this.ensureAudioUnlocked();
+    const segments = this.learningSegmentsForTts(item);
+    if (!segments.length) {
+      this.ttsMessage.set('No text available for TTS on this card.');
+      return;
+    }
+
+    this.stopCardTts();
+    const token = ++this.playbackToken;
+    this.playingCardKey.set(key);
+    this.ttsLoading.set(true);
+    this.ttsPlaying.set(true);
+    this.ttsCurrentWord.set(-1);
+    this.ttsTotalWords.set(segments.reduce((sum, segment) => sum + segment.wordCount, 0));
+    const segmentAudioPromises = new Map<number, Promise<Blob>>();
+    let nextSegmentToRequest = 0;
+
+    const queueSegmentAudio = (segmentIndex: number): Promise<Blob> | null => {
+      if (segmentIndex < 0 || segmentIndex >= segments.length) {
+        return null;
+      }
+      const existing = segmentAudioPromises.get(segmentIndex);
+      if (existing) {
+        return existing;
+      }
+      const promise = this.requestTtsSegmentAudio(segments[segmentIndex]);
+      segmentAudioPromises.set(segmentIndex, promise);
+      return promise;
+    };
+
+    const fillSegmentAudioQueue = (): void => {
+      while (
+        token === this.playbackToken &&
+        nextSegmentToRequest < segments.length &&
+        segmentAudioPromises.size < PipelineComponent.ttsPrefetchConcurrency
+      ) {
+        queueSegmentAudio(nextSegmentToRequest);
+        nextSegmentToRequest += 1;
+      }
+    };
+
+    try {
+      fillSegmentAudioQueue();
+
+      for (let i = 0; i < segments.length; i += 1) {
+        if (token !== this.playbackToken) {
+          return;
+        }
+
+        fillSegmentAudioQueue();
+        const segment = segments[i];
+        const queuedBlobPromise = queueSegmentAudio(i);
+        if (!queuedBlobPromise) {
+          throw new Error('Missing audio queue entry.');
+        }
+        const blob = await queuedBlobPromise;
+        if (!blob.size) {
+          throw new Error('API returned empty audio content.');
+        }
+        if (token !== this.playbackToken) {
+          return;
+        }
+        segmentAudioPromises.delete(i);
+        fillSegmentAudioQueue();
+
+        this.clearObjectUrl();
+        this.currentObjectUrl = URL.createObjectURL(blob);
+        this.audio.src = this.currentObjectUrl;
+        this.ttsCurrentWord.set(segment.wordStart);
+        this.audio.ontimeupdate = () => {
+          if (!this.audio) {
+            return;
+          }
+          const duration =
+            Number.isFinite(this.audio.duration) && this.audio.duration > 0 ? this.audio.duration : 0;
+          if (duration <= 0 || segment.wordCount <= 0) {
+            return;
+          }
+          const adjustedTime = this.audio.currentTime + PipelineComponent.highlightLeadSeconds;
+          const ratio = Math.min(1, Math.max(0, adjustedTime / duration));
+          const localWordIndex = Math.min(segment.wordCount - 1, Math.floor(ratio * segment.wordCount));
+          this.ttsCurrentWord.set(segment.wordStart + localWordIndex);
+        };
+
+        this.ttsLoading.set(false);
+        await this.audio.play();
+        await this.waitForSegmentEnd(token);
+      }
+
+      if (token === this.playbackToken) {
+        this.ttsPlaying.set(false);
+        this.ttsCurrentWord.set(-1);
+        this.ttsTotalWords.set(0);
+
+        if (this.autoPlayEnabled()) {
+          const nextIndex = index + 1;
+          if (nextIndex < this.learningSlides().length) {
+            this.goToSlide(nextIndex);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Pipeline TTS] Learning playback failed', err);
+      this.ttsMessage.set(`TTS playback failed: ${this.readApiError(err)}`);
+      this.ttsLoading.set(false);
+      this.ttsPlaying.set(false);
       this.ttsCurrentWord.set(-1);
       this.ttsTotalWords.set(0);
     }
@@ -1646,6 +2754,68 @@ export class PipelineComponent {
     }
   }
 
+  private normalizeLearningSummaryMarkdown(summary: string): string {
+    return summary
+      .replace(/\r\n/g, '\n')
+      .replace(/([:.;])\s+-\s+(?=(\*\*|[A-Z0-9]))/g, '$1\n- ')
+      .replace(/\s+\n/g, '\n')
+      .trim();
+  }
+
+  private askableExpressionButtonHtml(expression: string): string {
+    const escapedExpression = this.escapeHtml(expression);
+    const encodedExpression = encodeURIComponent(expression);
+    return `<span class="askable-expression" data-ask-expression="${encodedExpression}" style="position:relative;display:inline-block;padding-right:3.25rem;margin-right:-3.25rem;"><strong class="askable-expression-label" style="font-weight:800;color:#0f3552;transition:background-color .14s ease;border-radius:.35rem;">${escapedExpression}</strong><button type="button" class="askable-expression-trigger" data-ask-expression="${encodedExpression}" aria-label="Ask what ${escapedExpression} means" style="position:absolute;right:0;top:50%;transform:translateY(-50%);border:0;border-radius:999px;padding:.18rem .5rem;background:#0f5fa8;color:#fff;font:700 .72rem/1 inherit;white-space:nowrap;cursor:pointer;box-shadow:0 .35rem .8rem rgba(15,95,168,.24);">Ask</button></span>`;
+  }
+
+  private escapeHtmlForMarkdown(summary: string): string {
+    return summary.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private decodeAskExpression(value: string): string {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return '';
+    }
+  }
+
+  private findAskExpressionFromEvent(event: Event): string {
+    const trigger = event
+      .composedPath()
+      .find(
+        (entry): entry is HTMLElement =>
+          entry instanceof HTMLElement &&
+          entry.classList.contains('askable-expression-trigger') &&
+          !!entry.dataset['askExpression']
+      );
+
+    return trigger?.dataset['askExpression'] ?? '';
+  }
+
+  private stripMarkdownForPlainText(summary: string): string {
+    return summary
+      .replace(/\r\n/g, '\n')
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/^\s{0,3}(?:[-*+]|\d+\.)\s+/gm, '')
+      .replace(/^>\s?/gm, '')
+      .replace(/[`*_~#]/g, '')
+      .replace(/\n{2,}/g, ' ')
+      .replace(/\s*\n\s*/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
   private readApiError(err: unknown): string {
     if (err instanceof HttpErrorResponse) {
       const payload = err.error;
@@ -1691,6 +2861,18 @@ export class PipelineComponent {
       return value;
     }
     return null;
+  }
+
+  private toDocumentMode(value: string): RagIngestMode | null {
+    switch (value) {
+      case 'Story Mode':
+      case 'Learning Mode':
+      case 'Action Mode':
+      case 'Extraction Mode':
+        return value;
+      default:
+        return null;
+    }
   }
 
   private normalizeLanguage(value: string): string {

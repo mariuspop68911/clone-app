@@ -1,0 +1,20 @@
+@if (status(); as currentStatus) {
+  <section
+    class="ingest-progress"
+    [class.ingest-progress-failed]="isFailed()"
+    [class.ingest-progress-done]="isDone()"
+  >
+    <div class="ingest-progress-head">
+      <div class="ingest-progress-track" aria-hidden="true">
+        <div class="ingest-progress-bar" [style.width.%]="progressPercent()"></div>
+      </div>
+      <span class="ingest-progress-value">{{ progressPercent() }}%</span>
+    </div>
+
+    <p class="ingest-progress-message">{{ message() }}</p>
+
+    @if (stageLabel()) {
+      <p class="ingest-progress-stage">{{ stageLabel() }}</p>
+    }
+  </section>
+}

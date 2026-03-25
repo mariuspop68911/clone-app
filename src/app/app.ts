@@ -13,6 +13,7 @@ import {
   RagCharacterReferenceImageResponse,
   RagDocumentResponse
 } from './core/api/rag-api.service';
+import { AppShellUiService } from './app-shell-ui.service';
 
 @Component({
   selector: 'app-root',
@@ -23,6 +24,7 @@ import {
 export class App implements OnInit {
   private static readonly charactersRefreshEvent = 'codex:characters-refresh';
   private static readonly documentsRefreshEvent = 'codex:documents-refresh';
+  drawerOpen = signal(false);
   drawerDocs = signal<RagDocumentResponse[]>([]);
   drawerLoading = signal(false);
   selectedDocKey = signal('');
@@ -35,6 +37,7 @@ export class App implements OnInit {
   constructor(
     private readonly ragApi: RagApiService,
     private readonly router: Router,
+    readonly appShellUi: AppShellUiService,
     @Inject(PLATFORM_ID) private readonly platformId: object
   ) {}
 
@@ -101,6 +104,14 @@ export class App implements OnInit {
       [docKey]: !current[docKey]
     }));
     this.ensureCharactersLoaded(docKey);
+  }
+
+  toggleDrawer(): void {
+    this.drawerOpen.update((current) => !current);
+  }
+
+  closeDrawer(): void {
+    this.drawerOpen.set(false);
   }
 
   drawerCharacters(docKey: string): RagCharacterReferenceImageResponse[] {

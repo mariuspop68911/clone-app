@@ -50,6 +50,10 @@ export class DocumentsComponent implements OnInit {
     return parts.join(' | ');
   }
 
+  coverUrl(doc: RagDocumentResponse): string {
+    return typeof doc.coverUrl === 'string' ? doc.coverUrl.trim() : '';
+  }
+
   docKeyForRoute(doc: RagDocumentResponse): string | null {
     const key = doc['docKey'];
     if (typeof key === 'string' && key.trim()) {

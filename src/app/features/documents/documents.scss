@@ -108,6 +108,16 @@ h1 {
   color: #10283d;
 }
 
+.doc-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  margin: 0 0 0.8rem;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #edf3f8;
+}
+
 .meta {
   margin: 0.5rem 0 0;
   color: #3f5a72;
@@ -119,15 +129,19 @@ h1 {
   position: absolute;
   top: 0.65rem;
   right: 0.65rem;
+  display: grid;
+  place-items: center;
   width: 2rem;
   height: 2rem;
   border: 0;
   border-radius: 999px;
+  padding: 0;
   background: #d7263d;
   color: #ffffff;
   font: inherit;
   font-weight: 800;
   line-height: 1;
+  text-align: center;
   cursor: pointer;
   box-shadow: 0 10px 20px rgba(215, 38, 61, 0.3);
   opacity: 0;

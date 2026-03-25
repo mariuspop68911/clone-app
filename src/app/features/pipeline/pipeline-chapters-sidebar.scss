@@ -1,0 +1,116 @@
+.chapters-sidebar {
+  border: 1px solid #dde3eb;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f9fbff 0%, #ffffff 100%);
+  box-shadow: 0 10px 30px rgba(19, 53, 81, 0.08);
+  padding: 0.75rem;
+}
+
+.chapters-sidebar-header {
+  margin-bottom: 0.85rem;
+}
+
+.chapters-sidebar-eyebrow {
+  margin: 0;
+  color: #315a78;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.chapters-sidebar-status {
+  margin: 0;
+  color: #4a657d;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.chapters-nav {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.chapter-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: start;
+  width: 100%;
+  border: 1px solid #d6e0e8;
+  border-radius: 12px;
+  padding: 0.6rem;
+  background: #ffffff;
+  color: #183a57;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.chapter-item:hover {
+  border-color: #93b0c8;
+  background: #f8fbff;
+  box-shadow: 0 10px 24px rgba(27, 108, 168, 0.09);
+  transform: translateY(-1px);
+}
+
+.chapter-item-active {
+  border-color: #1b6ca8;
+  background: linear-gradient(135deg, rgba(27, 108, 168, 0.1), rgba(35, 166, 213, 0.06));
+  box-shadow: 0 12px 28px rgba(27, 108, 168, 0.14);
+}
+
+.chapter-item-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #f5f7fa;
+  color: #7a8c9f;
+  box-shadow: none;
+}
+
+.chapter-item-disabled:hover {
+  transform: none;
+  border-color: #d6e0e8;
+  background: #f5f7fa;
+  box-shadow: none;
+}
+
+.chapter-item-index {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: #e8f1f8;
+  color: #1b5b8a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.chapter-item-active .chapter-item-index {
+  background: #1b6ca8;
+  color: #ffffff;
+}
+
+.chapter-item-disabled .chapter-item-index {
+  background: #e6ebf0;
+  color: #7b8997;
+}
+
+.chapter-item-copy {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.chapter-item-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.chapter-item-meta {
+  color: #55718a;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}

@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, signal } from '@angular/core';
 import { BookImportPreviewPage } from '../../core/api/books-api.service';
+import { RagIngestMode } from '../../core/api/rag-api.service';
 
 interface PdfReviewPage {
   pageNumber: number;
   thumbnailUrl: string;
-  fullPageUrl: string;
+  fullPageUrl: string | null;
   included: boolean;
   textSnippet: string;
 }
@@ -17,21 +18,36 @@ interface PdfReviewPage {
   styleUrl: './pdf-page-review.scss'
 })
 export class PdfPageReviewComponent {
+  readonly modeOptions: RagIngestMode[] = [
+    'Story Mode',
+    'Learning Mode',
+    'Action Mode',
+    'Extraction Mode'
+  ];
+  private static readonly maxPreviewPages = 50;
+  private static readonly thumbnailScale = 0.38;
+  private static readonly fullPageScale = 1.15;
   private static workerConfigured = false;
   private loadToken = 0;
   private previewUrls: string[] = [];
+  private pdfDocument: any = null;
 
   @Input() file: File | null = null;
   @Input() externalPages: BookImportPreviewPage[] = [];
   @Input() busy = false;
+  @Input() selectedMode: RagIngestMode = 'Story Mode';
+  @Input() showModePicker = true;
   @Output() confirmSelectionRequested = new EventEmitter<number[]>();
   @Output() cancelReview = new EventEmitter<void>();
+  @Output() selectedModeChange = new EventEmitter<RagIngestMode>();
 
   pages = signal<PdfReviewPage[]>([]);
   selectedPages = signal<number[]>([]);
   activePageNumber = signal<number | null>(null);
   loading = signal(false);
+  activePageLoading = signal(false);
   message = signal('');
+  totalPageCount = signal(0);
 
   ngOnChanges(changes: SimpleChanges): void {
     if ('externalPages' in changes) {
@@ -45,6 +61,7 @@ export class PdfPageReviewComponent {
 
   ngOnDestroy(): void {
     this.clearPreviewUrls();
+    void this.destroyPdfDocument();
   }
 
   toggleSelection(pageNumber: number): void {
@@ -95,6 +112,16 @@ export class PdfPageReviewComponent {
       return;
     }
 
+    const currentPages = this.pages();
+    const currentIndex = currentPages.findIndex((page) => page.pageNumber === pageNumber);
+    const currentPage = currentIndex >= 0 ? currentPages[currentIndex] : null;
+    const nextVisiblePageNumber =
+      currentIndex >= 0
+        ? currentPages.slice(currentIndex + 1).find((page) => page.included)?.pageNumber ??
+          currentPages.slice(0, currentIndex).find((page) => page.included)?.pageNumber ??
+          null
+        : null;
+
     this.pages.update((current) =>
       current.map((page) =>
         page.pageNumber === pageNumber
@@ -106,7 +133,10 @@ export class PdfPageReviewComponent {
       )
     );
 
-    if (!this.isCurrentPageIncluded()) {
+    if (currentPage?.included && nextVisiblePageNumber !== null) {
+      this.activePageNumber.set(nextVisiblePageNumber);
+      void this.ensureActivePagePreviewLoaded();
+    } else if (!this.isCurrentPageIncluded()) {
       this.selectedPages.update((current) => current.filter((value) => value !== pageNumber));
     }
     this.ensureActivePageVisible();
@@ -117,21 +147,29 @@ export class PdfPageReviewComponent {
       return;
     }
 
-    const includedPages = this.pages()
-      .filter((page) => page.included)
+    const excludedPages = this.pages()
+      .filter((page) => !page.included)
       .map((page) => page.pageNumber);
 
-    if (!includedPages.length) {
+    if (this.includedCount() <= 0) {
       this.message.set('At least one page must remain selected for ingest.');
       return;
     }
 
     this.message.set('Starting import...');
-    this.confirmSelectionRequested.emit(includedPages);
+    this.confirmSelectionRequested.emit(excludedPages);
   }
 
   includedCount(): number {
-    return this.pages().filter((page) => page.included).length;
+    const totalPageCount = this.totalPageCount();
+    const excludedPreviewPages = this.pages().filter((page) => !page.included).length;
+    return totalPageCount > 0
+      ? Math.max(0, totalPageCount - excludedPreviewPages)
+      : this.pages().filter((page) => page.included).length;
+  }
+
+  previewedPageCount(): number {
+    return this.pages().length;
   }
 
   excludedPagesLabel(): string {
@@ -148,6 +186,7 @@ export class PdfPageReviewComponent {
 
   setActivePage(pageNumber: number): void {
     this.activePageNumber.set(pageNumber);
+    void this.ensureActivePagePreviewLoaded();
   }
 
   activePage(): PdfReviewPage | null {
@@ -170,13 +209,23 @@ export class PdfPageReviewComponent {
     return page.pageNumber;
   }
 
+  setMode(mode: RagIngestMode): void {
+    if (this.busy || mode === this.selectedMode) {
+      return;
+    }
+    this.selectedModeChange.emit(mode);
+  }
+
   private async loadPages(file: File | null): Promise<void> {
     const token = ++this.loadToken;
     this.clearPreviewUrls();
+    await this.destroyPdfDocument();
     this.pages.set([]);
     this.selectedPages.set([]);
     this.activePageNumber.set(null);
+    this.activePageLoading.set(false);
     this.message.set('');
+    this.totalPageCount.set(0);
 
     if (!file) {
       this.loading.set(false);
@@ -208,16 +257,23 @@ export class PdfPageReviewComponent {
 
       const documentTask = pdfjs.getDocument({ data: fileBuffer });
       const pdfDocument = await documentTask.promise;
-      const nextPages: PdfReviewPage[] = [];
+      this.pdfDocument = pdfDocument;
+      this.totalPageCount.set(pdfDocument.numPages);
+      const totalPages = Math.min(pdfDocument.numPages, PdfPageReviewComponent.maxPreviewPages);
+      const previewMessage =
+        pdfDocument.numPages > PdfPageReviewComponent.maxPreviewPages
+          ? `Showing the first ${PdfPageReviewComponent.maxPreviewPages} pages for preview.`
+          : '';
 
-      for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
+      for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
         if (token !== this.loadToken) {
           await pdfDocument.destroy();
+          this.pdfDocument = null;
           return;
         }
 
         const page = await pdfDocument.getPage(pageNumber);
-        const viewport = page.getViewport({ scale: 1.2 });
+        const viewport = page.getViewport({ scale: PdfPageReviewComponent.thumbnailScale });
         const canvas = window.document.createElement('canvas');
         const context = canvas.getContext('2d');
         if (!context) {
@@ -233,34 +289,30 @@ export class PdfPageReviewComponent {
           viewport
         }).promise;
 
-        const textContent = await page.getTextContent();
-        const textSnippet = textContent.items
-          .map((item) => ('str' in item ? item.str : ''))
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 260);
-
-        const fullPageUrl = canvas.toDataURL('image/png');
-        const thumbnailUrl = this.createPreviewUrl(canvas);
-        this.previewUrls.push(fullPageUrl, thumbnailUrl);
-        nextPages.push({
+        const thumbnailUrl = await this.createPreviewUrl(canvas);
+        this.previewUrls.push(thumbnailUrl);
+        const nextPage: PdfReviewPage = {
           pageNumber,
           thumbnailUrl,
-          fullPageUrl,
+          fullPageUrl: null,
           included: true,
-          textSnippet
-        });
+          textSnippet: 'Preview text loads when you open a page.'
+        };
+        this.pages.update((current) => [...current, nextPage]);
+        if (pageNumber === 1) {
+          this.activePageNumber.set(1);
+          void this.ensureActivePagePreviewLoaded();
+        }
+        this.message.set(previewMessage);
       }
 
-      await pdfDocument.destroy();
       if (token !== this.loadToken) {
         return;
       }
-
-      this.pages.set(nextPages);
-      this.activePageNumber.set(nextPages[0]?.pageNumber ?? null);
-      this.message.set(nextPages.length ? '' : 'No PDF pages available to review.');
+      const loadedPages = this.pages();
+      if (!loadedPages.length) {
+        this.message.set('No PDF pages available to review.');
+      }
     } catch (error) {
       console.error('[Import] Failed to prepare PDF review', error);
       this.message.set('Could not render the PDF preview. You can choose another file and try again.');
@@ -272,6 +324,11 @@ export class PdfPageReviewComponent {
   }
 
   private clearPreviewUrls(): void {
+    if (typeof window !== 'undefined' && typeof URL !== 'undefined') {
+      for (const url of this.previewUrls) {
+        URL.revokeObjectURL(url);
+      }
+    }
     this.previewUrls = [];
   }
 
@@ -283,6 +340,7 @@ export class PdfPageReviewComponent {
 
     if (!Array.isArray(externalPages) || !externalPages.length) {
       this.pages.set([]);
+      this.totalPageCount.set(0);
       return;
     }
 
@@ -295,7 +353,9 @@ export class PdfPageReviewComponent {
     }));
 
     this.pages.set(pages);
+    this.totalPageCount.set(pages.length);
     this.activePageNumber.set(pages[0]?.pageNumber ?? null);
+    this.activePageLoading.set(false);
     this.loading.set(false);
   }
 
@@ -309,16 +369,16 @@ export class PdfPageReviewComponent {
     this.activePageNumber.set(nextIncluded?.pageNumber ?? active?.pageNumber ?? null);
   }
 
-  private createPreviewUrl(sourceCanvas: HTMLCanvasElement): string {
+  private async createPreviewUrl(sourceCanvas: HTMLCanvasElement): Promise<string> {
     const cropBounds = this.findContentBounds(sourceCanvas);
     if (!cropBounds) {
-      return sourceCanvas.toDataURL('image/png');
+      return this.canvasToObjectUrl(sourceCanvas);
     }
 
     const croppedCanvas = window.document.createElement('canvas');
     const croppedContext = croppedCanvas.getContext('2d');
     if (!croppedContext) {
-      return sourceCanvas.toDataURL('image/png');
+      return this.canvasToObjectUrl(sourceCanvas);
     }
 
     croppedCanvas.width = cropBounds.width;
@@ -335,7 +395,96 @@ export class PdfPageReviewComponent {
       cropBounds.height
     );
 
-    return croppedCanvas.toDataURL('image/png');
+    return this.canvasToObjectUrl(croppedCanvas);
+  }
+
+  private async ensureActivePagePreviewLoaded(): Promise<void> {
+    const activePageNumber = this.activePageNumber();
+    if (!activePageNumber || !this.pdfDocument) {
+      this.activePageLoading.set(false);
+      return;
+    }
+
+    const currentPage = this.pages().find((page) => page.pageNumber === activePageNumber);
+    if (!currentPage || currentPage.fullPageUrl) {
+      this.activePageLoading.set(false);
+      return;
+    }
+
+    const token = this.loadToken;
+    this.activePageLoading.set(true);
+
+    try {
+      const pdfPage = await this.pdfDocument.getPage(activePageNumber);
+      const viewport = pdfPage.getViewport({ scale: PdfPageReviewComponent.fullPageScale });
+      const canvas = window.document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) {
+        return;
+      }
+
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+
+      await pdfPage.render({
+        canvas,
+        canvasContext: context,
+        viewport
+      }).promise;
+
+      const fullPageUrl = await this.canvasToObjectUrl(canvas);
+      this.previewUrls.push(fullPageUrl);
+
+      if (token !== this.loadToken) {
+        return;
+      }
+
+      this.pages.update((current) =>
+        current.map((page) =>
+          page.pageNumber === activePageNumber
+            ? {
+                ...page,
+                fullPageUrl,
+                textSnippet:
+                  'This page preview was rendered on demand. Text extraction is deferred to keep the preview fast.'
+              }
+            : page
+        )
+      );
+    } catch (error) {
+      console.error('[Import] Failed to render full page preview', error);
+    } finally {
+      if (token === this.loadToken) {
+        this.activePageLoading.set(false);
+      }
+    }
+  }
+
+  private canvasToObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Failed to create preview image blob.'));
+          return;
+        }
+
+        resolve(URL.createObjectURL(blob));
+      }, 'image/webp', 0.86);
+    });
+  }
+
+  private async destroyPdfDocument(): Promise<void> {
+    if (!this.pdfDocument) {
+      return;
+    }
+
+    try {
+      await this.pdfDocument.destroy();
+    } catch {
+      // Ignore teardown failures during preview refresh.
+    } finally {
+      this.pdfDocument = null;
+    }
   }
 
   private findContentBounds(canvas: HTMLCanvasElement):

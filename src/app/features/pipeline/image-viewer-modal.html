@@ -1,0 +1,36 @@
+<div class="image-viewer-backdrop" (click)="closeRequested.emit()">
+  <section
+    class="image-viewer-modal"
+    (click)="$event.stopPropagation()"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-label]="alt"
+  >
+    <div class="image-viewer-header">
+      <div class="image-viewer-controls">
+        <button type="button" class="secondary-action" (click)="zoomOutRequested.emit()">
+          -
+        </button>
+        <button type="button" class="secondary-action" (click)="zoomResetRequested.emit()">
+          {{ (zoom * 100).toFixed(0) }}%
+        </button>
+        <button type="button" class="secondary-action" (click)="zoomInRequested.emit()">
+          +
+        </button>
+      </div>
+
+      <button type="button" class="secondary-action" (click)="closeRequested.emit()">
+        Close
+      </button>
+    </div>
+
+    <div class="image-viewer-stage">
+      <img
+        class="image-viewer-image"
+        [src]="imageUrl"
+        [alt]="alt"
+        [style.transform]="'scale(' + zoom + ')'"
+      />
+    </div>
+  </section>
+</div>

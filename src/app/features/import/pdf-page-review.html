@@ -37,7 +37,25 @@
   </div>
 
   <div class="review-meta">
-    <p>Included pages: {{ includedCount() }} / {{ pages().length }}</p>
+    <p>Included pages: {{ includedCount() }} / {{ totalPageCount() || previewedPageCount() }}</p>
+    @if (showModePicker) {
+      <div class="mode-picker" aria-label="Ingest mode">
+        @for (mode of modeOptions; track mode) {
+          <button
+            type="button"
+            [class.primary-action]="selectedMode === mode"
+            [class.secondary-action]="selectedMode !== mode"
+            (click)="setMode(mode)"
+            [disabled]="busy"
+          >
+            {{ mode }}
+          </button>
+        }
+      </div>
+    }
+    @if (totalPageCount() > previewedPageCount()) {
+      <p>Previewing first {{ previewedPageCount() }} pages only. Later pages stay included unless removed elsewhere.</p>
+    }
     @if (excludedPagesLabel()) {
       <p>Excluded pages: {{ excludedPagesLabel() }}</p>
     }
@@ -47,6 +65,10 @@
     <p class="review-status">Loading PDF preview...</p>
   } @else if (message()) {
     <p class="review-status">{{ message() }}</p>
+  }
+
+  @if (loading() && pages().length) {
+    <p class="review-status">Preview is loading progressively. You can already review the pages shown.</p>
   }
 
   @if (pages().length) {
@@ -100,7 +122,13 @@
           </div>
 
           <div class="page-stage-image-shell">
-            <img [src]="currentPage.fullPageUrl" [alt]="'Full preview of page ' + currentPage.pageNumber" />
+            @if (currentPage.fullPageUrl) {
+              <img [src]="currentPage.fullPageUrl" [alt]="'Full preview of page ' + currentPage.pageNumber" />
+            } @else if (activePageLoading()) {
+              <p class="page-stage-placeholder">Rendering full page preview...</p>
+            } @else {
+              <p class="page-stage-placeholder">Select a page to render its full preview.</p>
+            }
           </div>
 
           <p class="page-stage-text">

@@ -148,10 +148,6 @@
   touch-action: pan-y;
 }
 
-.carousel-slide {
-  box-sizing: border-box;
-}
-
 .slide-card {
   position: relative;
   border: 1px solid #dde3eb;
@@ -392,34 +388,11 @@
   line-height: 1.45;
 }
 
-.custom-pagination {
-  width: min(100%, 420px);
-  margin: 0.25rem auto 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.35rem;
-}
-
 .load-more-actions {
   width: min(100%, 420px);
   margin: 0.85rem auto 0;
   display: flex;
   justify-content: center;
-}
-
-.dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 999px;
-  border: 0;
-  padding: 0;
-  background: #c2cad3;
-  cursor: pointer;
-}
-
-.dot-active {
-  background: #1f6ea0;
 }
 
 .word {
@@ -438,6 +411,10 @@
   font-size: 0.9rem;
 }
 
+::ng-deep .askable-expression:hover .askable-expression-label{background:#0f5fa81f}
+::ng-deep .askable-expression-trigger{opacity:0;pointer-events:none}
+::ng-deep .askable-expression:is(:hover,:focus-within) .askable-expression-trigger{opacity:1;pointer-events:auto}
+
 @keyframes tts-spin {
   to {
     transform: rotate(360deg);
@@ -449,14 +426,18 @@
   right: 1.5rem;
   bottom: 1.5rem;
   z-index: 30;
+  display: grid;
+  place-items: center;
   width: 4rem;
   height: 4rem;
   border: 0;
   border-radius: 999px;
+  padding: 0;
   background: linear-gradient(135deg, #0f5fa8, #23a6d5);
   color: #fff;
   font-weight: 800;
-  letter-spacing: 0.02em;
+  line-height: 1;
+  text-align: center;
   box-shadow: 0 16px 32px rgba(15, 95, 168, 0.28);
   cursor: pointer;
   transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;

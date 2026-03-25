@@ -1,134 +1,242 @@
-<section class="pipeline-page">
-  <section class="panel">
-    @if (docKey()) {
-      <h2 class="book-title">{{ docKey() }}</h2>
-    }
+<section class="pipeline-page" style="max-width:1320px;">
+  @if (shouldShowLearningActions() && !chaptersDrawerOpen() && !sourceOpen() && !askOpen() && !explainOpen()) {
+    <button
+      type="button"
+      style="position:fixed;top:5rem;left:1.5rem;z-index:30;border:1px solid #c7d4df;border-radius:999px;background:#fff;color:#183a57;padding:0.6rem 1rem;font:inherit;font-weight:700;line-height:1;box-shadow:0 12px 24px rgba(24,58,87,.14);cursor:pointer;"
+      (click)="toggleChaptersDrawer()"
+      aria-controls="pipeline-chapters-panel"
+      [attr.aria-expanded]="chaptersDrawerOpen()"
+      aria-label="Open chapters panel"
+    >
+      Chapters
+    </button>
+  }
 
-    <div class="action-row">
-      <button
-        type="button"
-        class="primary-action"
-        (click)="generateAll()"
-        [disabled]="loading() || clearing()"
-      >
-        {{ loading() ? 'Generating...' : 'Generate all' }}
-      </button>
+  <section class="panel slides-layout-main" style="min-width:0;display:block;">
+      @if (docKey()) {
+        <h2 class="book-title">{{ docKey() }}</h2>
+      }
 
-      <button
-        type="button"
-        class="secondary-action"
-        (click)="clearSlides()"
-        [disabled]="loading() || clearing()"
-      >
-        {{ clearing() ? 'Clearing...' : 'Clear' }}
-      </button>
+      <div class="action-row">
+        @if (shouldShowStoryActions()) {
+          <button
+            type="button"
+            class="primary-action"
+            (click)="generateAll()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ loading() && viewMode() === 'comic' ? 'Generating...' : 'Generate all' }}
+          </button>
 
-      <button
-        type="button"
-        [class.primary-action]="selectedLanguage() === 'en'"
-        [class.secondary-action]="selectedLanguage() !== 'en'"
-        (click)="setLanguage('en')"
-        [disabled]="loading() || clearing()"
-      >
-        ENG
-      </button>
-
-      <button
-        type="button"
-        [class.primary-action]="selectedLanguage() === 'ro'"
-        [class.secondary-action]="selectedLanguage() !== 'ro'"
-        (click)="setLanguage('ro')"
-        [disabled]="loading() || clearing()"
-      >
-        RO
-      </button>
-    </div>
-
-    @if (message()) {
-      <p class="status">{{ message() }}</p>
-    }
-
-    @if (ttsMessage()) {
-      <p class="status">{{ ttsMessage() }}</p>
-    }
-
-    <section class="slides-section">
-      <div class="section-heading">
-        @if (slidesLoading()) {
-          <span class="section-status">Loading...</span>
+          <button
+            type="button"
+            class="secondary-action"
+            (click)="clearSlides()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ clearing() ? 'Clearing...' : 'Clear' }}
+          </button>
         }
+
+        @if (shouldShowLearningActions()) {
+          <button
+            type="button"
+            class="primary-action"
+            (click)="generateLearning()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ loading() && viewMode() === 'learning' ? 'Generating...' : 'Generate learning' }}
+          </button>
+
+          <button
+            type="button"
+            class="secondary-action"
+            (click)="clearLearningSlides()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ clearing() ? 'Clearing...' : 'Clear learning' }}
+          </button>
+        }
+
+        <button
+          type="button"
+          [class.primary-action]="selectedLanguage() === 'en'"
+          [class.secondary-action]="selectedLanguage() !== 'en'"
+          (click)="setLanguage('en')"
+          [disabled]="loading() || clearing()"
+        >
+          ENG
+        </button>
+
+        <button
+          type="button"
+          [class.primary-action]="selectedLanguage() === 'ro'"
+          [class.secondary-action]="selectedLanguage() !== 'ro'"
+          (click)="setLanguage('ro')"
+          [disabled]="loading() || clearing()"
+        >
+          RO
+        </button>
       </div>
 
-      @if (slides().length > 0) {
-        <swiper-container
-          #carouselEl
-          class="carousel"
-          slides-per-view="1"
-          space-between="0"
-          grab-cursor="true"
-          resistance-ratio="0.85"
-          (swiperslidechange)="onSlideIndexChange($event)"
-        >
-          @for (slide of slides(); track slide.comicNote?.id ?? $index; let cardIndex = $index) {
-            <swiper-slide class="carousel-slide">
-              <article class="slide-card">
-                <div class="slide-visual">
-                  @if (slideImageUrl(slide); as imageUrl) {
-                    <img
-                      class="slide-image"
-                      [class.slide-image-zoom-left]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-left'"
-                      [class.slide-image-zoom-center]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-center'"
-                      [class.slide-image-zoom-right]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-right'"
-                      [src]="imageSrc(imageUrl)"
-                      [alt]="'Slide ' + (slide.id ?? $index + 1)"
-                      (error)="onImageError(imageUrl, $event)"
-                    />
-                    @if (isFailed(imageUrl)) {
-                      <p class="image-error">
-                        Preview failed (likely private object). Open this URI with an authorized
-                        account.
-                      </p>
-                    }
-                  } @else {
-                    <div class="slide-image slide-image--empty" aria-label="No image available">
-                      <div class="slide-image-placeholder">
-                        <div class="slide-image-placeholder-art" aria-hidden="true">No image</div>
-                        <p class="slide-image-placeholder-text">Image coming soon</p>
-                      </div>
-                    </div>
-                  }
+      @if (message()) {
+        <p class="status">{{ message() }}</p>
+      }
 
-                  @if (shouldShowHeadMarkers(slide, cardIndex)) {
-                    <div class="head-markers-layer" aria-hidden="true">
-                      @for (marker of headMarkers(slide, cardIndex); track marker.characterName + '-' + $index) {
-                        <div
-                          class="mouth-marker"
-                          [style.left.%]="marker.leftPercent"
-                          [style.top.%]="marker.topPercent"
-                          [attr.title]="marker.characterName || 'Character'"
+      @if (ttsMessage()) {
+        <p class="status">{{ ttsMessage() }}</p>
+      }
+
+      <section class="slides-section">
+        <div class="section-heading">
+          @if (slidesLoading()) {
+            <span class="section-status">Loading...</span>
+          }
+        </div>
+
+        <div style="min-width:0;">
+          @if (viewMode() === 'comic' && slides().length > 0) {
+            <swiper-container
+              #carouselEl
+              class="carousel"
+              slides-per-view="1"
+              space-between="0"
+              grab-cursor="true"
+              resistance-ratio="0.85"
+              (swiperslidechange)="onSlideIndexChange($event)"
+            >
+              @for (slide of slides(); track slide.comicNote?.id ?? $index; let cardIndex = $index) {
+                <swiper-slide class="carousel-slide">
+                  <article class="slide-card">
+                    <div class="slide-visual">
+                      @if (slideImageUrl(slide); as imageUrl) {
+                        <button
+                          type="button"
+                          class="slide-image-button"
+                          style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
+                          (click)="openImageViewer(imageUrl, 'Slide ' + (slide.id ?? $index + 1))"
                         >
-                          <span class="mouth-marker-x">X</span>
-                          <span class="mouth-marker-name">{{ marker.characterName || 'Character' }}</span>
+                          <img
+                            class="slide-image"
+                            [class.slide-image-zoom-left]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-left'"
+                            [class.slide-image-zoom-center]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-center'"
+                            [class.slide-image-zoom-right]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-right'"
+                            [src]="imageSrc(imageUrl)"
+                            [alt]="'Slide ' + (slide.id ?? $index + 1)"
+                            (error)="onImageError(imageUrl, $event)"
+                          />
+                        </button>
+                        @if (isFailed(imageUrl)) {
+                          <p class="image-error">
+                            Preview failed (likely private object). Open this URI with an authorized
+                            account.
+                          </p>
+                        }
+                      } @else {
+                        <div class="slide-image slide-image--empty" aria-label="No image available">
+                          <div class="slide-image-placeholder">
+                            <div class="slide-image-placeholder-art" aria-hidden="true">No image</div>
+                            <p class="slide-image-placeholder-text">Image coming soon</p>
+                          </div>
                         </div>
                       }
-                      @if (activeDialogueBubble(slide, cardIndex); as bubble) {
-                        <div
-                          class="speech-bubble"
-                          [style.left.%]="bubble.leftPercent"
-                          [style.top.%]="bubble.topPercent"
-                          [attr.title]="bubble.characterName || 'Character'"
-                        >
+
+                      @if (shouldShowHeadMarkers(slide, cardIndex)) {
+                        <div class="head-markers-layer" aria-hidden="true">
+                          @for (marker of headMarkers(slide, cardIndex); track marker.characterName + '-' + $index) {
+                            <div
+                              class="mouth-marker"
+                              [style.left.%]="marker.leftPercent"
+                              [style.top.%]="marker.topPercent"
+                              [attr.title]="marker.characterName || 'Character'"
+                            >
+                              <span class="mouth-marker-x">X</span>
+                              <span class="mouth-marker-name">{{ marker.characterName || 'Character' }}</span>
+                            </div>
+                          }
+                          @if (activeDialogueBubble(slide, cardIndex); as bubble) {
+                            <div
+                              class="speech-bubble"
+                              [style.left.%]="bubble.leftPercent"
+                              [style.top.%]="bubble.topPercent"
+                              [attr.title]="bubble.characterName || 'Character'"
+                            >
+                              <p class="speech-bubble-text">
+                                @if (bubble.characterName) {
+                                  <span class="speech-bubble-speaker speech-bubble-speaker-block">
+                                    {{ bubble.characterName }}
+                                  </span>
+                                }
+                                @for (token of activeDialogueBubbleTokens(slide, cardIndex); track $index) {
+                                  @if (token.isWord) {
+                                    <span
+                                      class="word"
+                                      [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, bubble.wordStart)"
+                                    >
+                                      {{ token.text }}
+                                    </span>
+                                  } @else {
+                                    <span>{{ token.text }}</span>
+                                  }
+                                }
+                              </p>
+                            </div>
+                          }
+                        </div>
+                      }
+
+                      @if (activeDialogueFallbackLine(slide, cardIndex)) {
+                        <div class="speech-bubble speech-bubble-fallback">
                           <p class="speech-bubble-text">
-                            @if (bubble.characterName) {
-                              <span class="speech-bubble-speaker speech-bubble-speaker-block">
-                                {{ bubble.characterName }}
+                            @if (activeDialogueFallbackSpeaker(slide, cardIndex)) {
+                              <span class="speech-bubble-speaker">
+                                {{ activeDialogueFallbackSpeaker(slide, cardIndex) }}:
                               </span>
+                              <span> </span>
                             }
-                            @for (token of activeDialogueBubbleTokens(slide, cardIndex); track $index) {
+                            @for (token of activeDialogueFallbackTokens(slide, cardIndex); track $index) {
                               @if (token.isWord) {
                                 <span
                                   class="word"
-                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, bubble.wordStart)"
+                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
+                                >
+                                  {{ token.text }}
+                                </span>
+                              } @else {
+                                <span>{{ token.text }}</span>
+                              }
+                            }
+                          </p>
+                        </div>
+                      }
+
+                      @if (activeContextText(slide, cardIndex)) {
+                        <div class="slide-card-body slide-card-body-top">
+                          <p class="slide-copy">
+                            @for (token of activeContextTokens(slide, cardIndex); track $index) {
+                              @if (token.isWord) {
+                                <span
+                                  class="word"
+                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
+                                >
+                                  {{ token.text }}
+                                </span>
+                              } @else {
+                                <span>{{ token.text }}</span>
+                              }
+                            }
+                          </p>
+                        </div>
+                      }
+
+                      @if (shouldShowSlideSummary(slide, cardIndex)) {
+                        <div class="slide-card-body">
+                          <p class="slide-copy">
+                            @for (token of mainNoteTokens(slide); track $index) {
+                              @if (token.isWord) {
+                                <span
+                                  class="word"
+                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, 0)"
                                 >
                                   {{ token.text }}
                                 </span>
@@ -140,183 +248,242 @@
                         </div>
                       }
                     </div>
-                  }
 
-                  @if (activeDialogueFallbackLine(slide, cardIndex)) {
-                    <div class="speech-bubble speech-bubble-fallback">
-                      <p class="speech-bubble-text">
-                        @if (activeDialogueFallbackSpeaker(slide, cardIndex)) {
-                          <span class="speech-bubble-speaker">
-                            {{ activeDialogueFallbackSpeaker(slide, cardIndex) }}:
-                          </span>
-                          <span> </span>
+                    <div class="tts-controls">
+                      <button
+                        type="button"
+                        class="btn-tts-toggle"
+                        (click)="toggleCardTts(slide, cardIndex)"
+                        [disabled]="(ttsLoading() && !isCardLoading(slide, cardIndex)) || slidesLoading()"
+                        [attr.aria-label]="isCardPlaying(slide, cardIndex) ? 'Pause' : 'Play'"
+                      >
+                        @if (isCardPlaying(slide, cardIndex)) {
+                          <span class="tts-icon tts-icon-pause" aria-hidden="true"></span>
+                        } @else if (isCardLoading(slide, cardIndex)) {
+                          <span class="tts-icon tts-icon-loading" aria-hidden="true"></span>
+                        } @else {
+                          <span class="tts-icon tts-icon-play" aria-hidden="true"></span>
                         }
-                        @for (token of activeDialogueFallbackTokens(slide, cardIndex); track $index) {
-                          @if (token.isWord) {
-                            <span
-                              class="word"
-                              [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
-                            >
-                              {{ token.text }}
-                            </span>
-                          } @else {
-                            <span>{{ token.text }}</span>
-                          }
+                      </button>
+                    </div>
+                  </article>
+                </swiper-slide>
+              }
+            </swiper-container>
+
+            @if (currentSlidePromptId(); as promptSlideId) {
+              <section class="slide-prompt-panel">
+                <h3>Slide Prompt</h3>
+                @if (isSlidePromptLoading(promptSlideId)) {
+                  <p>Loading prompt...</p>
+                } @else if (slidePromptError(promptSlideId)) {
+                  <p>{{ slidePromptError(promptSlideId) }}</p>
+                } @else if (slidePromptText(promptSlideId)) {
+                  <p>{{ slidePromptText(promptSlideId) }}</p>
+                } @else {
+                  <p>No prompt available.</p>
+                }
+
+                @if (currentSlideItem(); as currentSlide) {
+                  @if (isSlideDialogueLoading(currentSlide)) {
+                    <div class="slide-dialogue-panel">
+                      <h4>Dialog Text</h4>
+                      <p>Loading dialogs...</p>
+                    </div>
+                  } @else if (slideDialogueError(currentSlide)) {
+                    <div class="slide-dialogue-panel">
+                      <h4>Dialog Text</h4>
+                      <p>{{ slideDialogueError(currentSlide) }}</p>
+                    </div>
+                  } @else if (dialogue(currentSlide).length) {
+                    <div class="slide-dialogue-panel">
+                      <h4>Dialog Text</h4>
+                      <ul class="dialogue-list">
+                        @for (line of dialogue(currentSlide); track $index) {
+                          <li>{{ line }}</li>
                         }
-                      </p>
+                      </ul>
                     </div>
                   }
-
-                  @if (activeContextText(slide, cardIndex)) {
-                    <div class="slide-card-body slide-card-body-top">
-                      <p class="slide-copy">
-                        @for (token of activeContextTokens(slide, cardIndex); track $index) {
-                          @if (token.isWord) {
-                            <span
-                              class="word"
-                              [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
-                            >
-                              {{ token.text }}
-                            </span>
-                          } @else {
-                            <span>{{ token.text }}</span>
-                          }
-                        }
-                      </p>
-                    </div>
-                  }
-
-                  @if (shouldShowSlideSummary(slide, cardIndex)) {
-                    <div class="slide-card-body">
-                      <p class="slide-copy">
-                        @for (token of mainNoteTokens(slide); track $index) {
-                          @if (token.isWord) {
-                            <span
-                              class="word"
-                              [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, 0)"
-                            >
-                              {{ token.text }}
-                            </span>
-                          } @else {
-                            <span>{{ token.text }}</span>
-                          }
-                        }
-                      </p>
-                    </div>
-                  }
-                </div>
-
-                <div class="tts-controls">
-                  <button
-                    type="button"
-                    class="btn-tts-toggle"
-                    (click)="toggleCardTts(slide, cardIndex)"
-                    [disabled]="(ttsLoading() && !isCardLoading(slide, cardIndex)) || slidesLoading()"
-                    [attr.aria-label]="isCardPlaying(slide, cardIndex) ? 'Pause' : 'Play'"
+                }
+              </section>
+            }
+          } @else if (viewMode() === 'learning' && learningSlides().length > 0) {
+            <swiper-container
+              #carouselEl
+              class="carousel"
+              slides-per-view="1"
+              space-between="0"
+              grab-cursor="true"
+              resistance-ratio="0.85"
+              (swiperslidechange)="onSlideIndexChange($event)"
+            >
+              @for (slide of learningSlides(); track slide.summary ?? $index; let cardIndex = $index) {
+                <swiper-slide class="carousel-slide">
+                  <article
+                    class="slide-card"
+                    style="padding:18px;background:#fffdf8;border-color:#eadfce;box-shadow:0 10px 30px rgba(0,0,0,0.05);"
                   >
-                    @if (isCardPlaying(slide, cardIndex)) {
-                      <span class="tts-icon tts-icon-pause" aria-hidden="true"></span>
-                    } @else if (isCardLoading(slide, cardIndex)) {
-                      <span class="tts-icon tts-icon-loading" aria-hidden="true"></span>
-                    } @else {
-                      <span class="tts-icon tts-icon-play" aria-hidden="true"></span>
-                    }
-                  </button>
-                </div>
-              </article>
-            </swiper-slide>
-          }
-        </swiper-container>
+                    <div style="display:grid;gap:8px;margin-bottom:14px;">
+                      <h2
+                        style="margin:0;color:#1f2937;font-size:1.25rem;line-height:1.1;font-weight:800;text-align:left;"
+                      >
+                        {{ learningTitle(slide) }}
+                      </h2>
+                    </div>
 
-        @if (slides().length > 1) {
-          <div class="custom-pagination" role="tablist" aria-label="Slides">
-            @for (pageIndex of paginationIndexes(); track pageIndex) {
+                    <div style="display:grid;gap:16px;">
+                      @if (learningImageUrl(slide); as imageUrl) {
+                        <div>
+                          <button
+                            type="button"
+                            class="slide-image-button"
+                            style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
+                            (click)="openImageViewer(imageUrl, learningTitle(slide))"
+                          >
+                            <img
+                              style="width:100%;max-height:16rem;border-radius:14px;display:block;object-fit:contain;background:#edf3f8;"
+                              [src]="imageSrc(imageUrl)"
+                              [alt]="learningTitle(slide)"
+                              loading="eager"
+                              decoding="async"
+                              (error)="onImageError(imageUrl, $event)"
+                            />
+                          </button>
+                          @if (isFailed(imageUrl)) {
+                            <p class="image-error">
+                              Preview failed (likely private object). Open this URI with an authorized
+                              account.
+                            </p>
+                            <p style="margin:0.25rem 0 0;text-align:left;">
+                              <a [href]="imageSrc(imageUrl)" target="_blank" rel="noreferrer">
+                                Open image
+                              </a>
+                            </p>
+                          }
+                        </div>
+                      }
+
+                        <div
+                          class="learning-summary learning-summary-interactive swiper-no-swiping"
+                          style="display:block;max-width:68ch;color:#24303f;font-size:16px;line-height:1.7;text-align:left;cursor:text;user-select:text;-webkit-user-select:text;"
+                          [innerHTML]="learningSummaryHtml(slide)"
+                          (click)="onLearningSummaryClick($event)"
+                          (mouseup)="onLearningSummaryMouseUp($event, slide)"
+                          (mousedown)="onLearningSummaryPointerDown($event)"
+                          (pointerdown)="onLearningSummaryPointerDown($event)"
+                        ></div>
+                    </div>
+
+                    <footer style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+                      <button
+                        type="button"
+                        style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                        (click)="explainFullSummary(slide)"
+                      >
+                        Explain
+                      </button>
+                      @if (learningSourcePages(slide).length) {
+                        @for (page of learningSourcePages(slide); track page) {
+                          <button
+                            type="button"
+                            style="border:0;background:#efe4d1;color:#5b4630;border-radius:999px;padding:6px 10px;font-size:0.875rem;cursor:pointer;"
+                            (click)="toggleSourcePanel()"
+                          >
+                            Page {{ page }}
+                          </button>
+                        }
+                      }
+                    </footer>
+
+                    <div class="tts-controls">
+                      <button
+                        type="button"
+                        class="btn-tts-toggle"
+                        (click)="toggleLearningTts(slide, cardIndex)"
+                        [disabled]="(ttsLoading() && !isLearningCardLoading(cardIndex)) || slidesLoading()"
+                        [attr.aria-label]="isLearningCardPlaying(cardIndex) ? 'Pause' : 'Play'"
+                      >
+                        @if (isLearningCardPlaying(cardIndex)) {
+                          <span class="tts-icon tts-icon-pause" aria-hidden="true"></span>
+                        } @else if (isLearningCardLoading(cardIndex)) {
+                          <span class="tts-icon tts-icon-loading" aria-hidden="true"></span>
+                        } @else {
+                          <span class="tts-icon tts-icon-play" aria-hidden="true"></span>
+                        }
+                      </button>
+                    </div>
+                  </article>
+                </swiper-slide>
+              }
+            </swiper-container>
+
+          } @else if (!slidesLoading() && !slidesMessage() && !loading()) {
+            <p class="status">
+              {{ viewMode() === 'learning' ? 'No learning slides found.' : 'No slides found.' }}
+            </p>
+          }
+
+          @if (slidesMessage()) {
+            <p class="status">{{ slidesMessage() }}</p>
+          }
+
+          @if (visibleSlideCount() > 0 && shouldShowLoadMoreSlides()) {
+            <div class="load-more-actions">
               <button
                 type="button"
-                class="dot"
-                [class.dot-active]="currentSlide() === pageIndex"
-                (click)="goToSlide(pageIndex)"
-                [attr.aria-label]="'Go to slide ' + (pageIndex + 1)"
-              ></button>
-            }
-          </div>
-        }
-
-        @if (currentSlidePromptId(); as promptSlideId) {
-          <section class="slide-prompt-panel">
-            <h3>Slide Prompt</h3>
-            @if (isSlidePromptLoading(promptSlideId)) {
-              <p>Loading prompt...</p>
-            } @else if (slidePromptError(promptSlideId)) {
-              <p>{{ slidePromptError(promptSlideId) }}</p>
-            } @else if (slidePromptText(promptSlideId)) {
-              <p>{{ slidePromptText(promptSlideId) }}</p>
-            } @else {
-              <p>No prompt available.</p>
-            }
-
-            @if (currentSlideItem(); as currentSlide) {
-              @if (isSlideDialogueLoading(currentSlide)) {
-                <div class="slide-dialogue-panel">
-                  <h4>Dialog Text</h4>
-                  <p>Loading dialogs...</p>
-                </div>
-              } @else if (slideDialogueError(currentSlide)) {
-                <div class="slide-dialogue-panel">
-                  <h4>Dialog Text</h4>
-                  <p>{{ slideDialogueError(currentSlide) }}</p>
-                </div>
-              } @else if (dialogue(currentSlide).length) {
-                <div class="slide-dialogue-panel">
-                  <h4>Dialog Text</h4>
-                  <ul class="dialogue-list">
-                    @for (line of dialogue(currentSlide); track $index) {
-                      <li>{{ line }}</li>
-                    }
-                  </ul>
-                </div>
-              }
-            }
-          </section>
-        }
-      } @else if (!slidesLoading() && !slidesMessage()) {
-        <p class="status">No slides found.</p>
-      }
-
-      @if (slidesMessage()) {
-        <p class="status">{{ slidesMessage() }}</p>
-      }
-
-      @if (slides().length > 0) {
-        <div class="load-more-actions">
-          <button
-            type="button"
-            class="primary-action"
-            (click)="loadMoreSlides()"
-            [disabled]="loading() || clearing()"
-          >
-            {{ loading() ? 'Loading More...' : 'Load more' }}
-          </button>
+                class="primary-action"
+                (click)="loadMoreSlides()"
+                [disabled]="loading() || clearing()"
+              >
+                {{ loading() ? 'Loading More...' : 'Load more' }}
+              </button>
+            </div>
+          }
         </div>
-      }
-    </section>
   </section>
 
-  @if (askOpen()) {
+  @if (askOpen() || sourceOpen() || explainOpen() || chaptersDrawerOpen()) {
     <button
       type="button"
       class="ask-backdrop"
-      (click)="askOpen.set(false)"
-      aria-label="Close ask panel"
+      (click)="askOpen.set(false); sourceOpen.set(false); explainOpen.set(false); chaptersDrawerOpen.set(false)"
+      aria-label="Close side panel"
     ></button>
   }
 
-  @if (!askOpen()) {
+  @if (explainSelectionVisible()) {
+    <button
+      type="button"
+      style="position:fixed;z-index:32;left:0;top:0;transform:translate3d(calc(var(--x) * 1px),calc(var(--y) * 1px - 50%),0);border:0;border-radius:999px;padding:.3rem .68rem;background:#17486c;color:#fff;font:700 .78rem/1 inherit;box-shadow:0 .5rem 1rem rgba(23,72,108,.25);cursor:pointer;"
+      [style.--x]="explainSelectionButtonLeft()"
+      [style.--y]="explainSelectionButtonTop()"
+      (click)="triggerSelectionExplain()"
+    >
+      Explain
+    </button>
+  }
+
+  @if (!askOpen() && !explainOpen() && !chaptersDrawerOpen()) {
+    @if (canShowSourceButton()) {
+      <button
+        type="button"
+        class="ask-fab"
+        style="left:1.5rem;right:auto;bottom:1.5rem;background:linear-gradient(135deg,#245d3f,#4f9d69);box-shadow:0 16px 32px rgba(36,93,63,0.28);"
+        (click)="toggleSourcePanel()"
+        [attr.aria-expanded]="sourceOpen()"
+        aria-controls="pipeline-source-panel"
+        aria-label="Open source panel"
+      >
+        Source
+      </button>
+    }
+
     <button
       type="button"
       class="ask-fab"
       [class.ask-fab-open]="askOpen()"
-      (click)="askOpen.set(!askOpen())"
+      (click)="chaptersDrawerOpen.set(false); sourceOpen.set(false); askOpen.set(!askOpen())"
       [attr.aria-expanded]="askOpen()"
       aria-controls="pipeline-ask-panel"
       aria-label="Open ask panel"
@@ -344,6 +511,150 @@
       </button>
     </div>
 
-    <app-document-chat [embedded]="true" [languageCode]="selectedLanguage()"></app-document-chat>
+    <app-document-chat
+      [embedded]="true"
+      [languageCode]="selectedLanguage()"
+      [requestedQuestion]="askRequestedQuestion()"
+      [requestKey]="askRequestKey()"
+    ></app-document-chat>
   </aside>
+
+  <aside
+    id="pipeline-explain-panel"
+    class="ask-drawer"
+    [class.ask-drawer-open]="explainOpen()"
+    [attr.aria-hidden]="!explainOpen()"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="ask-drawer-header">
+      <p class="ask-drawer-eyebrow">Explain</p>
+      <button
+        type="button"
+        class="ask-drawer-close"
+        (click)="explainOpen.set(false)"
+        aria-label="Close explain panel"
+      >
+        Close
+      </button>
+    </div>
+
+    <div style="padding:1rem;display:grid;gap:1rem;overflow:auto;">
+      @if (explanationSummary()) {
+        <section style="padding:0.9rem;border:1px solid #d7e2ec;border-radius:14px;background:#fff;">
+          <p style="margin:0 0 0.45rem;color:#2a5878;font-size:0.72rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">
+            Summary
+          </p>
+          <p style="margin:0;color:#21384c;line-height:1.6;">{{ explanationSummary() }}</p>
+        </section>
+      }
+
+      <section style="padding:0.9rem;border:1px solid #d7e2ec;border-radius:14px;background:#fff;min-height:8rem;">
+        <p style="margin:0 0 0.45rem;color:#2a5878;font-size:0.72rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;">
+          Explanation
+        </p>
+        @if (explanationLoading()) {
+          <p style="margin:0;color:#21384c;line-height:1.6;">Explaining...</p>
+        } @else if (explanationMessage()) {
+          <p style="margin:0;color:#8a2c2c;line-height:1.6;">{{ explanationMessage() }}</p>
+        } @else {
+          <p style="margin:0;color:#21384c;line-height:1.7;white-space:pre-wrap;">{{ explanationText() }}</p>
+        }
+      </section>
+    </div>
+  </aside>
+
+  <aside
+    id="pipeline-chapters-panel"
+    class="ask-drawer"
+    style="width:min(92vw,22rem);left:0;right:auto;border-left:0;border-right:1px solid rgba(23,72,108,0.14);box-shadow:none;"
+    [style.transform]="chaptersDrawerOpen() ? 'translateX(0)' : 'translateX(-100%)'"
+    [attr.aria-hidden]="!chaptersDrawerOpen()"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="ask-drawer-header">
+      <p class="ask-drawer-eyebrow">Chapters</p>
+      <button
+        type="button"
+        class="ask-drawer-close"
+        (click)="chaptersDrawerOpen.set(false)"
+        aria-label="Close chapters panel"
+      >
+        Close
+      </button>
+    </div>
+
+    <div style="flex:1;overflow:auto;padding:1rem;">
+      <app-pipeline-chapters-sidebar
+        [chapters]="chapterItems()"
+        [activeChapterIndex]="activeChapterIndex()"
+        [availableChapterIndexes]="availableChapterIndexes()"
+        [loading]="learningContextLoading()"
+        [error]="learningContextError()"
+        (chapterSelected)="goToChapter($event)"
+      ></app-pipeline-chapters-sidebar>
+    </div>
+  </aside>
+
+  <aside
+    id="pipeline-source-panel"
+    class="ask-drawer"
+    style="width:min(94vw,760px);left:0;right:auto;border-left:0;border-right:1px solid rgba(23,72,108,0.14);box-shadow:none;"
+    [style.transform]="sourceOpen() ? 'translateX(0)' : 'translateX(-100%)'"
+    [attr.aria-hidden]="!sourceOpen()"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="ask-drawer-header">
+      <p class="ask-drawer-eyebrow">Source</p>
+      <button
+        type="button"
+        class="ask-drawer-close"
+        (click)="sourceOpen.set(false)"
+        aria-label="Close source panel"
+      >
+        Close
+      </button>
+    </div>
+
+    <div style="flex:1;overflow:auto;padding:1rem;">
+      @if (sourceLoading()) {
+        <p class="status">Loading source pages...</p>
+      } @else if (sourceMessage()) {
+        <p class="status">{{ sourceMessage() }}</p>
+      }
+
+      @if (sourcePages().length > 0) {
+        <div style="display:grid;gap:1rem;">
+          @for (page of sourcePages(); track page.pageNumber) {
+            <article style="padding:0.9rem;border:1px solid #d7e2ec;border-radius:16px;background:#ffffff;">
+              <p style="margin:0 0 0.75rem;color:#1f4d6d;font-size:0.9rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;">
+                Page {{ page.pageNumber }}
+              </p>
+              <object
+                style="display:block;width:100%;height:78vh;border:0;border-radius:12px;background:#eef4fa;box-shadow:0 18px 36px rgba(15,23,42,0.14);"
+                [data]="page.trustedPdfUrl"
+                type="application/pdf"
+              >
+                <div style="padding:1rem;">
+                  <p class="status">Embedded PDF preview is unavailable in this browser.</p>
+                  <a [href]="page.pdfUrl" target="_blank" rel="noreferrer">Open page {{ page.pageNumber }}</a>
+                </div>
+              </object>
+            </article>
+          }
+        </div>
+      }
+    </div>
+  </aside>
+
+  @if (imageViewerOpen()) {
+    <app-image-viewer-modal
+      [imageUrl]="imageViewerUrl()"
+      [alt]="imageViewerAlt()"
+      [zoom]="imageViewerZoom()"
+      (closeRequested)="closeImageViewer()"
+      (zoomInRequested)="zoomInImageViewer()"
+      (zoomOutRequested)="zoomOutImageViewer()"
+      (zoomResetRequested)="resetImageViewerZoom()"
+    ></app-image-viewer-modal>
+  }
 </section>

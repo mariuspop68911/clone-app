@@ -1,10 +1,38 @@
 <div class="app-layout">
-  <aside class="drawer">
+  @if (!drawerOpen() && appShellUi.browseButtonVisible()) {
+    <button
+      type="button"
+      class="drawer-toggle-fab"
+      (click)="toggleDrawer()"
+      [attr.aria-expanded]="drawerOpen()"
+      aria-controls="app-drawer"
+      aria-label="Open browse panel"
+    >
+      Browse
+    </button>
+  }
+
+  @if (drawerOpen()) {
+    <button
+      type="button"
+      class="drawer-backdrop"
+      (click)="closeDrawer()"
+      aria-label="Close browse panel"
+    ></button>
+  }
+
+  <aside
+    id="app-drawer"
+    class="drawer"
+    [class.drawer-open]="drawerOpen()"
+    [attr.aria-hidden]="!drawerOpen()"
+    (click)="$event.stopPropagation()"
+  >
     <h1>RAG Console</h1>
     <nav>
-      <a routerLink="/books" routerLinkActive="active">Search Books</a>
-      <a routerLink="/browse" routerLinkActive="active">Browse</a>
-      <a routerLink="/documents" routerLinkActive="active">View Documents</a>
+      <a routerLink="/books" routerLinkActive="active" (click)="closeDrawer()">Search Books</a>
+      <a routerLink="/browse" routerLinkActive="active" (click)="closeDrawer()">Browse</a>
+      <a routerLink="/documents" routerLinkActive="active" (click)="closeDrawer()">View Documents</a>
     </nav>
 
     <section class="drawer-docs">
@@ -26,6 +54,7 @@
                         class="drawer-doc-link"
                         routerLinkActive="active-doc"
                         [routerLink]="['/documents', docKey]"
+                        (click)="closeDrawer()"
                       >
                         {{ drawerDocLabel(doc, $index) }}
                       </a>

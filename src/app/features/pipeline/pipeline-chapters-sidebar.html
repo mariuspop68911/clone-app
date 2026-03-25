@@ -1,0 +1,34 @@
+<aside class="chapters-sidebar" aria-label="Book chapters">
+  <div class="chapters-sidebar-header">
+    <p class="chapters-sidebar-eyebrow">Chapters</p>
+  </div>
+
+  @if (loading) {
+    <p class="chapters-sidebar-status">Loading chapters...</p>
+  } @else if (error) {
+    <p class="chapters-sidebar-status">{{ error }}</p>
+  } @else if (chapters.length) {
+    <nav class="chapters-nav">
+      @for (chapter of chapters; track trackChapter($index, chapter); let index = $index) {
+        <button
+          type="button"
+          class="chapter-item"
+          [class.chapter-item-active]="activeChapterIndex === index"
+          [class.chapter-item-disabled]="!isChapterAvailable(index)"
+          [disabled]="!isChapterAvailable(index)"
+          (click)="selectChapter(index, chapter)"
+        >
+          <span class="chapter-item-index">{{ index + 1 }}</span>
+          <span class="chapter-item-copy">
+            <span class="chapter-item-title">{{ chapterLabel(index, chapter) }}</span>
+            @if (pageRange(chapter)) {
+              <span class="chapter-item-meta">{{ pageRange(chapter) }}</span>
+            }
+          </span>
+        </button>
+      }
+    </nav>
+  } @else {
+    <p class="chapters-sidebar-status">No chapters available.</p>
+  }
+</aside>

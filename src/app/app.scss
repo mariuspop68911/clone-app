@@ -1,18 +1,52 @@
 .app-layout {
   min-height: 100dvh;
-  display: grid;
-  grid-template-columns: 260px 1fr;
+  position: relative;
   background: #ffffff;
 }
 
 .drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 35;
+  width: min(88vw, 260px);
   border-right: 1px solid #dde3eb;
   padding: 1rem;
-  position: sticky;
-  top: 0;
   height: 100dvh;
   overflow-y: auto;
   background: #ffffff;
+  transform: translateX(-100%);
+  transition: transform 220ms ease;
+}
+
+.drawer-open {
+  transform: translateX(0);
+}
+
+.drawer-toggle-fab {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 30;
+  border: 1px solid #c7d4df;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #183a57;
+  padding: 0.6rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(24, 58, 87, 0.14);
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  border: 0;
+  background: rgba(11, 27, 40, 0.24);
+  cursor: pointer;
 }
 
 .drawer h1 {
@@ -213,15 +247,8 @@
 }
 
 @media (max-width: 900px) {
-  .app-layout {
-    grid-template-columns: 1fr;
-  }
-
   .drawer {
-    position: static;
-    height: auto;
-    border-right: 0;
-    border-bottom: 1px solid #dde3eb;
+    width: min(92vw, 260px);
   }
 
   .drawer nav {
