@@ -4,6 +4,13 @@ import { Injectable, OnDestroy, PLATFORM_ID, inject, signal } from '@angular/cor
 import { finalize, Subscription } from 'rxjs';
 import { RagApiService } from '../../core/api/rag-api.service';
 
+interface SelectionBox {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class LearningExplainService implements OnDestroy {
   private readonly ragApi = inject(RagApiService);
@@ -15,11 +22,13 @@ export class LearningExplainService implements OnDestroy {
   private explanationRequestSub: Subscription | null = null;
 
   readonly panelOpen = signal(false);
+  readonly selectionModeEnabled = signal(false);
   readonly selectionVisible = signal(false);
   readonly selectionText = signal('');
   readonly selectionChunkId = signal<number | null>(null);
   readonly selectionButtonTop = signal(0);
   readonly selectionButtonLeft = signal(0);
+  readonly selectionBoxes = signal<SelectionBox[]>([]);
   readonly loading = signal(false);
   readonly summary = signal('');
   readonly text = signal('');
@@ -42,6 +51,7 @@ export class LearningExplainService implements OnDestroy {
   reset(): void {
     this.cancelPendingRequest();
     this.panelOpen.set(false);
+    this.selectionModeEnabled.set(false);
     this.loading.set(false);
     this.summary.set('');
     this.text.set('');
@@ -57,16 +67,32 @@ export class LearningExplainService implements OnDestroy {
     this.panelOpen.set(false);
   }
 
+  enableSelectionMode(): void {
+    this.selectionModeEnabled.set(true);
+  }
+
+  disableSelectionMode(): void {
+    this.selectionModeEnabled.set(false);
+    this.hideSelectionButton();
+    this.clearWindowSelection();
+  }
+
   hideSelectionButton(): void {
     this.selectionVisible.set(false);
     this.selectionText.set('');
     this.selectionChunkId.set(null);
     this.selectionButtonTop.set(0);
     this.selectionButtonLeft.set(0);
+    this.selectionBoxes.set([]);
   }
 
   updateSelectionFromMouseUp(event: MouseEvent, chunkId: number | null): void {
     if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    if (!this.selectionModeEnabled()) {
+      this.hideSelectionButton();
       return;
     }
 
@@ -95,8 +121,24 @@ export class LearningExplainService implements OnDestroy {
     }
 
     const viewportWidth = this.documentRef.defaultView?.innerWidth ?? 0;
-    const estimatedWidth = 70;
-    const margin = 8;
+    const clientRects = Array.from(range.getClientRects())
+      .filter((clientRect) => clientRect.width > 0 && clientRect.height > 0)
+      .map((clientRect) => ({
+        left: Math.max(8, Math.round(clientRect.left - 2)),
+        top: Math.max(8, Math.round(clientRect.top - 1)),
+        width: Math.max(8, Math.round(clientRect.width + 4)),
+        height: Math.max(14, Math.round(clientRect.height + 2))
+      }));
+    const selectionBoxes = clientRects.length
+      ? clientRects
+      : [{
+          left: Math.max(8, Math.round(rect.left - 2)),
+          top: Math.max(8, Math.round(rect.top - 1)),
+          width: Math.max(8, Math.round(rect.width + 4)),
+          height: Math.max(14, Math.round(rect.height + 2))
+        }];
+    const estimatedWidth = 78;
+    const margin = 10;
     let left = rect.right + margin;
     if (viewportWidth && left + estimatedWidth > viewportWidth - margin) {
       left = Math.max(margin, rect.left - estimatedWidth - margin);
@@ -104,6 +146,7 @@ export class LearningExplainService implements OnDestroy {
 
     this.selectionText.set(selectedText);
     this.selectionChunkId.set(chunkId);
+    this.selectionBoxes.set(selectionBoxes);
     this.selectionButtonLeft.set(Math.round(left));
     this.selectionButtonTop.set(Math.round(rect.top + rect.height / 2));
     this.selectionVisible.set(true);
@@ -123,7 +166,8 @@ export class LearningExplainService implements OnDestroy {
     docKey: string,
     chunkId: number | null,
     summary: string,
-    beforeOpen?: () => void
+    beforeOpen?: () => void,
+    imageUrl?: string | null
   ): void {
     const cleanedSummary = this.normalizeSummary(summary);
 
@@ -157,15 +201,18 @@ export class LearningExplainService implements OnDestroy {
     this.chunkId.set(chunkId);
     this.message.set('');
 
-    this.explanationRequestSub = this.ragApi.explainLearningSummary({
+    const request$ = this.ragApi.explainLearningSummary({
       docKey: normalizedDocKey,
       chunkId,
-      summary: cleanedSummary
+      summary: cleanedSummary,
+      imageUrl: imageUrl?.trim() || undefined
     }).pipe(
       finalize(() => {
         this.loading.set(false);
       })
-    ).subscribe({
+    );
+
+    this.explanationRequestSub = request$.subscribe({
       next: (response) => {
         this.summary.set(
           typeof response.summary === 'string' && response.summary.trim()
@@ -189,6 +236,11 @@ export class LearningExplainService implements OnDestroy {
 
   private handleDocumentSelectionChange(): void {
     if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    if (!this.selectionModeEnabled()) {
+      this.hideSelectionButton();
       return;
     }
 

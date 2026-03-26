@@ -1,0 +1,8 @@
+@if (loadingOverlay.visible()) {
+  <div class="loading-overlay" aria-live="polite" aria-busy="true">
+    <div class="loading-overlay-card">
+      <span class="loading-overlay-spinner" aria-hidden="true"></span>
+      <p class="loading-overlay-text">{{ loadingOverlay.message() }}</p>
+    </div>
+  </div>
+}

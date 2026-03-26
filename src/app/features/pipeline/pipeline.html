@@ -58,6 +58,17 @@
           </button>
         }
 
+        @if (shouldShowLoadMoreSlides()) {
+          <button
+            type="button"
+            class="secondary-action"
+            (click)="loadMoreSlides()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ loading() ? 'Loading More...' : 'Load more' }}
+          </button>
+        }
+
         <button
           type="button"
           [class.primary-action]="selectedLanguage() === 'en'"
@@ -99,6 +110,7 @@
             <swiper-container
               #carouselEl
               class="carousel"
+              style="padding:0.2rem 1.1rem 0.8rem 0.75rem;box-sizing:border-box;overflow:visible;"
               slides-per-view="1"
               space-between="0"
               grab-cursor="true"
@@ -110,12 +122,12 @@
                   <article class="slide-card">
                     <div class="slide-visual">
                       @if (slideImageUrl(slide); as imageUrl) {
-                        <button
-                          type="button"
-                          class="slide-image-button"
-                          style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
-                          (click)="openImageViewer(imageUrl, 'Slide ' + (slide.id ?? $index + 1))"
-                        >
+                          <button
+                            type="button"
+                            class="slide-image-button"
+                            style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
+                            (click)="openImageViewer(imageUrl, 'Slide ' + (slide.id ?? $index + 1), null)"
+                          >
                           <img
                             class="slide-image"
                             [class.slide-image-zoom-left]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-left'"
@@ -312,6 +324,7 @@
             <swiper-container
               #carouselEl
               class="carousel"
+              style="padding:0.2rem 1.1rem 0.8rem 0.75rem;box-sizing:border-box;overflow:visible;"
               slides-per-view="1"
               space-between="0"
               grab-cursor="true"
@@ -322,7 +335,7 @@
                 <swiper-slide class="carousel-slide">
                   <article
                     class="slide-card"
-                    style="padding:18px;background:#fffdf8;border-color:#eadfce;box-shadow:0 10px 30px rgba(0,0,0,0.05);"
+                    style="padding:18px;background:#fffdf8;border-color:#eadfce;box-shadow:0 8px 16px rgba(17,38,58,0.045), 0 1px 4px rgba(17,38,58,0.025);"
                   >
                     <div style="display:grid;gap:8px;margin-bottom:14px;">
                       <h2
@@ -339,7 +352,7 @@
                             type="button"
                             class="slide-image-button"
                             style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
-                            (click)="openImageViewer(imageUrl, learningTitle(slide))"
+                            (click)="openImageViewer(imageUrl, learningTitle(slide), slide)"
                           >
                             <img
                               style="width:100%;max-height:16rem;border-radius:14px;display:block;object-fit:contain;background:#edf3f8;"
@@ -365,17 +378,69 @@
                       }
 
                         <div
-                          class="learning-summary learning-summary-interactive swiper-no-swiping"
-                          style="display:block;max-width:68ch;color:#24303f;font-size:16px;line-height:1.7;text-align:left;cursor:text;user-select:text;-webkit-user-select:text;"
-                          [innerHTML]="learningSummaryHtml(slide)"
-                          (click)="onLearningSummaryClick($event)"
-                          (mouseup)="onLearningSummaryMouseUp($event, slide)"
-                          (mousedown)="onLearningSummaryPointerDown($event)"
-                          (pointerdown)="onLearningSummaryPointerDown($event)"
-                        ></div>
+                          style="position:relative;display:block;max-width:68ch;"
+                          [style.padding]="selectionModeEnabled() ? '1.55rem 0.7rem 0.7rem' : null"
+                          [style.border]="selectionModeEnabled() ? '1px solid rgba(23,72,108,0.26)' : null"
+                          [style.border-radius]="selectionModeEnabled() ? '14px' : null"
+                          [style.background]="selectionModeEnabled() ? 'rgba(248,251,255,0.76)' : null"
+                        >
+                          @if (selectionModeEnabled()) {
+                            <span
+                              style="position:absolute;top:0.45rem;left:0.7rem;color:#2a5878;font-size:0.68rem;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;"
+                            >
+                              Select text to explain
+                            </span>
+
+                            <button
+                              type="button"
+                              style="position:absolute;top:0.45rem;right:0.55rem;width:1.35rem;height:1.35rem;border:0;border-radius:999px;background:#d7e6f2;color:#1b4e73;font:700 0.86rem/1 inherit;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;"
+                              (click)="closeLearningSummarySelectionMode($event)"
+                              aria-label="Close text selection mode"
+                            >
+                              &times;
+                            </button>
+                          }
+
+                          <div
+                            class="learning-summary learning-summary-interactive"
+                            [class.swiper-no-swiping]="selectionModeEnabled()"
+                            [style.display]="'block'"
+                            [style.color]="'#24303f'"
+                            [style.font-size]="'16px'"
+                            [style.line-height]="'1.7'"
+                            [style.text-align]="'left'"
+                            [style.cursor]="selectionModeEnabled() ? 'text' : 'grab'"
+                            [style.user-select]="selectionModeEnabled() ? 'text' : 'none'"
+                            [style.-webkit-user-select]="selectionModeEnabled() ? 'text' : 'none'"
+                            [innerHTML]="learningSummaryHtml(slide)"
+                            (click)="onLearningSummaryClick($event)"
+                            (mouseup)="onLearningSummaryMouseUp($event, slide)"
+                            (mousedown)="onLearningSummaryPointerDown($event)"
+                            (pointerdown)="onLearningSummaryPointerDown($event)"
+                            (pointerup)="onLearningSummaryPointerUp()"
+                            (pointercancel)="onLearningSummaryPointerUp()"
+                            (mouseleave)="onLearningSummaryPointerUp()"
+                            (touchend)="onLearningSummaryPointerUp()"
+                            (touchcancel)="onLearningSummaryPointerUp()"
+                          ></div>
+                        </div>
                     </div>
 
-                    <footer style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+                    <footer style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:14px;">
+                      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                        @if (learningSourcePages(slide).length) {
+                          @for (page of learningSourcePages(slide); track page) {
+                            <button
+                              type="button"
+                              style="border:0;background:#efe4d1;color:#5b4630;border-radius:999px;padding:4px 9px;font-size:0.78rem;font-weight:700;cursor:pointer;"
+                              (click)="toggleSourcePanel()"
+                            >
+                              Page {{ page }}
+                            </button>
+                          }
+                        }
+                      </div>
+
                       <button
                         type="button"
                         style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
@@ -383,17 +448,6 @@
                       >
                         Explain
                       </button>
-                      @if (learningSourcePages(slide).length) {
-                        @for (page of learningSourcePages(slide); track page) {
-                          <button
-                            type="button"
-                            style="border:0;background:#efe4d1;color:#5b4630;border-radius:999px;padding:6px 10px;font-size:0.875rem;cursor:pointer;"
-                            (click)="toggleSourcePanel()"
-                          >
-                            Page {{ page }}
-                          </button>
-                        }
-                      }
                     </footer>
 
                     <div class="tts-controls">
@@ -453,11 +507,21 @@
   }
 
   @if (explainSelectionVisible()) {
+    @for (box of explainSelectionBoxes(); track box.left + '-' + box.top + '-' + box.width + '-' + box.height) {
+      <div
+        style="position:fixed;z-index:32;pointer-events:none;border:1px solid rgba(23,72,108,.42);border-radius:6px;background:rgba(90,164,255,.18);box-shadow:0 0 0 1px rgba(90,164,255,.08) inset;"
+        [style.left.px]="box.left"
+        [style.top.px]="box.top"
+        [style.width.px]="box.width"
+        [style.height.px]="box.height"
+      ></div>
+    }
+
     <button
       type="button"
-      style="position:fixed;z-index:32;left:0;top:0;transform:translate3d(calc(var(--x) * 1px),calc(var(--y) * 1px - 50%),0);border:0;border-radius:999px;padding:.3rem .68rem;background:#17486c;color:#fff;font:700 .78rem/1 inherit;box-shadow:0 .5rem 1rem rgba(23,72,108,.25);cursor:pointer;"
-      [style.--x]="explainSelectionButtonLeft()"
-      [style.--y]="explainSelectionButtonTop()"
+      style="position:fixed;z-index:33;transform:translateY(-50%);border:0;border-radius:999px;padding:.38rem .78rem;background:#17486c;color:#fff;font:700 .8rem/1 inherit;box-shadow:0 .6rem 1.2rem rgba(23,72,108,.24);cursor:pointer;"
+      [style.left.px]="explainSelectionButtonLeft()"
+      [style.top.px]="explainSelectionButtonTop()"
       (click)="triggerSelectionExplain()"
     >
       Explain
@@ -651,10 +715,14 @@
       [imageUrl]="imageViewerUrl()"
       [alt]="imageViewerAlt()"
       [zoom]="imageViewerZoom()"
+      [explainVisible]="canExplainImageViewer()"
+      [explainLoading]="explanationLoading()"
       (closeRequested)="closeImageViewer()"
       (zoomInRequested)="zoomInImageViewer()"
       (zoomOutRequested)="zoomOutImageViewer()"
       (zoomResetRequested)="resetImageViewerZoom()"
+      (explainRequested)="explainImageViewer()"
     ></app-image-viewer-modal>
   }
 </section>
+

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 700" role="img" aria-labelledby="title desc">
+  <title id="title">Key takeaways sticky notes</title>
+  <desc id="desc">A stack of colorful sticky notes on a warm orange background with the words KEY TAKEAWAYS on the top note.</desc>
+  <defs>
+    <filter id="paperShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#5b2208" flood-opacity="0.28"/>
+    </filter>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#6f2a0b" flood-opacity="0.22"/>
+    </filter>
+    <radialGradient id="bgLight" cx="36%" cy="32%" r="85%">
+      <stop offset="0%" stop-color="#df8b3a"/>
+      <stop offset="55%" stop-color="#c96319"/>
+      <stop offset="100%" stop-color="#a54811"/>
+    </radialGradient>
+    <filter id="grain" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.045"/>
+      </feComponentTransfer>
+    </filter>
+    <linearGradient id="topNote" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#8fdde7"/>
+      <stop offset="100%" stop-color="#6eced8"/>
+    </linearGradient>
+    <linearGradient id="yellowNote" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffe614"/>
+      <stop offset="100%" stop-color="#f0cf09"/>
+    </linearGradient>
+    <linearGradient id="blueNote" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#b8eef3"/>
+      <stop offset="100%" stop-color="#8fd5de"/>
+    </linearGradient>
+    <linearGradient id="pinkEdge" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#d7a1c8"/>
+      <stop offset="100%" stop-color="#c88ab4"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1100" height="700" fill="url(#bgLight)"/>
+  <rect width="1100" height="700" fill="#000" opacity="0.06" filter="url(#grain)"/>
+
+  <g transform="translate(550 342)" filter="url(#softShadow)">
+    <rect x="-210" y="-205" width="365" height="420" rx="4" fill="url(#blueNote)" transform="rotate(-16)"/>
+    <rect x="-238" y="-150" width="390" height="430" rx="4" fill="url(#yellowNote)" transform="rotate(-8)"/>
+    <rect x="-145" y="-228" width="300" height="410" rx="4" fill="url(#yellowNote)" transform="rotate(-12)"/>
+    <rect x="-98" y="-236" width="320" height="405" rx="4" fill="url(#blueNote)" transform="rotate(-18)"/>
+    <rect x="-155" y="-90" width="400" height="292" rx="4" fill="url(#pinkEdge)" opacity="0.7" transform="rotate(2)"/>
+  </g>
+
+  <g transform="translate(554 333)" filter="url(#paperShadow)">
+    <rect x="-248" y="-210" width="510" height="480" rx="6" fill="url(#topNote)" transform="rotate(4)"/>
+    <text x="30" y="-8" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="82" font-weight="800" fill="#101010" transform="rotate(4)">KEY</text>
+    <text x="16" y="132" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="800" fill="#101010" transform="rotate(4)">TAKEAWAYS</text>
+  </g>
+</svg>

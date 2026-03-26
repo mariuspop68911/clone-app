@@ -34,6 +34,7 @@
 }
 
 .image-viewer-stage {
+  position: relative;
   overflow: auto;
   border-radius: 14px;
   background: linear-gradient(180deg, #dbe8f2 0%, #eef5fa 100%);
@@ -46,6 +47,27 @@
   height: auto;
   transform-origin: top center;
   transition: transform 140ms ease;
+}
+
+.image-viewer-explain {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.72rem 1rem;
+  background: #17486c;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 14px 28px rgba(23, 72, 108, 0.28);
+  cursor: pointer;
+}
+
+.image-viewer-explain:disabled {
+  opacity: 0.75;
+  cursor: wait;
 }
 
 @media (max-width: 720px) {

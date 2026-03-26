@@ -10,22 +10,52 @@
   } @else if (chapters.length) {
     <nav class="chapters-nav">
       @for (chapter of chapters; track trackChapter($index, chapter); let index = $index) {
-        <button
-          type="button"
+        <article
           class="chapter-item"
           [class.chapter-item-active]="activeChapterIndex === index"
           [class.chapter-item-disabled]="!isChapterAvailable(index)"
-          [disabled]="!isChapterAvailable(index)"
-          (click)="selectChapter(index, chapter)"
         >
-          <span class="chapter-item-index">{{ index + 1 }}</span>
-          <span class="chapter-item-copy">
-            <span class="chapter-item-title">{{ chapterLabel(index, chapter) }}</span>
-            @if (pageRange(chapter)) {
-              <span class="chapter-item-meta">{{ pageRange(chapter) }}</span>
-            }
-          </span>
-        </button>
+          <button
+            type="button"
+            class="chapter-item-button"
+            [disabled]="!isChapterAvailable(index)"
+            (click)="selectChapter(index, chapter)"
+          >
+            <span class="chapter-item-index">{{ index + 1 }}</span>
+            <span class="chapter-item-copy">
+              <span class="chapter-item-title">{{ chapterLabel(index, chapter) }}</span>
+              @if (pageRange(chapter)) {
+                <span class="chapter-item-meta">{{ pageRange(chapter) }}</span>
+              }
+            </span>
+          </button>
+
+          @if (keyTakeaways(chapter).length) {
+            <section class="chapter-item-takeaways-card">
+              <button
+                type="button"
+                class="chapter-item-takeaways-toggle"
+                (click)="toggleTakeaways(index, $event)"
+                [attr.aria-expanded]="isTakeawaysExpanded(index)"
+              >
+                <span class="chapter-item-takeaways-title">Key takeaways</span>
+                <span class="chapter-item-takeaways-icon">
+                  {{ isTakeawaysExpanded(index) ? 'Hide' : 'Show' }}
+                </span>
+              </button>
+
+              @if (isTakeawaysExpanded(index)) {
+                <span class="chapter-item-takeaways-list">
+                  @for (takeaway of keyTakeaways(chapter); track takeaway) {
+                    <span class="chapter-item-takeaway">
+                      <span class="chapter-item-takeaway-copy" [innerHTML]="takeawayHtml(takeaway)"></span>
+                    </span>
+                  }
+                </span>
+              }
+            </section>
+          }
+        </article>
       }
     </nav>
   } @else {

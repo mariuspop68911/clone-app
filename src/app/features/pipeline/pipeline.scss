@@ -154,7 +154,7 @@
   border-radius: 10px;
   overflow: visible;
   background: #fff;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0;
 }
 
 .slide-visual {
@@ -404,6 +404,7 @@
   background: #ffe49a;
 }
 
+
 .image-error {
   margin: 0.5rem 0 0;
   padding: 0 0.8rem 0.75rem;
@@ -414,6 +415,8 @@
 ::ng-deep .askable-expression:hover .askable-expression-label{background:#0f5fa81f}
 ::ng-deep .askable-expression-trigger{opacity:0;pointer-events:none}
 ::ng-deep .askable-expression:is(:hover,:focus-within) .askable-expression-trigger{opacity:1;pointer-events:auto}
+.learning-summary-interactive::selection{background:rgba(90,164,255,.28)}
+.learning-summary-interactive::-moz-selection{background:rgba(90,164,255,.28)}
 
 @keyframes tts-spin {
   to {

@@ -31,6 +31,17 @@
         [alt]="alt"
         [style.transform]="'scale(' + zoom + ')'"
       />
+
+      @if (explainVisible) {
+        <button
+          type="button"
+          class="image-viewer-explain"
+          [disabled]="explainLoading"
+          (click)="explainRequested.emit()"
+        >
+          {{ explainLoading ? 'Explaining...' : 'Explain' }}
+        </button>
+      }
     </div>
   </section>
 </div>

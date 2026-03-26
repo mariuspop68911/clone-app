@@ -14,10 +14,11 @@ import {
   RagDocumentResponse
 } from './core/api/rag-api.service';
 import { AppShellUiService } from './app-shell-ui.service';
+import { AppLoadingOverlayComponent } from './shared/loading-overlay';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, AppLoadingOverlayComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })

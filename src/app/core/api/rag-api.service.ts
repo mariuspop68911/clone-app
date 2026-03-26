@@ -24,11 +24,25 @@ export type RagIngestMode =
   | 'Extraction Mode';
 
 export interface RagDocumentResponse {
+  id?: number;
   documentId?: number;
   docKey?: string;
+  filename?: string;
   fileName?: string;
   createdAt?: string;
   coverUrl?: string;
+  lastSlide?: number;
+  [key: string]: unknown;
+}
+
+export interface RagDocumentLastSlideRequest {
+  lastSlide: number;
+}
+
+export interface RagDocumentLastSlideResponse {
+  docId?: number;
+  docKey?: string;
+  lastSlide?: number;
   [key: string]: unknown;
 }
 
@@ -143,6 +157,8 @@ export interface RagLearnSlide {
   imageUrl?: string;
   title?: string;
   summary?: string;
+  keyTakeaways?: string[] | boolean;
+  isKeyTakeaways?: boolean;
   [key: string]: unknown;
 }
 
@@ -163,6 +179,7 @@ export interface RagLearningPipelineChapter {
   endChunkIndex?: number;
   startPageNumber?: number;
   endPageNumber?: number;
+  keyTakeaways?: string[];
   [key: string]: unknown;
 }
 
@@ -184,7 +201,8 @@ export interface RagLearningPipelineContextResponse {
 export interface RagExplainLike12Request {
   docKey: string;
   summary: string;
-  chunkId: number;
+  chunkId?: number | null;
+  imageUrl?: string | null;
 }
 
 export interface RagExplainLike12Response {
@@ -363,6 +381,11 @@ interface PipelineLearningSlideRaw {
   imageUrl?: string;
   title?: string;
   summary?: string;
+  keyTakeaways?: string[] | boolean;
+  key_takeaways?: string[] | boolean;
+  importantTakeaways?: string[] | boolean;
+  isKeyTakeaways?: boolean;
+  is_key_takeaways?: boolean;
   [key: string]: unknown;
 }
 
@@ -465,11 +488,21 @@ export class RagApiService {
         timeout(this.listDocumentsTimeoutMs),
         map((response) => {
           if (Array.isArray(response)) {
-            return response;
+            return response.map((doc) => this.toDocumentResponse(doc));
           }
-          return Array.isArray(response?.value) ? response.value : [];
+          return Array.isArray(response?.value) ? response.value.map((doc) => this.toDocumentResponse(doc)) : [];
         })
       );
+  }
+
+  saveDocumentLastSlide(
+    docId: number,
+    lastSlide: number
+  ): Observable<RagDocumentLastSlideResponse> {
+    return this.http.post<RagDocumentLastSlideResponse>(
+      `${this.baseUrl}/documents/${encodeURIComponent(String(docId))}/last-slide`,
+      { lastSlide: Math.max(0, Math.floor(lastSlide)) }
+    );
   }
 
   askQuestion(req: RagAskRequest): Observable<RagAskResponse> {
@@ -712,6 +745,30 @@ export class RagApiService {
     };
   }
 
+  private toDocumentResponse(response: RagDocumentResponse): RagDocumentResponse {
+    const numericId =
+      typeof response.documentId === 'number'
+        ? response.documentId
+        : typeof response.id === 'number'
+          ? response.id
+          : undefined;
+
+    return {
+      ...response,
+      id: typeof response.id === 'number' ? response.id : numericId,
+      documentId: numericId,
+      docKey: this.toTrimmedString(response.docKey),
+      filename: this.toTrimmedString(response.filename) ?? this.toTrimmedString(response.fileName),
+      fileName: this.toTrimmedString(response.fileName) ?? this.toTrimmedString(response.filename),
+      createdAt: this.toTrimmedString(response.createdAt),
+      coverUrl: this.toTrimmedString(response.coverUrl),
+      lastSlide:
+        typeof response.lastSlide === 'number' && Number.isFinite(response.lastSlide)
+          ? response.lastSlide
+          : undefined
+    };
+  }
+
   private toComicSlidesWithImagesResponse(
     response: PipelineSlidesResponse
   ): RagComicSlidesWithImagesResponse {
@@ -759,7 +816,7 @@ export class RagApiService {
     response: PipelineLearningSlidesResponse
   ): RagLearnSlidesResponse {
     const slides = Array.isArray(response.slides)
-      ? response.slides.map((slide) => ({
+        ? response.slides.map((slide) => ({
           id: typeof slide.id === 'number' ? slide.id : undefined,
           chunkId: typeof slide.chunkId === 'number' ? slide.chunkId : undefined,
           chunkIndex: typeof slide.chunkIndex === 'number' ? slide.chunkIndex : undefined,
@@ -775,7 +832,16 @@ export class RagApiService {
             : [],
           imageUrl: this.toTrimmedString(slide.imageUrl),
           title: this.toTrimmedString(slide.title),
-          summary: this.toTrimmedString(slide.summary)
+          summary: this.toTrimmedString(slide.summary),
+          keyTakeaways: this.toBooleanOrStringList(
+            slide.keyTakeaways ?? slide.key_takeaways ?? slide.importantTakeaways
+          ),
+          isKeyTakeaways:
+            this.toNullableBoolean(slide.isKeyTakeaways) ??
+            this.toNullableBoolean(slide.is_key_takeaways) ??
+            this.toBooleanOrStringList(
+              slide.keyTakeaways ?? slide.key_takeaways ?? slide.importantTakeaways
+            ) === true
         }))
       : [];
 
@@ -829,7 +895,8 @@ export class RagApiService {
             endPageNumber:
               typeof chapter.endPageNumber === 'number' && Number.isFinite(chapter.endPageNumber)
                 ? chapter.endPageNumber
-                : undefined
+                : undefined,
+            keyTakeaways: []
           }))
         : []
     };
@@ -900,5 +967,31 @@ export class RagApiService {
     return value
       .map((entry) => this.toTrimmedString(entry))
       .filter((entry): entry is string => Boolean(entry));
+  }
+
+  private toNullableBoolean(value: unknown): boolean | null {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true') {
+        return true;
+      }
+      if (normalized === 'false') {
+        return false;
+      }
+    }
+    return null;
+  }
+
+  private toBooleanOrStringList(value: unknown): string[] | boolean | undefined {
+    const booleanValue = this.toNullableBoolean(value);
+    if (booleanValue !== null) {
+      return booleanValue;
+    }
+
+    const strings = this.toStringList(value);
+    return strings.length ? strings : undefined;
   }
 }
