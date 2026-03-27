@@ -346,33 +346,113 @@
                     </div>
 
                     <div style="display:grid;gap:16px;">
-                      @if (learningImageUrl(slide); as imageUrl) {
+                      @if (learningImageUrls(slide).length) {
                         <div>
-                          <button
-                            type="button"
-                            class="slide-image-button"
-                            style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
-                            (click)="openImageViewer(imageUrl, learningTitle(slide), slide)"
-                          >
-                            <img
-                              style="width:100%;max-height:16rem;border-radius:14px;display:block;object-fit:contain;background:#edf3f8;"
-                              [src]="imageSrc(imageUrl)"
-                              [alt]="learningTitle(slide)"
-                              loading="eager"
-                              decoding="async"
-                              (error)="onImageError(imageUrl, $event)"
-                            />
-                          </button>
-                          @if (isFailed(imageUrl)) {
-                            <p class="image-error">
-                              Preview failed (likely private object). Open this URI with an authorized
-                              account.
-                            </p>
-                            <p style="margin:0.25rem 0 0;text-align:left;">
-                              <a [href]="imageSrc(imageUrl)" target="_blank" rel="noreferrer">
-                                Open image
-                              </a>
-                            </p>
+                          @if (hasMultipleLearningImages(slide)) {
+                            <div style="overflow:hidden;touch-action:pan-x;">
+                              <swiper-container
+                                class="learning-image-carousel"
+                                style="display:block;width:100%;margin:0;padding:0;box-sizing:border-box;overflow:visible;touch-action:pan-x;"
+                                slides-per-view="auto"
+                                space-between="2"
+                                grab-cursor="true"
+                                centered-slides="false"
+                                nested="true"
+                                touch-start-prevent-default="false"
+                                touch-move-stop-propagation="true"
+                                mousewheel-force-to-axis="true"
+                                simulate-touch="true"
+                                (swiperslidechange)="onLearningImageCarouselSlideChange($event, slide)"
+                              >
+                                @for (imageUrl of learningImageUrls(slide); track imageUrl) {
+                                  <swiper-slide
+                                    class="carousel-slide"
+                                    style="width:calc(100% - 1.15rem);box-sizing:border-box;"
+                                  >
+                                    <div
+                                      style="display:block;width:100%;cursor:grab;"
+                                      (pointerdown)="onLearningImagePointerDown($event)"
+                                      (pointermove)="onLearningImagePointerMove($event)"
+                                      (pointerup)="onLearningImagePointerUp()"
+                                      (pointercancel)="onLearningImagePointerCancel()"
+                                      (pointerleave)="onLearningImagePointerCancel()"
+                                      (click)="openLearningImageViewerFromTap($event, imageUrl, learningTitle(slide), slide)"
+                                    >
+                                      <img
+                                        style="width:100%;max-height:16rem;display:block;object-fit:contain;user-select:none;-webkit-user-drag:none;"
+                                        [src]="imageSrc(imageUrl)"
+                                        [alt]="learningTitle(slide)"
+                                        draggable="false"
+                                        loading="eager"
+                                        decoding="async"
+                                        (error)="onImageError(imageUrl, $event)"
+                                      />
+                                    </div>
+                                  </swiper-slide>
+                                }
+                              </swiper-container>
+                              <div style="display:flex;justify-content:center;gap:0.4rem;margin-top:0.75rem;">
+                                @for (imageUrl of learningImageUrls(slide); track imageUrl; let imageIndex = $index) {
+                                  <span
+                                    style="display:block;width:0.42rem;height:0.42rem;border-radius:999px;"
+                                    [style.background]="learningImageActiveIndex(slide) === imageIndex ? '#17486c' : '#c7d4df'"
+                                  ></span>
+                                }
+                              </div>
+                            </div>
+                            @for (imageUrl of learningImageUrls(slide); track imageUrl) {
+                              @if (isFailed(imageUrl)) {
+                                <p class="image-error">
+                                  Preview failed (likely private object). Open this URI with an authorized
+                                  account.
+                                </p>
+                                <p style="margin:0.25rem 0 0;text-align:left;">
+                                  <a [href]="imageSrc(imageUrl)" target="_blank" rel="noreferrer">
+                                    Open image
+                                  </a>
+                                </p>
+                              }
+                            }
+                          } @else if (learningImageUrl(slide); as imageUrl) {
+                            @if (isLearningSlideImageClickable(slide)) {
+                              <button
+                                type="button"
+                                class="slide-image-button"
+                                style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
+                                (click)="openImageViewer(imageUrl, learningTitle(slide), slide)"
+                              >
+                                <img
+                                  style="width:100%;max-height:16rem;display:block;object-fit:contain;user-select:none;-webkit-user-drag:none;"
+                                  [src]="imageSrc(imageUrl)"
+                                  [alt]="learningTitle(slide)"
+                                  draggable="false"
+                                  loading="eager"
+                                  decoding="async"
+                                  (error)="onImageError(imageUrl, $event)"
+                                />
+                              </button>
+                            } @else {
+                              <img
+                                style="width:100%;max-height:16rem;display:block;object-fit:contain;user-select:none;-webkit-user-drag:none;"
+                                [src]="imageSrc(imageUrl)"
+                                [alt]="learningTitle(slide)"
+                                draggable="false"
+                                loading="eager"
+                                decoding="async"
+                                (error)="onImageError(imageUrl, $event)"
+                              />
+                            }
+                            @if (isFailed(imageUrl)) {
+                              <p class="image-error">
+                                Preview failed (likely private object). Open this URI with an authorized
+                                account.
+                              </p>
+                              <p style="margin:0.25rem 0 0;text-align:left;">
+                                <a [href]="imageSrc(imageUrl)" target="_blank" rel="noreferrer">
+                                  Open image
+                                </a>
+                              </p>
+                            }
                           }
                         </div>
                       }
@@ -428,11 +508,11 @@
 
                     <footer style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:14px;">
                       <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
-                        @if (learningSourcePages(slide).length) {
+                        @if (shouldShowLearningSlideSourcePages(slide)) {
                           @for (page of learningSourcePages(slide); track page) {
                             <button
                               type="button"
-                              style="border:0;background:#efe4d1;color:#5b4630;border-radius:999px;padding:4px 9px;font-size:0.78rem;font-weight:700;cursor:pointer;"
+                              style="border:0;background:#efe4d1;color:#5b4630;border-radius:999px;padding:2px 7px;font-size:0.68rem;font-weight:700;cursor:pointer;"
                               (click)="toggleSourcePanel()"
                             >
                               Page {{ page }}
@@ -441,13 +521,15 @@
                         }
                       </div>
 
-                      <button
-                        type="button"
-                        style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
-                        (click)="explainFullSummary(slide)"
-                      >
-                        Explain
-                      </button>
+                      @if (canExplainLearningSlide(slide)) {
+                        <button
+                          type="button"
+                          style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                          (click)="explainFullSummary(slide)"
+                        >
+                          Explain
+                        </button>
+                      }
                     </footer>
 
                     <div class="tts-controls">
@@ -649,12 +731,15 @@
 
     <div style="flex:1;overflow:auto;padding:1rem;">
       <app-pipeline-chapters-sidebar
+        [docKey]="docKey()"
         [chapters]="chapterItems()"
         [activeChapterIndex]="activeChapterIndex()"
         [availableChapterIndexes]="availableChapterIndexes()"
+        [quizGeneratingChapterIndexes]="quizGeneratingChapterIndexes()"
         [loading]="learningContextLoading()"
         [error]="learningContextError()"
         (chapterSelected)="goToChapter($event)"
+        (chapterQuizCompleted)="completeChapterQuiz($event)"
       ></app-pipeline-chapters-sidebar>
     </div>
   </aside>

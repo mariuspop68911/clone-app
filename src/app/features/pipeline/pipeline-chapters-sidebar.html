@@ -55,6 +55,66 @@
               }
             </section>
           }
+
+          @if (quiz(chapter) || isQuizGenerating(index)) {
+            <section class="chapter-item-takeaways-card">
+              <button
+                type="button"
+                class="chapter-item-takeaways-toggle"
+                (click)="toggleQuiz(index, $event)"
+                [attr.aria-expanded]="isQuizExpanded(index)"
+                [disabled]="isQuizGenerating(index) || !quiz(chapter)"
+              >
+                <span class="chapter-item-takeaways-title">
+                  Quiz
+                  @if (quizCompleted(chapter)) {
+                    <span class="chapter-item-quiz-complete">Completed</span>
+                  }
+                </span>
+                <span class="chapter-item-takeaways-icon">
+                  @if (isQuizGenerating(index)) {
+                    Generating...
+                  } @else {
+                    {{ isQuizExpanded(index) ? 'Hide' : 'Show' }}
+                  }
+                </span>
+              </button>
+
+              @if (isQuizExpanded(index) && quiz(chapter)) {
+                <swiper-container
+                  class="chapter-quiz-swiper"
+                  slides-per-view="1"
+                  space-between="12"
+                  grab-cursor="true"
+                >
+                  @for (question of quizQuestions(chapter); track question.question ?? $index; let questionIndex = $index) {
+                    <swiper-slide class="chapter-quiz-slide">
+                      <article class="chapter-quiz-card">
+                        <p class="chapter-quiz-question">
+                          {{ question.question }}
+                        </p>
+
+                        <div class="chapter-quiz-options">
+                          @for (option of question.options ?? []; track option; let optionIndex = $index) {
+                            <button
+                              type="button"
+                              class="chapter-quiz-option"
+                              [class.chapter-quiz-option-correct]="(showAnsweredOptionState(chapter, questionIndex, optionIndex) && isCorrectOption(chapter, questionIndex, optionIndex)) || shouldRevealCorrectOption(chapter, questionIndex, optionIndex)"
+                              [class.chapter-quiz-option-wrong]="showAnsweredOptionState(chapter, questionIndex, optionIndex) && !isCorrectOption(chapter, questionIndex, optionIndex)"
+                              [disabled]="isQuestionAnswered(chapter, questionIndex)"
+                              (click)="selectQuizAnswer(chapter, questionIndex, optionIndex, $event)"
+                            >
+                              {{ option }}
+                            </button>
+                          }
+                        </div>
+                      </article>
+                    </swiper-slide>
+                  }
+                </swiper-container>
+              }
+            </section>
+          }
         </article>
       }
     </nav>

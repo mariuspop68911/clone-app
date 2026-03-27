@@ -155,6 +155,7 @@ export interface RagLearnSlide {
   chunkIndexes?: number[];
   sourcePageNumbers?: number[];
   imageUrl?: string;
+  imageUrls?: string[];
   title?: string;
   summary?: string;
   keyTakeaways?: string[] | boolean;
@@ -180,6 +181,27 @@ export interface RagLearningPipelineChapter {
   startPageNumber?: number;
   endPageNumber?: number;
   keyTakeaways?: string[];
+  quiz?: RagLearningChapterQuiz;
+  reviewSlides?: RagLearnSlide[];
+  [key: string]: unknown;
+}
+
+export interface RagLearningChapterQuizQuestion {
+  question?: string;
+  options?: string[];
+  correctAnswerIndex?: number;
+  referencePageNumbers?: number[];
+  selectedAnswerIndex?: number;
+  [key: string]: unknown;
+}
+
+export interface RagLearningChapterQuiz {
+  docKey?: string;
+  docId?: number;
+  chapterIndex?: number;
+  chapterTitle?: string;
+  questions?: RagLearningChapterQuizQuestion[];
+  completed?: boolean;
   [key: string]: unknown;
 }
 
@@ -210,6 +232,50 @@ export interface RagExplainLike12Response {
   chunkId?: number;
   summary?: string;
   explanation?: string;
+  [key: string]: unknown;
+}
+
+export interface RagGenerateChapterQuizSlide {
+  slideIndex: number;
+  title: string;
+  summary: string;
+  sourcePageNumbers: number[];
+}
+
+export interface RagGenerateChapterQuizRequest {
+  docKey: string;
+  chapterIndex: number;
+  chapterTitle: string;
+  keyTakeaways: string;
+  slides: RagGenerateChapterQuizSlide[];
+}
+
+export interface RagCompleteChapterQuizRequest {
+  docKey: string;
+  chapterIndex: number;
+  chapterTitle?: string;
+}
+
+export interface RagAnswerChapterQuizRequest {
+  docKey: string;
+  chapterIndex: number;
+  questionIndex: number;
+  selectedAnswerIndex: number;
+}
+
+export interface RagGenerateChapterReviewSlidesRequest {
+  docKey: string;
+  chapterIndex: number;
+}
+
+export interface RagGenerateChapterReviewSlidesResponse {
+  docKey?: string;
+  docId?: number;
+  chapterIndex?: number;
+  chapterTitle?: string;
+  referencePageNumbers?: number[];
+  count?: number;
+  slides?: RagLearnSlide[];
   [key: string]: unknown;
 }
 
@@ -379,6 +445,7 @@ interface PipelineLearningSlideRaw {
   chunkIndexes?: number[];
   sourcePageNumbers?: number[];
   imageUrl?: string;
+  imageUrls?: string[];
   title?: string;
   summary?: string;
   keyTakeaways?: string[] | boolean;
@@ -406,6 +473,27 @@ interface PipelineLearningChapterRaw {
   endChunkIndex?: number;
   startPageNumber?: number;
   endPageNumber?: number;
+  quiz?: PipelineLearningChapterQuizRaw;
+  reviewSlides?: PipelineLearningSlideRaw[];
+  [key: string]: unknown;
+}
+
+interface PipelineLearningChapterQuizQuestionRaw {
+  question?: string;
+  options?: string[];
+  correctAnswerIndex?: number;
+  referencePageNumbers?: number[];
+  selectedAnswerIndex?: number;
+  [key: string]: unknown;
+}
+
+interface PipelineLearningChapterQuizRaw {
+  docKey?: string;
+  docId?: number;
+  chapterIndex?: number;
+  chapterTitle?: string;
+  questions?: PipelineLearningChapterQuizQuestionRaw[];
+  completed?: boolean;
   [key: string]: unknown;
 }
 
@@ -421,6 +509,17 @@ interface PipelineLearningContextResponse {
   importantTakeaways?: string[];
   teachingInsights?: string[];
   chapters?: PipelineLearningChapterRaw[];
+  [key: string]: unknown;
+}
+
+interface PipelineLearningChapterReviewSlidesResponse {
+  docKey?: string;
+  docId?: number;
+  chapterIndex?: number;
+  chapterTitle?: string;
+  referencePageNumbers?: number[];
+  count?: number;
+  slides?: PipelineLearningSlideRaw[];
   [key: string]: unknown;
 }
 
@@ -545,6 +644,36 @@ export class RagApiService {
         `${this.learningPipelineBaseUrl}/${encodeURIComponent(docKey)}/context`
       )
       .pipe(map((response) => this.toLearningPipelineContextResponse(response)));
+  }
+
+  generateChapterQuiz(
+    req: RagGenerateChapterQuizRequest
+  ): Observable<RagLearningChapterQuiz> {
+    return this.http
+      .post<PipelineLearningChapterQuizRaw>(
+        `${this.learningPipelineBaseUrl}/generate-chapter-quiz`,
+        req
+      )
+      .pipe(map((response) => this.toLearningChapterQuiz(response)));
+  }
+
+  completeChapterQuiz(req: RagCompleteChapterQuizRequest): Observable<unknown> {
+    return this.http.post(`${this.learningPipelineBaseUrl}/complete-chapter-quiz`, req);
+  }
+
+  answerChapterQuiz(req: RagAnswerChapterQuizRequest): Observable<unknown> {
+    return this.http.post(`${this.learningPipelineBaseUrl}/answer-chapter-quiz`, req);
+  }
+
+  generateChapterReviewSlides(
+    req: RagGenerateChapterReviewSlidesRequest
+  ): Observable<RagGenerateChapterReviewSlidesResponse> {
+    return this.http
+      .post<PipelineLearningChapterReviewSlidesResponse>(
+        `${this.learningPipelineBaseUrl}/generate-chapter-review-slides`,
+        req
+      )
+      .pipe(map((response) => this.toGenerateChapterReviewSlidesResponse(response)));
   }
 
   explainLearningSummary(req: RagExplainLike12Request): Observable<RagExplainLike12Response> {
@@ -816,33 +945,7 @@ export class RagApiService {
     response: PipelineLearningSlidesResponse
   ): RagLearnSlidesResponse {
     const slides = Array.isArray(response.slides)
-        ? response.slides.map((slide) => ({
-          id: typeof slide.id === 'number' ? slide.id : undefined,
-          chunkId: typeof slide.chunkId === 'number' ? slide.chunkId : undefined,
-          chunkIndex: typeof slide.chunkIndex === 'number' ? slide.chunkIndex : undefined,
-          chunkIndexes: Array.isArray(slide.chunkIndexes)
-            ? slide.chunkIndexes.filter(
-                (value): value is number => typeof value === 'number' && Number.isFinite(value)
-              )
-            : [],
-          sourcePageNumbers: Array.isArray(slide.sourcePageNumbers)
-            ? slide.sourcePageNumbers.filter(
-                (value): value is number => typeof value === 'number' && Number.isFinite(value)
-              )
-            : [],
-          imageUrl: this.toTrimmedString(slide.imageUrl),
-          title: this.toTrimmedString(slide.title),
-          summary: this.toTrimmedString(slide.summary),
-          keyTakeaways: this.toBooleanOrStringList(
-            slide.keyTakeaways ?? slide.key_takeaways ?? slide.importantTakeaways
-          ),
-          isKeyTakeaways:
-            this.toNullableBoolean(slide.isKeyTakeaways) ??
-            this.toNullableBoolean(slide.is_key_takeaways) ??
-            this.toBooleanOrStringList(
-              slide.keyTakeaways ?? slide.key_takeaways ?? slide.importantTakeaways
-            ) === true
-        }))
+      ? response.slides.map((slide) => this.toLearningSlide(slide))
       : [];
 
     return {
@@ -896,9 +999,116 @@ export class RagApiService {
               typeof chapter.endPageNumber === 'number' && Number.isFinite(chapter.endPageNumber)
                 ? chapter.endPageNumber
                 : undefined,
-            keyTakeaways: []
+            keyTakeaways: [],
+            quiz: chapter.quiz ? this.toLearningChapterQuiz(chapter.quiz) : undefined,
+            reviewSlides: Array.isArray(chapter.reviewSlides)
+              ? chapter.reviewSlides.map((slide) => this.toLearningSlide(slide))
+              : []
           }))
         : []
+    };
+  }
+
+  private toGenerateChapterReviewSlidesResponse(
+    response: PipelineLearningChapterReviewSlidesResponse
+  ): RagGenerateChapterReviewSlidesResponse {
+    return {
+      docKey: this.toTrimmedString(response.docKey),
+      docId: typeof response.docId === 'number' ? response.docId : undefined,
+      chapterIndex:
+        typeof response.chapterIndex === 'number' && Number.isFinite(response.chapterIndex)
+          ? response.chapterIndex
+          : undefined,
+      chapterTitle: this.toTrimmedString(response.chapterTitle),
+      referencePageNumbers: Array.isArray(response.referencePageNumbers)
+        ? response.referencePageNumbers.filter(
+            (value): value is number => typeof value === 'number' && Number.isFinite(value)
+          )
+        : [],
+      count: typeof response.count === 'number' ? response.count : undefined,
+      slides: Array.isArray(response.slides)
+        ? response.slides.map((slide) => this.toLearningSlide(slide))
+        : []
+    };
+  }
+
+  private toLearningChapterQuiz(
+    response: PipelineLearningChapterQuizRaw | null | undefined
+  ): RagLearningChapterQuiz {
+    return {
+      docKey: this.toTrimmedString(response?.docKey),
+      docId: typeof response?.docId === 'number' ? response.docId : undefined,
+      chapterIndex:
+        typeof response?.chapterIndex === 'number' && Number.isFinite(response.chapterIndex)
+          ? response.chapterIndex
+          : undefined,
+      chapterTitle: this.toTrimmedString(response?.chapterTitle),
+      questions: Array.isArray(response?.questions)
+        ? response.questions.map((question) => ({
+            question: this.toTrimmedString(question.question),
+            options: this.toStringList(question.options),
+            correctAnswerIndex:
+              typeof question.correctAnswerIndex === 'number' &&
+              Number.isFinite(question.correctAnswerIndex)
+                ? question.correctAnswerIndex
+                : undefined,
+            selectedAnswerIndex:
+              typeof question.selectedAnswerIndex === 'number' &&
+              Number.isFinite(question.selectedAnswerIndex)
+                ? question.selectedAnswerIndex
+                : undefined,
+            referencePageNumbers: Array.isArray(question.referencePageNumbers)
+              ? question.referencePageNumbers.filter(
+                  (value): value is number => typeof value === 'number' && Number.isFinite(value)
+                )
+              : []
+          }))
+        : [],
+      completed: this.toNullableBoolean(response?.completed) ?? false
+    };
+  }
+
+  private toLearningSlide(slide: PipelineLearningSlideRaw): RagLearnSlide {
+    return {
+      id: typeof slide.id === 'number' ? slide.id : undefined,
+      chunkId: typeof slide.chunkId === 'number' ? slide.chunkId : undefined,
+      chunkIndex: typeof slide.chunkIndex === 'number' ? slide.chunkIndex : undefined,
+      chunkIndexes: Array.isArray(slide.chunkIndexes)
+        ? slide.chunkIndexes.filter(
+            (value): value is number => typeof value === 'number' && Number.isFinite(value)
+          )
+        : [],
+      sourcePageNumbers: Array.isArray(slide.sourcePageNumbers)
+        ? slide.sourcePageNumbers.filter(
+            (value): value is number => typeof value === 'number' && Number.isFinite(value)
+          )
+        : [],
+      imageUrl: this.toTrimmedString(slide.imageUrl),
+      imageUrls: Array.isArray(slide.imageUrls)
+        ? slide.imageUrls.filter(
+            (value): value is string => typeof value === 'string' && value.trim().length > 0
+          )
+        : [],
+      title: this.toTrimmedString(slide.title),
+      summary: this.toTrimmedString(slide.summary),
+      keyTakeaways: this.toBooleanOrStringList(
+        slide.keyTakeaways ?? slide.key_takeaways ?? slide.importantTakeaways
+      ),
+      isKeyTakeaways:
+        this.toNullableBoolean(slide.isKeyTakeaways) ??
+        this.toNullableBoolean(slide.is_key_takeaways) ??
+        this.toBooleanOrStringList(
+          slide.keyTakeaways ?? slide.key_takeaways ?? slide.importantTakeaways
+        ) === true,
+      review: this.toNullableBoolean(slide['review']) ?? undefined,
+      keyTakeaway: this.toNullableBoolean(slide['keyTakeaway']) ?? undefined,
+      chapterIndex:
+        typeof slide['chapterIndex'] === 'number' && Number.isFinite(slide['chapterIndex'])
+          ? (slide['chapterIndex'] as number)
+          : undefined,
+      chapterTitle: this.toTrimmedString(slide['chapterTitle']),
+      mainTopics: this.toStringList(slide['mainTopics']),
+      coreConcepts: this.toStringList(slide['coreConcepts'])
     };
   }
 

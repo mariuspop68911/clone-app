@@ -33,6 +33,7 @@
 
 .chapter-item {
   display: grid;
+  min-width: 0;
   gap: 0.45rem;
   border: 1px solid #d6e0e8;
   border-radius: 12px;
@@ -113,6 +114,7 @@
 
 .chapter-item-copy {
   display: grid;
+  min-width: 0;
   gap: 0.2rem;
 }
 
@@ -134,6 +136,7 @@
 
 .chapter-item-takeaways-card {
   display: grid;
+  min-width: 0;
   gap: 0.5rem;
   padding: 0.55rem 0.65rem;
   border-radius: 10px;
@@ -175,6 +178,11 @@
   font-weight: 700;
 }
 
+.chapter-item-takeaways-toggle:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
 .chapter-item-takeaway {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -209,4 +217,96 @@
 .chapter-item-disabled .chapter-item-takeaways-icon,
 .chapter-item-disabled .chapter-item-takeaway-copy strong {
   color: inherit;
+}
+
+.chapter-item-quiz-complete {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.45rem;
+  padding: 0.12rem 0.42rem;
+  border-radius: 999px;
+  background: rgba(55, 138, 84, 0.12);
+  color: #2d7b47;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chapter-quiz-swiper {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chapter-quiz-slide {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.chapter-quiz-card {
+  display: grid;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 0.7rem;
+  padding: 0.15rem 0.05rem 0.1rem;
+}
+
+.chapter-quiz-question {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #173a57;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.chapter-quiz-options {
+  display: grid;
+  min-width: 0;
+  gap: 0.45rem;
+}
+
+.chapter-quiz-option {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(147, 176, 200, 0.55);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  background: rgba(255, 255, 255, 0.92);
+  color: #284860;
+  text-align: left;
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.chapter-quiz-option:hover:not(:disabled) {
+  border-color: #1b6ca8;
+  background: #f7fbff;
+}
+
+.chapter-quiz-option:disabled {
+  cursor: default;
+}
+
+.chapter-quiz-option-correct {
+  border-color: rgba(53, 138, 82, 0.68);
+  background: rgba(81, 175, 110, 0.16);
+  color: #205e34;
+}
+
+.chapter-quiz-option-wrong {
+  border-color: rgba(193, 87, 87, 0.52);
+  background: rgba(214, 112, 112, 0.14);
+  color: #7a3131;
 }

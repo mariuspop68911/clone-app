@@ -13,10 +13,13 @@ import { ActivatedRoute } from '@angular/router';
 import { DocumentChatComponent } from '../document-chat';
 import {
   RagApiService,
+  RagGenerateChapterQuizRequest,
+  RagGenerateChapterReviewSlidesResponse,
   RagComicBookGenerateResponse,
   RagComicSlide,
   RagDocumentResponse,
   RagIngestMode,
+  RagLearningChapterQuiz,
   RagLearningPipelineChapter,
   RagLearningPipelineContextResponse,
   RagLearnSlide,
@@ -126,6 +129,9 @@ export class PipelineComponent {
   private loadedSourceSignature = '';
   private lastAutoLoadTriggerKey = '';
   private selectionModeLongPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private chapterQuizCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  private learningImagePointerStart: { x: number; y: number; moved: boolean } | null = null;
+  private suppressLearningImageClick = false;
   private desiredInitialSlideIndex: number | null = null;
   private lastPersistedSlideIndex: number | null = null;
   private pendingLastSlideIndex: number | null = null;
@@ -135,6 +141,8 @@ export class PipelineComponent {
   private audioUnlocked = false;
   private generateAllStartedAt = 0;
   private readonly failedUriMap = signal<Record<string, true>>({});
+  private readonly quizGeneratingChapterIndexMap = signal<Record<number, true>>({});
+  private readonly learningImageActiveIndexMap = signal<Record<string, number>>({});
   private readonly onFirstInteractionBound = () => {
     void this.ensureAudioUnlocked();
   };
@@ -274,6 +282,7 @@ export class PipelineComponent {
       this.chaptersDrawerOpen.set(false);
       this.learningExplainService.reset();
       this.clearSelectionModeLongPressTimer();
+      this.clearChapterQuizCheckTimer();
       this.documentMode.set(null);
       this.slides.set([]);
       this.learningSlides.set([]);
@@ -296,6 +305,8 @@ export class PipelineComponent {
       this.lastPersistedSlideIndex = null;
       this.pendingLastSlideIndex = null;
       this.clearPersistLastSlideTimer();
+      this.quizGeneratingChapterIndexMap.set({});
+      this.learningImageActiveIndexMap.set({});
       this.learningContext.set(null);
       this.learningContextLoading.set(false);
       this.learningContextError.set('');
@@ -324,6 +335,7 @@ export class PipelineComponent {
     this.hideSlidesOverlay();
     this.clearPersistLastSlideTimer();
     this.clearSelectionModeLongPressTimer();
+    this.clearChapterQuizCheckTimer();
     if (typeof window !== 'undefined') {
       window.removeEventListener('pointerdown', this.onFirstInteractionBound);
     }
@@ -523,6 +535,7 @@ export class PipelineComponent {
     this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
     if (this.viewMode() === 'learning') {
       void this.loadSourcePagesForCurrentSlide();
+      this.scheduleChapterQuizCheck();
     }
   }
 
@@ -542,6 +555,7 @@ export class PipelineComponent {
       this.playCurrentSlideIfAutoPlayEnabled();
       if (this.viewMode() === 'learning') {
         void this.loadSourcePagesForCurrentSlide();
+        this.scheduleChapterQuizCheck();
       }
     }
   }
@@ -554,7 +568,8 @@ export class PipelineComponent {
 
     return chapters.map((chapter) => ({
       ...chapter,
-      keyTakeaways: this.chapterKeyTakeaways(chapter)
+      keyTakeaways: this.chapterKeyTakeaways(chapter),
+      reviewSlides: this.chapterReviewSlides(chapter)
     }));
   }
 
@@ -585,6 +600,12 @@ export class PipelineComponent {
       }
       return indexes;
     }, []);
+  }
+
+  quizGeneratingChapterIndexes(): number[] {
+    return Object.keys(this.quizGeneratingChapterIndexMap())
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
   }
 
   goToChapter(chapter: RagLearningPipelineChapter): void {
@@ -629,6 +650,95 @@ export class PipelineComponent {
       learningSlide ? this.toNullableFiniteNumber(learningSlide.chunkId) : null
     );
     this.imageViewerOpen.set(true);
+  }
+
+  onLearningImagePointerDown(event: PointerEvent): void {
+    this.setOuterCarouselTouchEnabled(false);
+    this.learningImagePointerStart = {
+      x: event.clientX,
+      y: event.clientY,
+      moved: false
+    };
+  }
+
+  onLearningImagePointerMove(event: PointerEvent): void {
+    if (!this.learningImagePointerStart) {
+      return;
+    }
+
+    const deltaX = Math.abs(event.clientX - this.learningImagePointerStart.x);
+    const deltaY = Math.abs(event.clientY - this.learningImagePointerStart.y);
+    if (deltaX > 8 || deltaY > 8) {
+      this.learningImagePointerStart.moved = true;
+    }
+  }
+
+  onLearningImagePointerUp(): void {
+    this.suppressLearningImageClick = this.learningImagePointerStart?.moved ?? false;
+    this.learningImagePointerStart = null;
+    this.setOuterCarouselTouchEnabled(true);
+  }
+
+  onLearningImagePointerCancel(): void {
+    this.learningImagePointerStart = null;
+    this.suppressLearningImageClick = false;
+    this.setOuterCarouselTouchEnabled(true);
+  }
+
+  openLearningImageViewerFromTap(
+    event: Event,
+    imageUrl: string,
+    alt: string,
+    learningSlide: RagLearnSlide | null = null
+  ): void {
+    if (this.suppressLearningImageClick) {
+      this.suppressLearningImageClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    this.openImageViewer(imageUrl, alt, learningSlide);
+  }
+
+  onLearningImageCarouselSlideChange(event: Event, slide: RagLearnSlide | null): void {
+    const target = event.target as { swiper?: { activeIndex?: number; realIndex?: number } } | null;
+    const rawIndex = target?.swiper?.realIndex ?? target?.swiper?.activeIndex;
+    if (typeof rawIndex !== 'number' || !Number.isFinite(rawIndex)) {
+      return;
+    }
+
+    const slideKey = this.learningImageCarouselKey(slide);
+    this.learningImageActiveIndexMap.update((current) => ({
+      ...current,
+      [slideKey]: Math.max(0, Math.floor(rawIndex))
+    }));
+  }
+
+  learningImageActiveIndex(slide: RagLearnSlide | null): number {
+    const slideKey = this.learningImageCarouselKey(slide);
+    return this.learningImageActiveIndexMap()[slideKey] ?? 0;
+  }
+
+  private setOuterCarouselTouchEnabled(enabled: boolean): void {
+    const swiper = this.carouselElement?.nativeElement?.swiper as { allowTouchMove?: boolean } | undefined;
+    if (swiper && 'allowTouchMove' in swiper) {
+      swiper.allowTouchMove = enabled;
+    }
+  }
+
+  private learningImageCarouselKey(slide: RagLearnSlide | null): string {
+    const slideId = this.toNullableFiniteNumber(slide?.id);
+    if (slideId !== null) {
+      return `slide-${slideId}`;
+    }
+
+    const chunkId = this.toNullableFiniteNumber(slide?.chunkId);
+    if (chunkId !== null) {
+      return `chunk-${chunkId}`;
+    }
+
+    return `${slide?.title ?? ''}::${slide?.summary ?? ''}`;
   }
 
   closeImageViewer(): void {
@@ -1156,14 +1266,19 @@ export class PipelineComponent {
   }
 
   learningImageUrl(slide: RagLearnSlide | null): string | null {
+    return this.learningImageUrls(slide)[0] ?? null;
+  }
+
+  learningImageUrls(slide: RagLearnSlide | null): string[] {
     if (!slide) {
-      return null;
+      return [];
     }
 
     if (this.isKeyTakeawaysLearningSlide(slide)) {
-      return PipelineComponent.keyTakeawaysImageAssetUrl;
+      return [PipelineComponent.keyTakeawaysImageAssetUrl];
     }
 
+    const normalizedUrls: string[] = [];
     const directCandidates = [
       slide.imageUrl,
       slide['image_url'],
@@ -1173,26 +1288,44 @@ export class PipelineComponent {
 
     for (const candidate of directCandidates) {
       if (typeof candidate === 'string' && candidate.trim()) {
-        return candidate.trim();
+        normalizedUrls.push(candidate.trim());
       }
     }
 
-    const imageUrls = slide['imageUrls'];
-    if (Array.isArray(imageUrls)) {
-      const firstUrl = imageUrls.find(
-        (value): value is string => typeof value === 'string' && value.trim().length > 0
-      );
-      if (firstUrl) {
-        return firstUrl.trim();
+    const imageUrls = Array.isArray(slide.imageUrls)
+      ? slide.imageUrls
+      : Array.isArray(slide['imageUrls'])
+        ? slide['imageUrls']
+        : [];
+
+    for (const candidate of imageUrls) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        normalizedUrls.push(candidate.trim());
       }
     }
 
-    return null;
+    return normalizedUrls.filter((value, index, array) => array.indexOf(value) === index);
+  }
+
+  hasMultipleLearningImages(slide: RagLearnSlide | null): boolean {
+    return this.learningImageUrls(slide).length > 1;
+  }
+
+  isLearningSlideImageClickable(slide: RagLearnSlide | null): boolean {
+    return !this.isKeyTakeawaysLearningSlide(slide);
   }
 
   learningSourcePagesText(slide: RagLearnSlide | null): string {
     const pages = this.learningSourcePages(slide);
     return pages.join(', ');
+  }
+
+  shouldShowLearningSlideSourcePages(slide: RagLearnSlide | null): boolean {
+    return !this.isKeyTakeawaysLearningSlide(slide) && this.learningSourcePages(slide).length > 0;
+  }
+
+  canExplainLearningSlide(slide: RagLearnSlide | null): boolean {
+    return !this.isKeyTakeawaysLearningSlide(slide);
   }
 
   learningSourcePages(slide: RagLearnSlide | null): number[] {
@@ -1269,6 +1402,13 @@ export class PipelineComponent {
     if (this.selectionModeLongPressTimer !== null) {
       clearTimeout(this.selectionModeLongPressTimer);
       this.selectionModeLongPressTimer = null;
+    }
+  }
+
+  private clearChapterQuizCheckTimer(): void {
+    if (this.chapterQuizCheckTimer !== null) {
+      clearTimeout(this.chapterQuizCheckTimer);
+      this.chapterQuizCheckTimer = null;
     }
   }
 
@@ -1426,6 +1566,104 @@ export class PipelineComponent {
       return null;
     }
     return chapters.find((chapter) => this.slideMatchesChapter(slide, chapter)) ?? null;
+  }
+
+  private scheduleChapterQuizCheck(): void {
+    this.clearChapterQuizCheckTimer();
+    this.chapterQuizCheckTimer = setTimeout(() => {
+      this.chapterQuizCheckTimer = null;
+      this.ensureQuizForCurrentKeyTakeawaysSlide();
+    }, 550);
+  }
+
+  private ensureQuizForCurrentKeyTakeawaysSlide(): void {
+    if (this.viewMode() !== 'learning') {
+      return;
+    }
+
+    const slide = this.currentLearningSlide();
+    if (!this.isKeyTakeawaysLearningSlide(slide)) {
+      return;
+    }
+
+    const chapter = this.currentChapterSignal();
+    if (!chapter) {
+      return;
+    }
+
+    const chapterIndex = this.toNullableFiniteNumber(chapter.chapterIndex);
+    if (chapterIndex === null) {
+      return;
+    }
+
+    if (this.chapterHasQuiz(chapter) || this.quizGeneratingChapterIndexMap()[chapterIndex]) {
+      return;
+    }
+
+    const request = this.buildGenerateChapterQuizRequest(chapter, chapterIndex);
+    if (!request) {
+      return;
+    }
+
+    this.quizGeneratingChapterIndexMap.update((current) => ({ ...current, [chapterIndex]: true }));
+    this.ragApi.generateChapterQuiz(request).subscribe({
+      next: (quiz) => {
+        this.updateChapterQuiz(chapterIndex, {
+          ...quiz,
+          completed: quiz.completed === true
+        });
+        this.quizGeneratingChapterIndexMap.update((current) => {
+          const next = { ...current };
+          delete next[chapterIndex];
+          return next;
+        });
+      },
+      error: (err) => {
+        this.quizGeneratingChapterIndexMap.update((current) => {
+          const next = { ...current };
+          delete next[chapterIndex];
+          return next;
+        });
+        console.warn('[Pipeline] Failed to generate chapter quiz', {
+          docKey: this.docKey(),
+          chapterIndex,
+          error: this.readApiError(err)
+        });
+      }
+    });
+  }
+
+  completeChapterQuiz(chapter: RagLearningPipelineChapter): void {
+    const chapterIndex = this.toNullableFiniteNumber(chapter.chapterIndex);
+    const docKey = this.docKey().trim();
+    if (!docKey || chapterIndex === null || chapter.quiz?.completed === true) {
+      return;
+    }
+
+    this.ragApi.completeChapterQuiz({
+      docKey,
+      chapterIndex,
+      chapterTitle: typeof chapter.title === 'string' ? chapter.title.trim() : undefined
+    }).subscribe({
+      next: () => {
+        this.updateChapterQuiz(chapterIndex, {
+          ...(chapter.quiz ?? {}),
+          docKey,
+          chapterIndex,
+          chapterTitle: typeof chapter.title === 'string' ? chapter.title.trim() : undefined,
+          questions: Array.isArray(chapter.quiz?.questions) ? chapter.quiz?.questions : [],
+          completed: true
+        });
+        this.generateChapterReviewSlides(chapter, chapterIndex, docKey);
+      },
+      error: (err) => {
+        console.warn('[Pipeline] Failed to complete chapter quiz', {
+          docKey,
+          chapterIndex,
+          error: this.readApiError(err)
+        });
+      }
+    });
   }
 
   private slideMatchesChapter(
@@ -1647,6 +1885,7 @@ export class PipelineComponent {
         this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
         this.slides.set([]);
         this.learningSlides.set(nextSlides);
+        this.appendContextReviewSlides();
         this.viewMode.set('learning');
         this.slidePromptById.set({});
         this.slidePromptLoadingById.set({});
@@ -1669,6 +1908,7 @@ export class PipelineComponent {
         this.slidesMessage.set(nextSlides.length ? '' : 'No slides found.');
         if (nextSlides.length) {
           void this.loadSourcePagesForCurrentSlide();
+          this.scheduleChapterQuizCheck();
         }
         console.info('[Pipeline] Learning slide fallback finished', {
           docKey,
@@ -1805,6 +2045,7 @@ export class PipelineComponent {
         this.appendLearningSlides(response);
         if (Array.isArray(response.slides) && response.slides.length) {
           void this.loadSourcePagesForCurrentSlide();
+          this.scheduleChapterQuizCheck();
         }
         console.info('[Pipeline] Generate learning response received', {
           docKey,
@@ -1913,8 +2154,10 @@ export class PipelineComponent {
     const combinedSlides = [...this.learningSlides(), ...generatedSlides];
     const nextIndex = this.clampSlideIndex(this.currentSlide(), combinedSlides.length);
     this.learningSlides.set(combinedSlides);
+    this.appendContextReviewSlides();
     this.currentSlide.set(nextIndex);
     this.syncSwiperSlide(nextIndex);
+    this.scheduleChapterQuizCheck();
     console.info('[Pipeline] Learning slides appended', {
       appendedCount: generatedSlides.length,
       totalCount: combinedSlides.length,
@@ -1954,6 +2197,23 @@ export class PipelineComponent {
     this.learningSlides.set(combinedSlides);
     this.currentSlide.set(nextIndex);
     this.syncSwiperSlide(nextIndex);
+    this.scheduleChapterQuizCheck();
+  }
+
+  private appendContextReviewSlides(): void {
+    const context = this.learningContext();
+    if (!context || !Array.isArray(context.chapters)) {
+      return;
+    }
+
+    const reviewSlides = context.chapters.flatMap((chapter) =>
+      Array.isArray(chapter.reviewSlides) ? chapter.reviewSlides : []
+    );
+    if (!reviewSlides.length) {
+      return;
+    }
+
+    this.appendFetchedLearningSlides(reviewSlides);
   }
 
   private chapterKeyTakeaways(chapter: RagLearningPipelineChapter): string[] {
@@ -1970,6 +2230,153 @@ export class PipelineComponent {
     }
 
     return [...collected];
+  }
+
+  private chapterReviewSlides(chapter: RagLearningPipelineChapter): RagLearnSlide[] {
+    const contextReviewSlides = Array.isArray(chapter.reviewSlides) ? chapter.reviewSlides : [];
+    if (!contextReviewSlides.length) {
+      return [];
+    }
+
+    const chapterIndex = this.toNullableFiniteNumber(chapter.chapterIndex);
+    return contextReviewSlides.filter((slide) => {
+      if (chapterIndex === null) {
+        return true;
+      }
+
+      const slideChapterIndex = this.toNullableFiniteNumber(slide['chapterIndex']);
+      return slideChapterIndex === null || slideChapterIndex === chapterIndex;
+    });
+  }
+
+  private chapterHasQuiz(chapter: RagLearningPipelineChapter | null | undefined): boolean {
+    return Array.isArray(chapter?.quiz?.questions) && chapter.quiz.questions.length > 0;
+  }
+
+  private buildGenerateChapterQuizRequest(
+    chapter: RagLearningPipelineChapter,
+    chapterIndex: number
+  ): RagGenerateChapterQuizRequest | null {
+    const docKey = this.docKey().trim();
+    const chapterTitle = typeof chapter.title === 'string' ? chapter.title.trim() : '';
+    const keyTakeaways = this.chapterKeyTakeaways(chapter);
+    const slides = this.learningSlides()
+      .map((slide, slideIndex) => ({ slide, slideIndex }))
+      .filter(({ slide }) => this.slideMatchesChapter(slide, chapter))
+      .map(({ slide, slideIndex }) => ({
+        slideIndex,
+        title: this.learningTitle(slide),
+        summary: this.learningSummaryPlainText(slide),
+        sourcePageNumbers: this.slidePageNumbers(slide)
+      }))
+      .filter((slide) => slide.summary.trim().length > 0);
+
+    if (!docKey || !chapterTitle || !keyTakeaways.length || !slides.length) {
+      return null;
+    }
+
+    return {
+      docKey,
+      chapterIndex,
+      chapterTitle,
+      keyTakeaways: keyTakeaways.map((takeaway) => `- ${this.stripMarkdownForPlainText(takeaway)}`).join('\n'),
+      slides
+    };
+  }
+
+  private updateChapterQuiz(chapterIndex: number, quiz: RagLearningChapterQuiz): void {
+    this.learningContext.update((current) => {
+      if (!current || !Array.isArray(current.chapters)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        chapters: current.chapters.map((chapter) => {
+          const currentChapterIndex = this.toNullableFiniteNumber(chapter.chapterIndex);
+          if (currentChapterIndex !== chapterIndex) {
+            return chapter;
+          }
+
+          return {
+            ...chapter,
+            quiz: {
+              ...chapter.quiz,
+              ...quiz,
+              chapterIndex,
+              chapterTitle:
+                quiz.chapterTitle ??
+                (typeof chapter.title === 'string' ? chapter.title.trim() : undefined)
+            }
+          };
+        })
+      };
+    });
+  }
+
+  private updateChapterReviewSlides(chapterIndex: number, reviewSlides: RagLearnSlide[]): void {
+    this.learningContext.update((current) => {
+      if (!current || !Array.isArray(current.chapters)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        chapters: current.chapters.map((chapter) => {
+          const currentChapterIndex = this.toNullableFiniteNumber(chapter.chapterIndex);
+          if (currentChapterIndex !== chapterIndex) {
+            return chapter;
+          }
+
+          return {
+            ...chapter,
+            reviewSlides
+          };
+        })
+      };
+    });
+  }
+
+  private generateChapterReviewSlides(
+    chapter: RagLearningPipelineChapter,
+    chapterIndex: number,
+    docKey: string
+  ): void {
+    this.ragApi.generateChapterReviewSlides({ docKey, chapterIndex }).subscribe({
+      next: (response) => {
+        this.applyGeneratedChapterReviewSlides(chapter, chapterIndex, response);
+      },
+      error: (err) => {
+        console.warn('[Pipeline] Failed to generate chapter review slides', {
+          docKey,
+          chapterIndex,
+          error: this.readApiError(err)
+        });
+      }
+    });
+  }
+
+  private applyGeneratedChapterReviewSlides(
+    chapter: RagLearningPipelineChapter,
+    chapterIndex: number,
+    response: RagGenerateChapterReviewSlidesResponse
+  ): void {
+    const reviewSlides = Array.isArray(response.slides) ? response.slides : [];
+    if (!reviewSlides.length) {
+      return;
+    }
+
+    const chapterTitle = typeof chapter.title === 'string' ? chapter.title.trim() : '';
+    const normalizedReviewSlides = reviewSlides.map((slide) => ({
+      ...slide,
+      review: true,
+      chapterIndex:
+        this.toNullableFiniteNumber(slide['chapterIndex']) ?? chapterIndex,
+      chapterTitle: (typeof slide['chapterTitle'] === 'string' && slide['chapterTitle'].trim()) || chapterTitle
+    }));
+
+    this.updateChapterReviewSlides(chapterIndex, normalizedReviewSlides);
+    this.appendFetchedLearningSlides(normalizedReviewSlides);
   }
 
   private learningSlideKeyTakeaways(slide: RagLearnSlide | null | undefined): string[] {
