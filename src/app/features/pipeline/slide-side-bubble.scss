@@ -1,0 +1,117 @@
+:host {
+  display: contents;
+}
+
+.slide-side-bubble {
+  position: fixed;
+  top: 50%;
+  right: 1.25rem;
+  z-index: 26;
+  width: min(24rem, calc(100vw - 2rem));
+  pointer-events: none;
+  opacity: 0;
+  transform: translate3d(120%, -50%, 0);
+  transition: transform 240ms ease, opacity 240ms ease;
+}
+
+.slide-side-bubble-open {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translate3d(0, -50%, 0);
+}
+
+.slide-side-bubble-shell {
+  position: relative;
+}
+
+.slide-side-bubble-close {
+  position: absolute;
+  top: -0.9rem;
+  left: -0.9rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #55677a;
+  font-size: 1.65rem;
+  line-height: 1;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+}
+
+.slide-side-bubble-card {
+  max-height: min(38rem, calc(100vh - 3rem));
+  border: 1px solid rgba(86, 138, 255, 0.12);
+  border-radius: 2rem;
+  background: linear-gradient(135deg, #f3f8ff 0%, #eef3ff 100%);
+  box-shadow: 0 22px 44px rgba(35, 68, 115, 0.16);
+  padding: 1.6rem 1.55rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-side-bubble-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.95rem;
+}
+
+.slide-side-bubble-icon {
+  flex: 0 0 auto;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #4b74ff 0%, #5a45ff 100%);
+  color: #ffffff;
+  box-shadow: 0 14px 22px rgba(76, 95, 255, 0.28);
+}
+
+.slide-side-bubble-icon-ask {
+  background: linear-gradient(135deg, #1d7bff 0%, #26b4ff 100%);
+}
+
+.slide-side-bubble-icon svg {
+  width: 1.45rem;
+  height: 1.45rem;
+}
+
+.slide-side-bubble-heading h2 {
+  margin: 0.15rem 0 0;
+  color: #1e2b3a;
+  font-size: 1.7rem;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.slide-side-bubble-content {
+  min-height: 0;
+  overflow: auto;
+  margin-top: 0.9rem;
+  color: #3a495c;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.slide-side-bubble-content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 720px) {
+  .slide-side-bubble {
+    right: 0.8rem;
+    width: min(22rem, calc(100vw - 1.2rem));
+  }
+
+  .slide-side-bubble-card {
+    border-radius: 1.5rem;
+    padding: 1.2rem 1.05rem 1.1rem;
+  }
+
+  .slide-side-bubble-heading h2 {
+    font-size: 1.35rem;
+  }
+}

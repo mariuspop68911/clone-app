@@ -2,6 +2,7 @@ import {
   CUSTOM_ELEMENTS_SCHEMA,
   Component,
   ElementRef,
+  Input,
   ViewChild,
   computed,
   effect,
@@ -37,10 +38,10 @@ import { TtsApiService } from '../../core/api/tts-api.service';
 import { ImageViewerModalComponent } from './image-viewer-modal';
 import { LearningExplainService } from './learning-explain.service';
 import { SlideProgressComponent } from './slide-progress';
+import { SlideSideBubbleComponent } from './slide-side-bubble';
 import {
   ChapterSection,
-  ChapterSectionSelection,
-  PipelineChaptersSidebarComponent
+  ChapterSectionSelection
 } from './pipeline-chapters-sidebar';
 import { PipelineSlideProgressItem } from './slide-progress.service';
 import { AppShellUiService } from '../../app-shell-ui.service';
@@ -111,9 +112,9 @@ type PipelineViewMode = 'comic' | 'learning';
   selector: 'app-pipeline',
   imports: [
     DocumentChatComponent,
-    PipelineChaptersSidebarComponent,
     ImageViewerModalComponent,
-    SlideProgressComponent
+    SlideProgressComponent,
+    SlideSideBubbleComponent
   ],
   templateUrl: './pipeline.html',
   styleUrl: './pipeline.scss',
@@ -164,6 +165,7 @@ export class PipelineComponent {
   private readonly appShellUi = inject(AppShellUiService);
   private readonly loadingOverlay = inject(LoadingOverlayService);
   private readonly ingestProgress = inject(IngestProgressService);
+  @Input() modalMode = false;
 
   docKey = signal('');
   viewMode = signal<PipelineViewMode>('comic');
@@ -192,7 +194,6 @@ export class PipelineComponent {
   currentSlide = signal(0);
   askOpen = signal(false);
   sourceOpen = signal(false);
-  chaptersDrawerOpen = signal(false);
   explainOpen = this.learningExplainService.panelOpen;
   documentMode = signal<RagIngestMode | null>(null);
   slides = signal<RagComicSlide[]>([]);
@@ -388,7 +389,7 @@ export class PipelineComponent {
   ) {
     effect(() => {
       this.appShellUi.setBrowseButtonVisible(
-        !(this.askOpen() || this.sourceOpen() || this.explainOpen() || this.chaptersDrawerOpen())
+        !(this.askOpen() || this.sourceOpen() || this.explainOpen())
       );
     });
 
@@ -447,7 +448,6 @@ export class PipelineComponent {
       this.currentSlide.set(0);
       this.askOpen.set(false);
       this.sourceOpen.set(false);
-      this.chaptersDrawerOpen.set(false);
       this.learningExplainService.reset();
       this.clearSelectionModeLongPressTimer();
       this.clearChapterQuizCheckTimer();
@@ -739,7 +739,6 @@ export class PipelineComponent {
     if (nextIndex === null) {
       return;
     }
-    this.chaptersDrawerOpen.set(false);
     this.goToSlide(nextIndex);
   }
 
@@ -748,8 +747,6 @@ export class PipelineComponent {
     if (nextIndex === null) {
       return;
     }
-
-    this.chaptersDrawerOpen.set(false);
     this.goToSlide(nextIndex);
   }
 
@@ -1215,6 +1212,9 @@ export class PipelineComponent {
     if (this.isQuizLearningSlide(slide)) {
       return this.isReviewQuizLearningSlide(slide) ? 'Review quiz' : 'Quiz';
     }
+    if (this.isKeyTakeawaysLearningSlide(slide)) {
+      return '';
+    }
     if (!slide || typeof slide.title !== 'string') {
       return 'Learning summary';
     }
@@ -1367,7 +1367,6 @@ export class PipelineComponent {
         this.imageViewerOpen.set(false);
         this.askOpen.set(false);
         this.sourceOpen.set(false);
-        this.chaptersDrawerOpen.set(false);
       },
       imageUrl
     );
@@ -1381,7 +1380,6 @@ export class PipelineComponent {
 
     this.learningExplainService.hideSelectionButton();
     this.sourceOpen.set(false);
-    this.chaptersDrawerOpen.set(false);
     this.learningExplainService.closePanel();
     this.askOpen.set(true);
     this.askRequestedQuestion.set(`What is ${normalizedExpression}`);
@@ -1672,7 +1670,11 @@ export class PipelineComponent {
   }
 
   canShowSourceButton(): boolean {
-    return this.shouldShowLearningActions() && this.viewMode() === 'learning' && this.visibleSourcePageNumbers().length > 0;
+    return (
+      this.shouldShowLearningActions() &&
+      this.viewMode() === 'learning' &&
+      this.learningSourcePages(this.currentLearningSlide()).length > 0
+    );
   }
 
   visibleSourcePageNumbers(): number[] {
@@ -1683,20 +1685,11 @@ export class PipelineComponent {
     return slide.sourcePageNumbers.filter((value, index, array) => value > 0 && array.indexOf(value) === index);
   }
 
-  toggleChaptersDrawer(): void {
-    const nextOpen = !this.chaptersDrawerOpen();
-    this.askOpen.set(false);
-    this.explainOpen.set(false);
-    this.sourceOpen.set(false);
-    this.chaptersDrawerOpen.set(nextOpen);
-  }
-
   toggleSourcePanel(): void {
     const nextOpen = !this.sourceOpen();
     this.learningExplainService.hideSelectionButton();
     this.askOpen.set(false);
     this.explainOpen.set(false);
-    this.chaptersDrawerOpen.set(false);
     this.sourceOpen.set(nextOpen);
     if (nextOpen) {
       void this.loadSourcePagesForCurrentSlide();

@@ -1,21 +1,11 @@
-import { Component, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
-import { PipelineComponent } from '../pipeline';
+import { Component } from '@angular/core';
+import { DocumentDetailsModalComponent } from './document-details-modal';
 
 @Component({
   selector: 'app-document-details',
-  imports: [PipelineComponent],
+  imports: [DocumentDetailsModalComponent],
   templateUrl: './document-details.html',
   styleUrl: './document-details.scss'
 })
 export class DocumentDetailsComponent {
-  docKey = signal('');
-  message = signal('');
-
-  constructor(private readonly route: ActivatedRoute) {
-    this.route.paramMap.subscribe((params) => {
-      this.docKey.set(params.get('docKey') ?? 'Unknown Document');
-      this.message.set('');
-    });
-  }
 }

@@ -1,0 +1,62 @@
+<section class="details-modal-shell">
+  <div class="details-modal-scrim"></div>
+
+  <div class="details-modal-toolbar">
+    <a class="details-modal-close" routerLink="/documents" aria-label="Close document details">
+      X
+    </a>
+  </div>
+
+  <button
+    type="button"
+    class="details-modal-chapters"
+    (click)="toggleChapters()"
+    aria-controls="document-details-chapters"
+    [attr.aria-expanded]="chaptersOpen()"
+  >
+    Chapters
+  </button>
+
+  <div class="details-modal-content">
+    <app-pipeline #pipelineRef [modalMode]="true"></app-pipeline>
+  </div>
+
+  @if (chaptersOpen()) {
+    <button
+      type="button"
+      class="details-modal-backdrop"
+      (click)="closeChapters()"
+      aria-label="Close chapters panel"
+    ></button>
+  }
+
+  <aside
+    id="document-details-chapters"
+    class="details-modal-chapters-panel"
+    [class.details-modal-chapters-panel-open]="chaptersOpen()"
+    [attr.aria-hidden]="!chaptersOpen()"
+  >
+    <div class="details-modal-chapters-header">
+      <p class="details-modal-chapters-eyebrow">Chapters</p>
+      <button
+        type="button"
+        class="details-modal-chapters-close"
+        (click)="closeChapters()"
+        aria-label="Close chapters panel"
+      >
+        Close
+      </button>
+    </div>
+
+    <div class="details-modal-chapters-body">
+      <app-pipeline-chapters-sidebar
+        [chapters]="chapterItems()"
+        [activeChapterIndex]="activeChapterIndex()"
+        [availableChapterIndexes]="availableChapterIndexes()"
+        [loading]="learningContextLoading()"
+        [error]="learningContextError()"
+        (sectionSelected)="goToChapterSection($event)"
+      ></app-pipeline-chapters-sidebar>
+    </div>
+  </aside>
+</section>

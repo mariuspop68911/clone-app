@@ -1,0 +1,38 @@
+<aside
+  class="slide-side-bubble"
+  [class.slide-side-bubble-open]="open"
+  [attr.aria-hidden]="!open"
+  (click)="$event.stopPropagation()"
+>
+  <div class="slide-side-bubble-shell">
+    <button
+      type="button"
+      class="slide-side-bubble-close"
+      (click)="requestClose()"
+      [attr.aria-label]="'Close ' + (title || 'panel')"
+    >
+      ×
+    </button>
+
+    <div class="slide-side-bubble-card">
+      <div class="slide-side-bubble-header">
+        <div class="slide-side-bubble-icon" [class.slide-side-bubble-icon-ask]="variant === 'ask'">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M12 4.75c-4.56 0-8.25 3.27-8.25 7.31 0 1.95.87 3.73 2.29 5.05l-.89 3.14 3.3-1.47c1.04.39 2.19.6 3.55.6 4.56 0 8.25-3.27 8.25-7.32 0-4.03-3.69-7.3-8.25-7.3Zm0 12.88c-1.2 0-2.22-.18-3.13-.56l-.52-.21-1.39.63.37-1.39-.39-.38c-1.26-1.18-1.95-2.65-1.95-4.16 0-3.06 2.93-5.55 6.99-5.55 4.05 0 6.99 2.49 6.99 5.55 0 3.07-2.94 5.57-6.99 5.57Z"
+              fill="currentColor"
+            />
+          </svg>
+        </div>
+
+        <div class="slide-side-bubble-heading">
+          <h2>{{ title }}</h2>
+        </div>
+      </div>
+
+      <div class="slide-side-bubble-content">
+        <ng-content></ng-content>
+      </div>
+    </div>
+  </div>
+</aside>

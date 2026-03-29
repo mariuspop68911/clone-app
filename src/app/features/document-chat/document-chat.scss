@@ -95,6 +95,57 @@ h1 {
 .chat-page-embedded {
   max-width: none;
   min-height: 0;
-  height: 100%;
-  padding: 1rem 1rem 0.9rem;
+  height: auto;
+  padding: 0;
+}
+
+.chat-page-embedded .chat-body {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  overflow-y: auto;
+  max-height: min(52dvh, 24rem);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-page-embedded .chat-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.chat-page-embedded .row {
+  margin-bottom: 0.7rem;
+}
+
+.chat-page-embedded .bubble {
+  max-width: 100%;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(87, 119, 171, 0.08);
+}
+
+.chat-page-embedded .bubble-user {
+  background: linear-gradient(135deg, #4b74ff 0%, #5a45ff 100%);
+  color: #fff;
+}
+
+.chat-page-embedded .composer {
+  margin-top: 1rem;
+  grid-template-columns: 1fr;
+}
+
+.chat-page-embedded .composer textarea {
+  min-height: 6rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.chat-page-embedded .composer button {
+  justify-self: end;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.72rem 1.15rem;
+  background: linear-gradient(135deg, #4b74ff 0%, #5a45ff 100%);
+  color: #ffffff;
 }
