@@ -47,15 +47,6 @@
           >
             {{ loading() && viewMode() === 'learning' ? 'Generating...' : 'Generate learning' }}
           </button>
-
-          <button
-            type="button"
-            class="secondary-action"
-            (click)="clearLearningSlides()"
-            [disabled]="loading() || clearing()"
-          >
-            {{ clearing() ? 'Clearing...' : 'Clear learning' }}
-          </button>
         }
 
         @if (shouldShowLoadMoreSlides()) {
@@ -104,6 +95,19 @@
             <span class="section-status">Loading...</span>
           }
         </div>
+
+        @if (viewMode() === 'learning' && currentChapterTitle() && !isQuizLearningSlide(currentLearningSlide())) {
+          <p style="margin:0.25rem 0 0.2rem;text-align:center;padding: 1rem; color:#214967;font-size:1.2rem;font-weight:800;line-height:1.3;">
+            {{ currentChapterTitle() }}
+          </p>
+        }
+
+        @if (slideProgressItems().length > 0) {
+          <app-slide-progress
+            [items]="slideProgressItems()"
+            [currentIndex]="slideProgressCurrentIndex()"
+          ></app-slide-progress>
+        }
 
         <div style="min-width:0;">
           @if (viewMode() === 'comic' && slides().length > 0) {
@@ -283,44 +287,7 @@
               }
             </swiper-container>
 
-            @if (currentSlidePromptId(); as promptSlideId) {
-              <section class="slide-prompt-panel">
-                <h3>Slide Prompt</h3>
-                @if (isSlidePromptLoading(promptSlideId)) {
-                  <p>Loading prompt...</p>
-                } @else if (slidePromptError(promptSlideId)) {
-                  <p>{{ slidePromptError(promptSlideId) }}</p>
-                } @else if (slidePromptText(promptSlideId)) {
-                  <p>{{ slidePromptText(promptSlideId) }}</p>
-                } @else {
-                  <p>No prompt available.</p>
-                }
-
-                @if (currentSlideItem(); as currentSlide) {
-                  @if (isSlideDialogueLoading(currentSlide)) {
-                    <div class="slide-dialogue-panel">
-                      <h4>Dialog Text</h4>
-                      <p>Loading dialogs...</p>
-                    </div>
-                  } @else if (slideDialogueError(currentSlide)) {
-                    <div class="slide-dialogue-panel">
-                      <h4>Dialog Text</h4>
-                      <p>{{ slideDialogueError(currentSlide) }}</p>
-                    </div>
-                  } @else if (dialogue(currentSlide).length) {
-                    <div class="slide-dialogue-panel">
-                      <h4>Dialog Text</h4>
-                      <ul class="dialogue-list">
-                        @for (line of dialogue(currentSlide); track $index) {
-                          <li>{{ line }}</li>
-                        }
-                      </ul>
-                    </div>
-                  }
-                }
-              </section>
-            }
-          } @else if (viewMode() === 'learning' && learningSlides().length > 0) {
+          } @else if (viewMode() === 'learning' && visibleLearningSlides().length > 0) {
             <swiper-container
               #carouselEl
               class="carousel"
@@ -331,19 +298,21 @@
               resistance-ratio="0.85"
               (swiperslidechange)="onSlideIndexChange($event)"
             >
-              @for (slide of learningSlides(); track slide.summary ?? $index; let cardIndex = $index) {
+              @for (slide of visibleLearningSlides(); track slide.summary ?? slide.title ?? $index; let cardIndex = $index) {
                 <swiper-slide class="carousel-slide">
                   <article
                     class="slide-card"
-                    style="padding:18px;background:#fffdf8;border-color:#eadfce;box-shadow:0 8px 16px rgba(17,38,58,0.045), 0 1px 4px rgba(17,38,58,0.025);"
+                    [style]="learningSlideCardStyle(slide)"
                   >
-                    <div style="display:grid;gap:8px;margin-bottom:14px;">
-                      <h2
-                        style="margin:0;color:#1f2937;font-size:1.25rem;line-height:1.1;font-weight:800;text-align:left;"
-                      >
-                        {{ learningTitle(slide) }}
-                      </h2>
-                    </div>
+                    @if (!isQuizLearningSlide(slide)) {
+                      <div style="display:grid;gap:8px;margin-bottom:14px;">
+                        <h2
+                          style="margin:0;color:#1f2937;font-size:1.25rem;line-height:1.1;font-weight:800;text-align:left;"
+                        >
+                          {{ learningTitle(slide) }}
+                        </h2>
+                      </div>
+                    }
 
                     <div style="display:grid;gap:16px;">
                       @if (learningImageUrls(slide).length) {
@@ -457,6 +426,28 @@
                         </div>
                       }
 
+                      @if (isQuizLearningSlide(slide)) {
+                        <div style="display:grid;gap:0.9rem;max-width:40rem;">
+                          <p style="margin:0;color:#123b5b;font-size:1.05rem;line-height:1.5;font-weight:800;">
+                            {{ quizQuestionText(slide) }}
+                          </p>
+
+                          <div style="display:grid;gap:0.7rem;">
+                            @for (option of quizAnswerOptions(slide); track option; let optionIndex = $index) {
+                              <button
+                                type="button"
+                                style="width:100%;text-align:left;padding:0.82rem 0.95rem;border-radius:14px;border:1px solid #c8d9ea;background:#ffffff;color:#24445f;font:600 0.95rem/1.45 inherit;"
+                                [style.background]="quizOptionAnswered(slide, optionIndex) && quizOptionCorrect(slide, optionIndex) ? '#dff4e4' : (quizOptionAnswered(slide, optionIndex) ? '#fde3e3' : '#ffffff')"
+                                [style.border-color]="quizOptionAnswered(slide, optionIndex) && quizOptionCorrect(slide, optionIndex) ? '#79bf8c' : (quizOptionAnswered(slide, optionIndex) ? '#d57c7c' : '#c8d9ea')"
+                                [disabled]="selectedQuizOptionIndex(slide) !== null"
+                                (click)="selectQuizAnswerOnSlide(slide, optionIndex, $event)"
+                              >
+                                {{ option }}
+                              </button>
+                            }
+                          </div>
+                        </div>
+                      } @else {
                         <div
                           style="position:relative;display:block;max-width:68ch;"
                           [style.padding]="selectionModeEnabled() ? '1.55rem 0.7rem 0.7rem' : null"
@@ -504,6 +495,7 @@
                             (touchcancel)="onLearningSummaryPointerUp()"
                           ></div>
                         </div>
+                      }
                     </div>
 
                     <footer style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:14px;">
@@ -521,7 +513,53 @@
                         }
                       </div>
 
-                      @if (canExplainLearningSlide(slide)) {
+                      @if (isKeyTakeawaysLearningSlide(slide)) {
+                        <div style="display:grid;gap:0.45rem;justify-items:end;align-items:center;">
+                          <button
+                            type="button"
+                            style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                            (click)="generateOrOpenChapterQuizFromTakeaways(slide)"
+                          >
+                            Quiz
+                          </button>
+
+                          @if (shouldShowNextChapterButton(slide)) {
+                            <button
+                              type="button"
+                              style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                              (click)="goToNextChapterFromTakeaways(slide)"
+                            >
+                              Next chapter
+                            </button>
+                          }
+                        </div>
+                      } @else if (isReviewQuizLearningSlide(slide) && isLastReviewQuizSlideForChapter(slide) && shouldShowNextChapterButton(slide)) {
+                        <button
+                          type="button"
+                          style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                          [disabled]="!allQuizQuestionsAnswered(slide)"
+                          (click)="advanceToNextChapterAfterReviewQuiz(slide)"
+                        >
+                          Next chapter
+                        </button>
+                      } @else if (isQuizLearningSlide(slide) && shouldShowQuizNextButton(slide)) {
+                        <button
+                          type="button"
+                          style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                          [disabled]="!allQuizQuestionsAnswered(slide)"
+                          (click)="advanceAfterQuiz(slide)"
+                        >
+                          Next
+                        </button>
+                      } @else if (isReviewLearningSlide(slide) && isLastReviewSlideForChapter(slide)) {
+                        <button
+                          type="button"
+                          style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                          (click)="advanceAfterReview(slide)"
+                        >
+                          Next
+                        </button>
+                      } @else if (canExplainLearningSlide(slide)) {
                         <button
                           type="button"
                           style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
@@ -532,6 +570,7 @@
                       }
                     </footer>
 
+                    @if (!isQuizLearningSlide(slide)) {
                     <div class="tts-controls">
                       <button
                         type="button"
@@ -549,15 +588,12 @@
                         }
                       </button>
                     </div>
+                    }
                   </article>
                 </swiper-slide>
               }
             </swiper-container>
 
-          } @else if (!slidesLoading() && !slidesMessage() && !loading()) {
-            <p class="status">
-              {{ viewMode() === 'learning' ? 'No learning slides found.' : 'No slides found.' }}
-            </p>
           }
 
           @if (slidesMessage()) {
@@ -712,7 +748,7 @@
   <aside
     id="pipeline-chapters-panel"
     class="ask-drawer"
-    style="width:min(92vw,22rem);left:0;right:auto;border-left:0;border-right:1px solid rgba(23,72,108,0.14);box-shadow:none;"
+    style="width:min(94vw,26rem);left:0;right:auto;border-left:0;border-right:1px solid rgba(23,72,108,0.14);box-shadow:none;"
     [style.transform]="chaptersDrawerOpen() ? 'translateX(0)' : 'translateX(-100%)'"
     [attr.aria-hidden]="!chaptersDrawerOpen()"
     (click)="$event.stopPropagation()"
@@ -731,15 +767,12 @@
 
     <div style="flex:1;overflow:auto;padding:1rem;">
       <app-pipeline-chapters-sidebar
-        [docKey]="docKey()"
         [chapters]="chapterItems()"
         [activeChapterIndex]="activeChapterIndex()"
         [availableChapterIndexes]="availableChapterIndexes()"
-        [quizGeneratingChapterIndexes]="quizGeneratingChapterIndexes()"
         [loading]="learningContextLoading()"
         [error]="learningContextError()"
-        (chapterSelected)="goToChapter($event)"
-        (chapterQuizCompleted)="completeChapterQuiz($event)"
+        (sectionSelected)="goToChapterSection($event)"
       ></app-pipeline-chapters-sidebar>
     </div>
   </aside>
@@ -810,4 +843,3 @@
     ></app-image-viewer-modal>
   }
 </section>
-

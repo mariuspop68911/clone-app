@@ -182,6 +182,7 @@ export interface RagLearningPipelineChapter {
   endPageNumber?: number;
   keyTakeaways?: string[];
   quiz?: RagLearningChapterQuiz;
+  reviewQuiz?: RagLearningChapterQuiz;
   reviewSlides?: RagLearnSlide[];
   [key: string]: unknown;
 }
@@ -201,6 +202,7 @@ export interface RagLearningChapterQuiz {
   chapterIndex?: number;
   chapterTitle?: string;
   questions?: RagLearningChapterQuizQuestion[];
+  review?: boolean;
   completed?: boolean;
   [key: string]: unknown;
 }
@@ -266,6 +268,10 @@ export interface RagAnswerChapterQuizRequest {
 export interface RagGenerateChapterReviewSlidesRequest {
   docKey: string;
   chapterIndex: number;
+  incorrectAnsweredQuestions: {
+    question: string;
+    referencePageNumbers: number[];
+  }[];
 }
 
 export interface RagGenerateChapterReviewSlidesResponse {
@@ -277,6 +283,20 @@ export interface RagGenerateChapterReviewSlidesResponse {
   count?: number;
   slides?: RagLearnSlide[];
   [key: string]: unknown;
+}
+
+export interface RagGenerateReviewQuizSource {
+  sourceIndex: number;
+  incorrectAnsweredQuestion: string;
+  referencePageNumbers: number[];
+}
+
+export interface RagGenerateReviewQuizRequest {
+  docKey: string;
+  chapterIndex: number;
+  chapterTitle: string;
+  keyTakeaways: string;
+  reviewSources: RagGenerateReviewQuizSource[];
 }
 
 export interface RagComicBookGenerateResponse {
@@ -474,6 +494,7 @@ interface PipelineLearningChapterRaw {
   startPageNumber?: number;
   endPageNumber?: number;
   quiz?: PipelineLearningChapterQuizRaw;
+  reviewQuiz?: PipelineLearningChapterQuizRaw;
   reviewSlides?: PipelineLearningSlideRaw[];
   [key: string]: unknown;
 }
@@ -665,6 +686,15 @@ export class RagApiService {
     return this.http.post(`${this.learningPipelineBaseUrl}/answer-chapter-quiz`, req);
   }
 
+  generateReviewQuiz(req: RagGenerateReviewQuizRequest): Observable<RagLearningChapterQuiz> {
+    return this.http
+      .post<PipelineLearningChapterQuizRaw>(
+        `${this.learningPipelineBaseUrl}/generate-review-quiz`,
+        req
+      )
+      .pipe(map((response) => this.toLearningChapterQuiz(response)));
+  }
+
   generateChapterReviewSlides(
     req: RagGenerateChapterReviewSlidesRequest
   ): Observable<RagGenerateChapterReviewSlidesResponse> {
@@ -694,12 +724,6 @@ export class RagApiService {
   resetPipelineDocument(docKey: string): Observable<void> {
     return this.http.delete<void>(
       `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/reset`
-    );
-  }
-
-  resetLearningSlides(docKey: string): Observable<void> {
-    return this.http.delete<void>(
-      `${this.learningPipelineBaseUrl}/${encodeURIComponent(docKey)}/slides`
     );
   }
 
@@ -1001,6 +1025,9 @@ export class RagApiService {
                 : undefined,
             keyTakeaways: [],
             quiz: chapter.quiz ? this.toLearningChapterQuiz(chapter.quiz) : undefined,
+            reviewQuiz: chapter.reviewQuiz
+              ? this.toLearningChapterQuiz(chapter.reviewQuiz)
+              : undefined,
             reviewSlides: Array.isArray(chapter.reviewSlides)
               ? chapter.reviewSlides.map((slide) => this.toLearningSlide(slide))
               : []
@@ -1064,6 +1091,7 @@ export class RagApiService {
               : []
           }))
         : [],
+      review: this.toNullableBoolean(response?.['review']) ?? false,
       completed: this.toNullableBoolean(response?.completed) ?? false
     };
   }

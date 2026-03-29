@@ -50,6 +50,24 @@ export class DocumentsComponent implements OnInit {
     return parts.join(' | ');
   }
 
+  isLearningDoc(doc: RagDocumentResponse): boolean {
+    const mode = typeof doc['mode'] === 'string' ? doc['mode'].trim().toLowerCase() : '';
+    return mode.includes('learning') || mode.includes('action') || mode.includes('extraction');
+  }
+
+  isStoryDoc(doc: RagDocumentResponse): boolean {
+    const mode = typeof doc['mode'] === 'string' ? doc['mode'].trim().toLowerCase() : '';
+    return !mode || mode.includes('story');
+  }
+
+  storyDocs(): RagDocumentResponse[] {
+    return this.docs().filter((doc) => this.isStoryDoc(doc));
+  }
+
+  learningDocs(): RagDocumentResponse[] {
+    return this.docs().filter((doc) => this.isLearningDoc(doc));
+  }
+
   coverUrl(doc: RagDocumentResponse): string {
     return typeof doc.coverUrl === 'string' ? doc.coverUrl.trim() : '';
   }

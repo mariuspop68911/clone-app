@@ -1,6 +1,9 @@
 <aside class="chapters-sidebar" aria-label="Book chapters">
   <div class="chapters-sidebar-header">
-    <p class="chapters-sidebar-eyebrow">Chapters</p>
+    <div class="chapters-sidebar-title">
+      <span class="chapters-sidebar-title-icon" aria-hidden="true">▣</span>
+      <span>Chapters</span>
+    </div>
   </div>
 
   @if (loading) {
@@ -14,107 +17,51 @@
           class="chapter-item"
           [class.chapter-item-active]="activeChapterIndex === index"
           [class.chapter-item-disabled]="!isChapterAvailable(index)"
+          [class.chapter-item-completed]="chapterStatus(index, chapter) === 'completed'"
         >
-          <button
-            type="button"
-            class="chapter-item-button"
-            [disabled]="!isChapterAvailable(index)"
-            (click)="selectChapter(index, chapter)"
-          >
-            <span class="chapter-item-index">{{ index + 1 }}</span>
-            <span class="chapter-item-copy">
-              <span class="chapter-item-title">{{ chapterLabel(index, chapter) }}</span>
-              @if (pageRange(chapter)) {
-                <span class="chapter-item-meta">{{ pageRange(chapter) }}</span>
-              }
+          <div class="chapter-item-header-row">
+            <div class="chapter-item-head">
+              <span class="chapter-item-index">{{ index + 1 }}</span>
+              <span class="chapter-item-copy">
+                <span class="chapter-item-title">{{ chapterLabel(index, chapter) }}</span>
+                @if (pageRange(chapter)) {
+                  <span class="chapter-item-meta">{{ pageRange(chapter) }}</span>
+                }
+              </span>
+            </div>
+
+            <span
+              class="chapter-status-badge"
+              [class.chapter-status-badge-completed]="chapterStatus(index, chapter) === 'completed'"
+              [class.chapter-status-badge-progress]="chapterStatus(index, chapter) === 'in-progress'"
+              [class.chapter-status-badge-upcoming]="chapterStatus(index, chapter) === 'upcoming'"
+            >
+              <span class="chapter-status-badge-icon" aria-hidden="true">
+                @if (chapterStatus(index, chapter) === 'completed') {
+                  ✓
+                } @else if (chapterStatus(index, chapter) === 'in-progress') {
+                  ◔
+                } @else {
+                  ◌
+                }
+              </span>
+              {{ chapterStatusLabel(index, chapter) }}
             </span>
-          </button>
+          </div>
 
-          @if (keyTakeaways(chapter).length) {
-            <section class="chapter-item-takeaways-card">
+          <div class="chapter-item-sections">
+            @for (section of sectionItems; track section.key) {
               <button
                 type="button"
-                class="chapter-item-takeaways-toggle"
-                (click)="toggleTakeaways(index, $event)"
-                [attr.aria-expanded]="isTakeawaysExpanded(index)"
+                class="chapter-section-button"
+                [disabled]="!sectionAvailable(index, chapter, section.key)"
+                (click)="selectSection(index, chapter, section.key)"
               >
-                <span class="chapter-item-takeaways-title">Key takeaways</span>
-                <span class="chapter-item-takeaways-icon">
-                  {{ isTakeawaysExpanded(index) ? 'Hide' : 'Show' }}
-                </span>
+                <span class="chapter-section-icon" aria-hidden="true">{{ section.icon }}</span>
+                <span class="chapter-section-label">{{ section.label }}</span>
               </button>
-
-              @if (isTakeawaysExpanded(index)) {
-                <span class="chapter-item-takeaways-list">
-                  @for (takeaway of keyTakeaways(chapter); track takeaway) {
-                    <span class="chapter-item-takeaway">
-                      <span class="chapter-item-takeaway-copy" [innerHTML]="takeawayHtml(takeaway)"></span>
-                    </span>
-                  }
-                </span>
-              }
-            </section>
-          }
-
-          @if (quiz(chapter) || isQuizGenerating(index)) {
-            <section class="chapter-item-takeaways-card">
-              <button
-                type="button"
-                class="chapter-item-takeaways-toggle"
-                (click)="toggleQuiz(index, $event)"
-                [attr.aria-expanded]="isQuizExpanded(index)"
-                [disabled]="isQuizGenerating(index) || !quiz(chapter)"
-              >
-                <span class="chapter-item-takeaways-title">
-                  Quiz
-                  @if (quizCompleted(chapter)) {
-                    <span class="chapter-item-quiz-complete">Completed</span>
-                  }
-                </span>
-                <span class="chapter-item-takeaways-icon">
-                  @if (isQuizGenerating(index)) {
-                    Generating...
-                  } @else {
-                    {{ isQuizExpanded(index) ? 'Hide' : 'Show' }}
-                  }
-                </span>
-              </button>
-
-              @if (isQuizExpanded(index) && quiz(chapter)) {
-                <swiper-container
-                  class="chapter-quiz-swiper"
-                  slides-per-view="1"
-                  space-between="12"
-                  grab-cursor="true"
-                >
-                  @for (question of quizQuestions(chapter); track question.question ?? $index; let questionIndex = $index) {
-                    <swiper-slide class="chapter-quiz-slide">
-                      <article class="chapter-quiz-card">
-                        <p class="chapter-quiz-question">
-                          {{ question.question }}
-                        </p>
-
-                        <div class="chapter-quiz-options">
-                          @for (option of question.options ?? []; track option; let optionIndex = $index) {
-                            <button
-                              type="button"
-                              class="chapter-quiz-option"
-                              [class.chapter-quiz-option-correct]="(showAnsweredOptionState(chapter, questionIndex, optionIndex) && isCorrectOption(chapter, questionIndex, optionIndex)) || shouldRevealCorrectOption(chapter, questionIndex, optionIndex)"
-                              [class.chapter-quiz-option-wrong]="showAnsweredOptionState(chapter, questionIndex, optionIndex) && !isCorrectOption(chapter, questionIndex, optionIndex)"
-                              [disabled]="isQuestionAnswered(chapter, questionIndex)"
-                              (click)="selectQuizAnswer(chapter, questionIndex, optionIndex, $event)"
-                            >
-                              {{ option }}
-                            </button>
-                          }
-                        </div>
-                      </article>
-                    </swiper-slide>
-                  }
-                </swiper-container>
-              }
-            </section>
-          }
+            }
+          </div>
         </article>
       }
     </nav>

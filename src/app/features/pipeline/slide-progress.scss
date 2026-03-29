@@ -1,0 +1,54 @@
+:host {
+  display: block;
+}
+
+.slide-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: min(100%, 26rem);
+  margin: 0.35rem auto 0.85rem;
+  padding: 0 0.2rem;
+}
+
+.slide-progress-segment {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.slide-progress-dot {
+  width: 0.86rem;
+  height: 0.86rem;
+  flex: 0 0 0.86rem;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  transition: background 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.slide-progress-dot-current {
+  transform: scale(1.06);
+}
+
+.slide-progress-dot-viewed {
+  box-shadow: 0 2px 8px rgba(17, 38, 58, 0.08);
+}
+
+.slide-progress-check {
+  font-size: 0.54rem;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.slide-progress-line {
+  height: 2px;
+  flex: 1 1 auto;
+  border-radius: 999px;
+  margin: 0 0.2rem;
+  transition: background 160ms ease, opacity 160ms ease;
+}
