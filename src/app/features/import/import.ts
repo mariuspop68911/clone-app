@@ -1,27 +1,34 @@
 import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { BookImportPreviewPage, BooksApiService } from '../../core/api/books-api.service';
 import { RagIngestMode } from '../../core/api/rag-api.service';
-import { IngestProgressComponent } from './ingest-progress';
 import {
-  IngestProgressService,
-  IngestProgressStatus
+  IngestProgressService
 } from './ingest-progress.service';
 import { ImportModeSelectorComponent } from './import-mode-selector';
 import { PdfPageReviewComponent } from './pdf-page-review';
+import { LoadingOverlayService } from '../../shared/loading-overlay.service';
 
 @Component({
   selector: 'app-import',
-  imports: [FormsModule, PdfPageReviewComponent, ImportModeSelectorComponent, IngestProgressComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    PdfPageReviewComponent,
+    ImportModeSelectorComponent
+  ],
   templateUrl: './import.html',
   styleUrl: './import.scss'
 })
 export class ImportComponent implements OnInit, OnDestroy {
+  private static readonly documentsRefreshEvent = 'codex:documents-refresh';
   private static pdfWorkerConfigured = false;
   private ingestUploadSubscription: Subscription | null = null;
   private ingestStateSubscription: Subscription | null = null;
+  private ingestOverlayToken: symbol | null = null;
 
   docKey = '';
   selectedFile: File | null = null;
@@ -31,13 +38,14 @@ export class ImportComponent implements OnInit, OnDestroy {
   sourceLabel = signal('');
   reviewPages = signal<BookImportPreviewPage[]>([]);
   ingestMode = signal<RagIngestMode>('Story Mode');
-  ingestStatus = signal<IngestProgressStatus | null>(null);
   ingestActive = signal(false);
+  usableDocKey = signal('');
 
   constructor(
     private readonly booksApi: BooksApiService,
     private readonly route: ActivatedRoute,
-    private readonly ingestProgress: IngestProgressService
+    private readonly ingestProgress: IngestProgressService,
+    private readonly loadingOverlay: LoadingOverlayService
   ) {}
 
   ngOnInit(): void {
@@ -52,6 +60,7 @@ export class ImportComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopIngestTracking();
+    this.hideIngestOverlay();
   }
 
   onFileChange(event: Event): void {
@@ -121,6 +130,7 @@ export class ImportComponent implements OnInit, OnDestroy {
 
     this.loading.set(true);
     this.message.set('Preparing PDF for ingest...');
+    this.showIngestOverlay('Preparing document...');
 
     let fileForIngest = this.selectedFile;
     if (Array.isArray(excludedPageNumbers)) {
@@ -130,6 +140,7 @@ export class ImportComponent implements OnInit, OnDestroy {
         console.error('[Import] Failed to prepare filtered PDF', error);
         this.message.set('Could not prepare the filtered PDF for ingest.');
         this.loading.set(false);
+        this.hideIngestOverlay();
         return;
       }
     }
@@ -144,57 +155,63 @@ export class ImportComponent implements OnInit, OnDestroy {
 
     this.stopIngestTracking();
     this.ingestActive.set(true);
-    this.ingestStatus.set({
-      ingestId: task.ingestId,
-      docKey,
-      mode: this.ingestMode(),
-      progressPercent: 0,
-      stage: 'STARTED',
-      message: 'Starting ingest...',
-      done: false,
-      failed: false
-    });
+    this.usableDocKey.set('');
     this.message.set('Uploading document...');
+    this.showIngestOverlay('Uploading document...');
 
     this.ingestStateSubscription = task.status$.subscribe({
       next: (status) => {
-        this.ingestStatus.set(status);
         if (status.failed) {
           this.ingestActive.set(false);
           this.loading.set(false);
           this.message.set(status.message || 'Ingest failed.');
+          this.hideIngestOverlay();
           this.stopIngestTracking();
         } else if (status.done) {
           this.ingestActive.set(false);
           this.loading.set(false);
           this.message.set(status.message || 'File ingested successfully.');
+          this.hideIngestOverlay();
           this.selectedFile = null;
           this.reviewFile.set(null);
           this.sourceLabel.set('');
           this.reviewPages.set([]);
           this.ingestMode.set('Story Mode');
           this.stopIngestTracking();
+        } else if (status.usable) {
+          this.usableDocKey.set(status.docKey?.trim() || docKey);
+          this.message.set(
+            status.message ||
+              'First chapter ready. You can open the document now while the remaining chapters keep processing in the background.'
+          );
+          this.hideIngestOverlay();
         }
       },
       error: (error) => {
         this.ingestActive.set(false);
         this.loading.set(false);
         this.message.set(`Ingest status failed: ${this.readApiError(error)}`);
+        this.hideIngestOverlay();
       }
     });
 
     this.ingestUploadSubscription = task.upload$.subscribe({
-      next: () => {
+      next: (response) => {
         this.loading.set(false);
-        if (!this.ingestStatus()?.done) {
-          this.message.set('Upload complete. Waiting for ingest progress...');
-        }
+        const usableDocKey = response.docKey?.trim() || docKey;
+        this.usableDocKey.set(usableDocKey);
+        this.message.set(
+          'First chapter ready. You can open the document now while the remaining chapters keep processing in the background.'
+        );
+        this.dispatchDocumentsRefresh();
+        this.hideIngestOverlay();
       },
       error: (err) => {
         if (err?.name === 'TimeoutError') {
           this.message.set('Ingest timed out after 120s. Backend is taking too long or is unreachable.');
           this.loading.set(false);
           this.ingestActive.set(false);
+          this.hideIngestOverlay();
           return;
         }
 
@@ -206,12 +223,9 @@ export class ImportComponent implements OnInit, OnDestroy {
         this.message.set(`Ingest failed (${status}): ${backendMessage}`);
         this.loading.set(false);
         this.ingestActive.set(false);
+        this.hideIngestOverlay();
       }
     });
-  }
-
-  shouldShowIngestProgress(): boolean {
-    return this.ingestStatus() !== null;
   }
 
   setIngestMode(mode: RagIngestMode): void {
@@ -398,8 +412,9 @@ export class ImportComponent implements OnInit, OnDestroy {
 
   private resetIngestProgress(): void {
     this.stopIngestTracking();
-    this.ingestStatus.set(null);
     this.ingestActive.set(false);
+    this.usableDocKey.set('');
+    this.hideIngestOverlay();
   }
 
   private readApiError(error: unknown): string {
@@ -417,5 +432,27 @@ export class ImportComponent implements OnInit, OnDestroy {
           err?.message ??
           'unknown error';
     return `${status}: ${backendMessage}`;
+  }
+
+  private dispatchDocumentsRefresh(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent(ImportComponent.documentsRefreshEvent));
+  }
+
+  private showIngestOverlay(message: string): void {
+    this.hideIngestOverlay();
+    this.ingestOverlayToken = this.loadingOverlay.show(message);
+  }
+
+  private hideIngestOverlay(): void {
+    if (!this.ingestOverlayToken) {
+      return;
+    }
+
+    this.loadingOverlay.hide(this.ingestOverlayToken);
+    this.ingestOverlayToken = null;
   }
 }

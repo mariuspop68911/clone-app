@@ -12,6 +12,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { DomSanitizer, SafeHtml, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { DocumentChatComponent } from '../document-chat';
+import { IngestProgressService, IngestProgressStatus } from '../import/ingest-progress.service';
 import {
   RagApiService,
   RagGenerateChapterQuizRequest,
@@ -152,6 +153,7 @@ export class PipelineComponent {
   private audioUnlocked = false;
   private generateAllStartedAt = 0;
   private autoRequestedInitialSlides = false;
+  private learningRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly failedUriMap = signal<Record<string, true>>({});
   private readonly quizGeneratingChapterIndexMap = signal<Record<number, true>>({});
   private readonly learningImageActiveIndexMap = signal<Record<string, number>>({});
@@ -161,6 +163,7 @@ export class PipelineComponent {
   private readonly learningExplainService = inject(LearningExplainService);
   private readonly appShellUi = inject(AppShellUiService);
   private readonly loadingOverlay = inject(LoadingOverlayService);
+  private readonly ingestProgress = inject(IngestProgressService);
 
   docKey = signal('');
   viewMode = signal<PipelineViewMode>('comic');
@@ -389,6 +392,24 @@ export class PipelineComponent {
       );
     });
 
+    effect(() => {
+      const currentDocKey = this.docKey().trim();
+      const tracked = this.ingestProgress.trackedStatus(currentDocKey);
+      const canRefreshLearning =
+        tracked?.backgroundProcessing === true &&
+        (this.documentMode() === 'Learning Mode' ||
+          this.documentMode() === 'Action Mode' ||
+          this.documentMode() === 'Extraction Mode' ||
+          (this.learningContext()?.chapters?.length ?? 0) > 0);
+
+      if (!currentDocKey || !canRefreshLearning) {
+        this.clearBackgroundLearningRefreshTimer();
+        return;
+      }
+
+      this.scheduleBackgroundLearningRefresh(currentDocKey);
+    });
+
     if (typeof window !== 'undefined') {
       this.audio = new Audio();
       window.addEventListener('pointerdown', this.onFirstInteractionBound, { passive: true });
@@ -468,6 +489,7 @@ export class PipelineComponent {
       this.lastAutoLoadTriggerKey = '';
       this.failedUriMap.set({});
       this.stopCardTts();
+      this.clearBackgroundLearningRefreshTimer();
 
       if (key.trim()) {
         this.loadDocumentMode(key);
@@ -483,6 +505,7 @@ export class PipelineComponent {
     this.clearPersistLastSlideTimer();
     this.clearSelectionModeLongPressTimer();
     this.clearChapterQuizCheckTimer();
+    this.clearBackgroundLearningRefreshTimer();
     if (typeof window !== 'undefined') {
       window.removeEventListener('pointerdown', this.onFirstInteractionBound);
     }
@@ -686,8 +709,23 @@ export class PipelineComponent {
     return this.activeChapterIndexComputed();
   }
 
+  backgroundIngestStatus(): IngestProgressStatus | null {
+    return this.ingestProgress.trackedStatus(this.docKey());
+  }
+
   availableChapterIndexes(): number[] {
     return this.availableChapterIndexesComputed();
+  }
+
+  isBackgroundProcessingActive(): boolean {
+    return this.backgroundIngestStatus()?.backgroundProcessing === true;
+  }
+
+  backgroundProcessingMessage(): string {
+    return (
+      this.backgroundIngestStatus()?.message ||
+      'First chapter ready. Remaining chapters are still processing in the background.'
+    );
   }
 
   quizGeneratingChapterIndexes(): number[] {
@@ -1809,6 +1847,73 @@ export class PipelineComponent {
 
   private currentChapterSignal(): RagLearningPipelineChapter | null {
     return this.currentChapterComputed();
+  }
+
+  private scheduleBackgroundLearningRefresh(docKey: string): void {
+    if (this.learningRefreshTimer !== null) {
+      return;
+    }
+
+    this.learningRefreshTimer = setTimeout(() => {
+      this.learningRefreshTimer = null;
+
+      if (
+        this.docKey().trim() !== docKey ||
+        this.ingestProgress.trackedStatus(docKey)?.backgroundProcessing !== true
+      ) {
+        return;
+      }
+
+      this.refreshBackgroundLearningState(docKey);
+      this.scheduleBackgroundLearningRefresh(docKey);
+    }, 4000);
+  }
+
+  private clearBackgroundLearningRefreshTimer(): void {
+    if (this.learningRefreshTimer === null) {
+      return;
+    }
+
+    clearTimeout(this.learningRefreshTimer);
+    this.learningRefreshTimer = null;
+  }
+
+  private refreshBackgroundLearningState(docKey: string): void {
+    if (this.loading() || this.clearing()) {
+      return;
+    }
+
+    this.ragApi.getLearningSlides(docKey).subscribe({
+      next: (response) => {
+        this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
+        this.appendFetchedLearningSlides(Array.isArray(response.slides) ? response.slides : []);
+        const totalCount = this.toNullableFiniteNumber(response.count);
+        const returnedCount = Array.isArray(response.slides) ? response.slides.length : 0;
+        const backendLastLimit = this.toNullableFiniteNumber(response.lastLimit);
+        const hasMore =
+          totalCount !== null && backendLastLimit !== null
+            ? totalCount > backendLastLimit
+            : returnedCount >= PipelineComponent.comicBatchSize;
+        this.showLoadMoreLearningSlide.set(hasMore);
+
+        if (this.sourceOpen()) {
+          void this.loadSourcePagesForCurrentSlide();
+        }
+      },
+      error: (err) => {
+        const statusCode =
+          typeof err?.status === 'number' && Number.isFinite(err.status) ? err.status : 0;
+        if (statusCode === 404) {
+          this.ingestProgress.stopTrackingDoc(docKey);
+          this.clearBackgroundLearningRefreshTimer();
+          if (this.docKey().trim() === docKey) {
+            this.learningSlides.set([]);
+            this.learningContext.set(null);
+            this.slidesMessage.set('This document was removed while background processing was running.');
+          }
+        }
+      }
+    });
   }
 
   private findSlideIndexForChapter(chapter: RagLearningPipelineChapter): number | null {

@@ -1,7 +1,7 @@
 <aside class="chapters-sidebar" aria-label="Book chapters">
   <div class="chapters-sidebar-header">
     <div class="chapters-sidebar-title">
-      <span class="chapters-sidebar-title-icon" aria-hidden="true">▣</span>
+      <span class="chapters-sidebar-title-icon" aria-hidden="true">#</span>
       <span>Chapters</span>
     </div>
   </div>
@@ -38,11 +38,11 @@
             >
               <span class="chapter-status-badge-icon" aria-hidden="true">
                 @if (chapterStatus(index, chapter) === 'completed') {
-                  ✓
+                  OK
                 } @else if (chapterStatus(index, chapter) === 'in-progress') {
-                  ◔
+                  >
                 } @else {
-                  ◌
+                  o
                 }
               </span>
               {{ chapterStatusLabel(index, chapter) }}

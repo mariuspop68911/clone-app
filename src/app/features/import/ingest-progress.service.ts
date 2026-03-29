@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import {
   Observable,
+  Subscription,
+  Subject,
   catchError,
   filter,
   ignoreElements,
@@ -33,6 +35,8 @@ export interface IngestProgressStatus {
   message: string;
   done: boolean;
   failed: boolean;
+  usable: boolean;
+  backgroundProcessing: boolean;
   chunksInserted?: number;
   updatedAt?: string;
 }
@@ -60,10 +64,20 @@ interface RawIngestProgressStatus {
   updatedAt?: unknown;
 }
 
+interface TrackedIngestTask {
+  ingestId: string;
+  docKey: string;
+  stop$: Subject<void>;
+  uploadSubscription: Subscription;
+  statusSubscription: Subscription;
+}
+
 @Injectable({ providedIn: 'root' })
 export class IngestProgressService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api/rag';
+  private readonly trackedStatuses = signal<Record<string, IngestProgressStatus>>({});
+  private readonly trackedTasks = new Map<string, TrackedIngestTask>();
 
   createIngestId(): string {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -74,8 +88,10 @@ export class IngestProgressService {
 
   startIngest(request: IngestProgressRequest): IngestProgressTask {
     const ingestId = this.createIngestId();
+    const requestedDocKey = request.docKey.trim();
+    const stop$ = new Subject<void>();
     const formData = new FormData();
-    formData.append('docKey', request.docKey);
+    formData.append('docKey', requestedDocKey);
     formData.append('mode', request.mode);
     formData.append('ingestId', ingestId);
     formData.append('file', request.file, request.file.name);
@@ -85,7 +101,8 @@ export class IngestProgressService {
 
     const upload$ = this.http
       .post<RagIngestResponse>(`${this.baseUrl}/ingest`, formData)
-      .pipe(shareReplay({ bufferSize: 1, refCount: true }));
+      .pipe(takeUntil(stop$))
+      .pipe(shareReplay({ bufferSize: 1, refCount: false }));
 
     const uploadError$ = upload$.pipe(
       ignoreElements(),
@@ -108,15 +125,137 @@ export class IngestProgressService {
       filter((status): status is RawIngestProgressStatus => status !== null),
       map((status) => this.normalizeStatus(status, ingestId)),
       takeUntil(uploadError$),
+      takeUntil(stop$),
       takeWhile((status) => !status.done && !status.failed, true),
-      shareReplay({ bufferSize: 1, refCount: true })
+      shareReplay({ bufferSize: 1, refCount: false })
     );
+
+    this.updateTrackedStatus(requestedDocKey, {
+      ingestId,
+      docKey: requestedDocKey,
+      mode: request.mode,
+      progressPercent: 0,
+      stage: 'STARTED',
+      message: 'Uploading document...',
+      done: false,
+      failed: false,
+      usable: false,
+      backgroundProcessing: false
+    });
+
+    const uploadSubscription = upload$.subscribe({
+      next: (response) => {
+        const responseDocKey =
+          typeof response.docKey === 'string' && response.docKey.trim()
+            ? response.docKey.trim()
+            : requestedDocKey;
+        this.renameTrackedStatus(requestedDocKey, responseDocKey, ingestId);
+        this.updateTrackedStatus(responseDocKey, {
+          ingestId,
+          docKey: responseDocKey,
+          documentId: typeof response.documentId === 'number' ? response.documentId : undefined,
+          mode: request.mode,
+          progressPercent: Math.max(8, this.trackedStatus(responseDocKey)?.progressPercent ?? 0),
+          stage: 'FIRST_CHAPTER_READY',
+          message:
+            'First chapter ready. You can open the document now while the remaining chapters keep processing in the background.',
+          done: false,
+          failed: false,
+          usable: true,
+          backgroundProcessing: true,
+          chunksInserted:
+            typeof response.chunksInserted === 'number' ? response.chunksInserted : undefined
+        });
+      },
+      error: (error) => {
+        this.updateTrackedStatus(requestedDocKey, {
+          ...this.failedStatus(ingestId, requestedDocKey),
+          message: this.readErrorMessage(error)
+        });
+        this.cleanupTrackedTask(ingestId);
+      }
+    });
+
+    const statusSubscription = status$.subscribe({
+      next: (status) => {
+        const trackedDocKey =
+          (typeof status.docKey === 'string' && status.docKey.trim()) ||
+          this.trackedTaskDocKey(ingestId) ||
+          requestedDocKey;
+        const docKey = typeof trackedDocKey === 'string' ? trackedDocKey.trim() : requestedDocKey;
+        const current = this.trackedStatus(docKey);
+        const usable = current?.usable === true || status.done;
+        this.updateTrackedStatus(docKey, {
+          ...status,
+          docKey,
+          usable,
+          backgroundProcessing: usable && !status.done && !status.failed,
+          message:
+            usable && !status.done && !status.failed
+              ? this.backgroundProcessingMessage(status.message)
+              : status.message
+        });
+
+        if (status.done || status.failed) {
+          this.cleanupTrackedTask(ingestId);
+        }
+      },
+      error: (error) => {
+        const docKey = this.trackedTaskDocKey(ingestId) ?? requestedDocKey;
+        this.updateTrackedStatus(docKey, {
+          ...this.failedStatus(ingestId, docKey),
+          usable: this.trackedStatus(docKey)?.usable === true,
+          backgroundProcessing: false,
+          message: this.readErrorMessage(error)
+        });
+        this.cleanupTrackedTask(ingestId);
+      }
+    });
+
+    this.trackedTasks.set(ingestId, {
+      ingestId,
+      docKey: requestedDocKey,
+      stop$,
+      uploadSubscription,
+      statusSubscription
+    });
 
     return {
       ingestId,
       upload$,
       status$
     };
+  }
+
+  trackedStatus(docKey: string | null | undefined): IngestProgressStatus | null {
+    const normalizedDocKey = typeof docKey === 'string' ? docKey.trim() : '';
+    if (!normalizedDocKey) {
+      return null;
+    }
+    return this.trackedStatuses()[normalizedDocKey] ?? null;
+  }
+
+  trackedStatusesSnapshot(): IngestProgressStatus[] {
+    return Object.values(this.trackedStatuses());
+  }
+
+  stopTrackingDoc(docKey: string | null | undefined): void {
+    const normalizedDocKey = typeof docKey === 'string' ? docKey.trim() : '';
+    if (!normalizedDocKey) {
+      return;
+    }
+
+    for (const [ingestId, task] of this.trackedTasks.entries()) {
+      if (task.docKey === normalizedDocKey) {
+        this.cleanupTrackedTask(ingestId);
+      }
+    }
+
+    this.trackedStatuses.update((current) => {
+      const next = { ...current };
+      delete next[normalizedDocKey];
+      return next;
+    });
   }
 
   private normalizePercent(value: unknown): number {
@@ -152,9 +291,113 @@ export class IngestProgressService {
       message: this.readString(status.message) ?? '',
       done,
       failed,
+      usable: done,
+      backgroundProcessing: false,
       chunksInserted: this.readNumber(status.chunksInserted),
       updatedAt: this.readString(status.updatedAt)
     };
+  }
+
+  private trackedTaskDocKey(ingestId: string): string | null {
+    return this.trackedTasks.get(ingestId)?.docKey ?? null;
+  }
+
+  private updateTrackedStatus(docKey: string, status: IngestProgressStatus): void {
+    const normalizedDocKey = docKey.trim();
+    if (!normalizedDocKey) {
+      return;
+    }
+
+    this.trackedStatuses.update((current) => ({
+      ...current,
+      [normalizedDocKey]: {
+        ...current[normalizedDocKey],
+        ...status,
+        docKey: normalizedDocKey
+      }
+    }));
+  }
+
+  private renameTrackedStatus(previousDocKey: string, nextDocKey: string, ingestId: string): void {
+    const normalizedPrevious = previousDocKey.trim();
+    const normalizedNext = nextDocKey.trim();
+    if (!normalizedPrevious || !normalizedNext || normalizedPrevious === normalizedNext) {
+      const task = this.trackedTasks.get(ingestId);
+      if (task && normalizedNext) {
+        this.trackedTasks.set(ingestId, { ...task, docKey: normalizedNext });
+      }
+      return;
+    }
+
+    this.trackedStatuses.update((current) => {
+      const next = { ...current };
+      const existing = next[normalizedPrevious];
+      delete next[normalizedPrevious];
+      if (existing) {
+        next[normalizedNext] = {
+          ...existing,
+          docKey: normalizedNext
+        };
+      }
+      return next;
+    });
+
+    const task = this.trackedTasks.get(ingestId);
+    if (task) {
+      this.trackedTasks.set(ingestId, { ...task, docKey: normalizedNext });
+    }
+  }
+
+  private cleanupTrackedTask(ingestId: string): void {
+    const task = this.trackedTasks.get(ingestId);
+    if (!task) {
+      return;
+    }
+
+    task.uploadSubscription.unsubscribe();
+    task.statusSubscription.unsubscribe();
+    task.stop$.next();
+    task.stop$.complete();
+    this.trackedTasks.delete(ingestId);
+  }
+
+  private backgroundProcessingMessage(message: string): string {
+    const normalized = message.trim();
+    if (!normalized) {
+      return 'First chapter ready. Remaining chapters are still processing in the background.';
+    }
+    return `First chapter ready. ${normalized}`;
+  }
+
+  private failedStatus(ingestId: string, docKey: string): IngestProgressStatus {
+    return {
+      ingestId,
+      docKey,
+      progressPercent: 100,
+      stage: 'FAILED',
+      message: 'Ingest failed.',
+      done: false,
+      failed: true,
+      usable: false,
+      backgroundProcessing: false
+    };
+  }
+
+  private readErrorMessage(error: unknown): string {
+    const err = error as {
+      status?: number;
+      error?: unknown;
+      message?: string;
+    };
+    const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+    const backendMessage =
+      typeof err?.error === 'string'
+        ? err.error
+        : (err?.error as { message?: string; error?: string } | undefined)?.message ??
+          (err?.error as { message?: string; error?: string } | undefined)?.error ??
+          err?.message ??
+          'unknown error';
+    return `${status}: ${backendMessage}`;
   }
 
   private shouldRetryStatusRequest(error: unknown): boolean {

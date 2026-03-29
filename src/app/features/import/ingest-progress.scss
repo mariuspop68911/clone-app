@@ -50,6 +50,13 @@
   font-size: 0.84rem;
 }
 
+.ingest-progress-note {
+  margin: 0;
+  color: #315a79;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
 .ingest-progress-failed {
   border-color: #efc3c8;
   background: #fff7f8;
@@ -65,4 +72,13 @@
 
 .ingest-progress-done .ingest-progress-bar {
   background: linear-gradient(135deg, #28724b, #53b47d);
+}
+
+.ingest-progress-usable:not(.ingest-progress-done):not(.ingest-progress-failed) {
+  border-color: #bad8c4;
+  background: #f7fcf8;
+}
+
+.ingest-progress-usable:not(.ingest-progress-done):not(.ingest-progress-failed) .ingest-progress-bar {
+  background: linear-gradient(135deg, #2d8b57, #67b97e);
 }

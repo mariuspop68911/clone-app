@@ -14,7 +14,7 @@
       <p class="message">{{ message() }}</p>
     }
 
-    @if (docs().length) {
+    @if (mergedDocs().length) {
       <section class="docs-group">
         <h2 class="docs-group-title">Stories</h2>
         <ul class="docs-grid">
@@ -24,6 +24,7 @@
                 <div class="doc-card-shell">
                   <a
                     class="doc-card doc-link"
+                    [class.doc-card-processing]="isDocumentProcessing(doc)"
                     [routerLink]="['/documents', docKeyForRoute(doc)]"
                   >
                     @if (coverUrl(doc)) {
@@ -34,6 +35,9 @@
                       />
                     }
                     <h3>{{ displayTitle(doc, $index) }}</h3>
+                    @if (documentStatusText(doc)) {
+                      <p class="doc-status">{{ documentStatusText(doc) }}</p>
+                    }
                   </a>
 
                   <button
@@ -71,6 +75,7 @@
                 <div class="doc-card-shell">
                   <a
                     class="doc-card doc-link"
+                    [class.doc-card-processing]="isDocumentProcessing(doc)"
                     [routerLink]="['/documents', docKeyForRoute(doc)]"
                   >
                     @if (coverUrl(doc)) {
@@ -81,6 +86,9 @@
                       />
                     }
                     <h3>{{ displayTitle(doc, $index) }}</h3>
+                    @if (documentStatusText(doc)) {
+                      <p class="doc-status">{{ documentStatusText(doc) }}</p>
+                    }
                   </a>
 
                   <button

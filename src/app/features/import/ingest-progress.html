@@ -3,6 +3,7 @@
     class="ingest-progress"
     [class.ingest-progress-failed]="isFailed()"
     [class.ingest-progress-done]="isDone()"
+    [class.ingest-progress-usable]="isUsable()"
   >
     <div class="ingest-progress-head">
       <div class="ingest-progress-track" aria-hidden="true">
@@ -15,6 +16,12 @@
 
     @if (stageLabel()) {
       <p class="ingest-progress-stage">{{ stageLabel() }}</p>
+    }
+
+    @if (isBackgroundProcessing()) {
+      <p class="ingest-progress-note">
+        The first chapter and learning context are ready now. Remaining chapters will keep appearing as backend processing finishes.
+      </p>
     }
   </section>
 }

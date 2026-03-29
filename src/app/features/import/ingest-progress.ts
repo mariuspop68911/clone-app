@@ -24,10 +24,15 @@ export class IngestProgressComponent {
   });
   readonly isFailed = computed(() => !!this.status()?.failed);
   readonly isDone = computed(() => !!this.status()?.done);
+  readonly isUsable = computed(() => !!this.status()?.usable && !this.status()?.failed);
+  readonly isBackgroundProcessing = computed(
+    () => !!this.status()?.backgroundProcessing && !this.status()?.failed
+  );
 
   private friendlyStageLabel(stage: string): string {
     const stageLabels: Record<string, string> = {
       STARTED: 'Starting ingest',
+      FIRST_CHAPTER_READY: 'First chapter ready',
       EXTRACTING_PAGES: 'Extracting PDF pages',
       SAVING_DOCUMENT: 'Saving document',
       SAVING_COVER: 'Saving cover',

@@ -72,3 +72,34 @@
   flex-wrap: wrap;
   gap: 0.75rem;
 }
+
+.mode-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.7rem 1.1rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.mode-action-button-primary {
+  background: #1b6ca8;
+  border-color: #1b6ca8;
+  color: #ffffff;
+}
+
+.mode-action-button-secondary {
+  background: #ffffff;
+  border-color: #c9d8e6;
+  color: #214967;
+}
+
+.mode-action-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}

@@ -29,3 +29,56 @@ button {
 .msg {
   min-height: 1.2rem;
 }
+
+.ready-callout {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #cfe3d5;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f7fcf8 0%, #ffffff 100%);
+}
+
+.ready-callout-title,
+.ready-callout-copy {
+  margin: 0;
+}
+
+.ready-callout-title {
+  color: #1f5f3d;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.ready-callout-copy {
+  color: #23465f;
+  line-height: 1.55;
+}
+
+.ready-callout-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ready-callout-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.ready-callout-actions a:first-child {
+  background: #1f6a45;
+  color: #ffffff;
+}
+
+.ready-callout-actions a:last-child {
+  border: 1px solid #c4d8e8;
+  color: #214967;
+  background: #ffffff;
+}

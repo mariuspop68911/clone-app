@@ -22,10 +22,10 @@
   </div>
 
   <div class="mode-actions">
-    <button type="button" class="secondary-action" (click)="cancelRequested.emit()" [disabled]="busy">
+    <button type="button" class="mode-action-button mode-action-button-secondary" (click)="cancelRequested.emit()" [disabled]="busy">
       Choose Another File
     </button>
-    <button type="button" class="primary-action" (click)="confirmRequested.emit()" [disabled]="busy">
+    <button type="button" class="mode-action-button mode-action-button-primary" (click)="confirmRequested.emit()" [disabled]="busy">
       {{ selectedMode === 'Story Mode' ? 'Confirm and Review' : 'Confirm and Import' }}
     </button>
   </div>

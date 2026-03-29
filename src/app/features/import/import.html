@@ -41,11 +41,20 @@
     />
   }
 
-  @if (shouldShowIngestProgress()) {
-    <app-ingest-progress [status]="ingestStatus()"></app-ingest-progress>
+  @if (usableDocKey()) {
+    <section class="ready-callout">
+      <p class="ready-callout-title">First chapter ready</p>
+      <p class="ready-callout-copy">
+        The document is usable now. You can open the learning context immediately while the rest of the chapters continue processing in the background.
+      </p>
+      <div class="ready-callout-actions">
+        <a [routerLink]="['/documents', usableDocKey()]">Open document</a>
+        <a routerLink="/documents">View library</a>
+      </div>
+    </section>
   }
 
-  @if (message() && (!ingestStatus() || !ingestActive())) {
+  @if (message() && !ingestActive()) {
     <p class="msg">{{ message() }}</p>
   }
 </section>

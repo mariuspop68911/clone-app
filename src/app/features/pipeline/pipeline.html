@@ -85,6 +85,12 @@
         <p class="status">{{ message() }}</p>
       }
 
+      @if (isBackgroundProcessingActive()) {
+        <p class="status">
+          {{ backgroundProcessingMessage() }}
+        </p>
+      }
+
       @if (ttsMessage()) {
         <p class="status">{{ ttsMessage() }}</p>
       }

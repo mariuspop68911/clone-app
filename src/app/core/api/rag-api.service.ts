@@ -210,14 +210,6 @@ export interface RagLearningChapterQuiz {
 export interface RagLearningPipelineContextResponse {
   docKey?: string;
   docId?: number;
-  mainTopics?: string[];
-  coreConcepts?: string[];
-  keyTerms?: string[];
-  importantExamples?: string[];
-  causeAndEffect?: string[];
-  commonMisunderstandings?: string[];
-  importantTakeaways?: string[];
-  teachingInsights?: string[];
   chapters?: RagLearningPipelineChapter[];
   [key: string]: unknown;
 }
@@ -521,14 +513,6 @@ interface PipelineLearningChapterQuizRaw {
 interface PipelineLearningContextResponse {
   docKey?: string;
   docId?: number;
-  mainTopics?: string[];
-  coreConcepts?: string[];
-  keyTerms?: string[];
-  importantExamples?: string[];
-  causeAndEffect?: string[];
-  commonMisunderstandings?: string[];
-  importantTakeaways?: string[];
-  teachingInsights?: string[];
   chapters?: PipelineLearningChapterRaw[];
   [key: string]: unknown;
 }
@@ -992,14 +976,6 @@ export class RagApiService {
     return {
       docKey: this.toTrimmedString(response.docKey),
       docId: response.docId,
-      mainTopics: this.toStringList(response.mainTopics),
-      coreConcepts: this.toStringList(response.coreConcepts),
-      keyTerms: this.toStringList(response.keyTerms),
-      importantExamples: this.toStringList(response.importantExamples),
-      causeAndEffect: this.toStringList(response.causeAndEffect),
-      commonMisunderstandings: this.toStringList(response.commonMisunderstandings),
-      importantTakeaways: this.toStringList(response.importantTakeaways),
-      teachingInsights: this.toStringList(response.teachingInsights),
       chapters: Array.isArray(response.chapters)
         ? response.chapters.map((chapter) => ({
             chapterIndex:

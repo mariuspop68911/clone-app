@@ -100,7 +100,7 @@ h1 {
 
 .doc-card {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 1fr auto auto;
   align-items: stretch;
   height: 100%;
   min-height: 210px;
@@ -134,6 +134,19 @@ h1 {
   text-align: center;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+.doc-status {
+  margin: 0.35rem 0 0;
+  color: #3d6179;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.doc-card-processing {
+  border-color: #c7dfcf;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fcf9 100%);
 }
 
 .doc-cover {

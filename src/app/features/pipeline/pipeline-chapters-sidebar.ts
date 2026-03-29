@@ -22,10 +22,10 @@ export class PipelineChaptersSidebarComponent {
   @Output() sectionSelected = new EventEmitter<ChapterSectionSelection>();
 
   readonly sectionItems: { key: ChapterSection; label: string; icon: string }[] = [
-    { key: 'summary', label: 'Summary', icon: '▣' },
-    { key: 'takeaways', label: 'Key Takeaways', icon: '◈' },
-    { key: 'quiz', label: 'Quiz', icon: '◌' },
-    { key: 'review', label: 'Review', icon: '✦' }
+    { key: 'summary', label: 'Summary', icon: '#' },
+    { key: 'takeaways', label: 'Key Takeaways', icon: '*' },
+    { key: 'quiz', label: 'Quiz', icon: '?' },
+    { key: 'review', label: 'Review', icon: '+' }
   ];
 
   trackChapter(index: number, chapter: RagLearningPipelineChapter): number | string {
@@ -50,7 +50,10 @@ export class PipelineChaptersSidebarComponent {
     return this.availableChapterIndexes.includes(index);
   }
 
-  chapterStatus(index: number, chapter: RagLearningPipelineChapter): 'completed' | 'in-progress' | 'upcoming' {
+  chapterStatus(
+    index: number,
+    chapter: RagLearningPipelineChapter
+  ): 'completed' | 'in-progress' | 'upcoming' {
     if (this.quizCompleted(chapter)) {
       return 'completed';
     }

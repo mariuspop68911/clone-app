@@ -1,7 +1,8 @@
 import { isPlatformBrowser } from '@angular/common';
-import { Component, Inject, OnInit, PLATFORM_ID, signal } from '@angular/core';
+import { Component, Inject, OnDestroy, OnInit, PLATFORM_ID, computed, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RagApiService, RagDocumentResponse } from '../../core/api/rag-api.service';
+import { IngestProgressService } from '../import/ingest-progress.service';
 
 @Component({
   selector: 'app-documents',
@@ -9,15 +10,18 @@ import { RagApiService, RagDocumentResponse } from '../../core/api/rag-api.servi
   templateUrl: './documents.html',
   styleUrl: './documents.scss'
 })
-export class DocumentsComponent implements OnInit {
+export class DocumentsComponent implements OnInit, OnDestroy {
   private static readonly documentsRefreshEvent = 'codex:documents-refresh';
+  private readonly onDocumentsRefreshBound = () => this.loadDocuments();
   docs = signal<RagDocumentResponse[]>([]);
   loading = signal(false);
   message = signal('');
   deletingDocKey = signal('');
+  readonly mergedDocs = computed(() => this.mergeTrackedDocs(this.docs()));
 
   constructor(
     private readonly ragApi: RagApiService,
+    private readonly ingestProgress: IngestProgressService,
     @Inject(PLATFORM_ID) private readonly platformId: object
   ) {}
 
@@ -25,7 +29,15 @@ export class DocumentsComponent implements OnInit {
     if (!isPlatformBrowser(this.platformId)) {
       return;
     }
+    window.addEventListener(DocumentsComponent.documentsRefreshEvent, this.onDocumentsRefreshBound);
     this.loadDocuments();
+  }
+
+  ngOnDestroy(): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+    window.removeEventListener(DocumentsComponent.documentsRefreshEvent, this.onDocumentsRefreshBound);
   }
 
   displayTitle(doc: RagDocumentResponse, index: number): string {
@@ -61,11 +73,11 @@ export class DocumentsComponent implements OnInit {
   }
 
   storyDocs(): RagDocumentResponse[] {
-    return this.docs().filter((doc) => this.isStoryDoc(doc));
+    return this.mergedDocs().filter((doc) => this.isStoryDoc(doc));
   }
 
   learningDocs(): RagDocumentResponse[] {
-    return this.docs().filter((doc) => this.isLearningDoc(doc));
+    return this.mergedDocs().filter((doc) => this.isLearningDoc(doc));
   }
 
   coverUrl(doc: RagDocumentResponse): string {
@@ -97,6 +109,7 @@ export class DocumentsComponent implements OnInit {
         this.docs.update((current) =>
           current.filter((entry) => this.docKeyForRoute(entry) !== docKey)
         );
+        this.ingestProgress.stopTrackingDoc(docKey);
         this.deletingDocKey.set('');
         this.message.set(`Deleted document "${docKey}".`);
         this.dispatchDocumentsRefresh();
@@ -113,6 +126,33 @@ export class DocumentsComponent implements OnInit {
     });
   }
 
+  documentStatusText(doc: RagDocumentResponse): string {
+    const docKey = this.docKeyForRoute(doc);
+    if (!docKey) {
+      return '';
+    }
+
+    const tracked = this.ingestProgress.trackedStatus(docKey);
+    if (!tracked?.usable) {
+      return '';
+    }
+
+    if (tracked.backgroundProcessing) {
+      return 'First chapter ready. More chapters are still processing.';
+    }
+
+    if (tracked.done) {
+      return 'Ready';
+    }
+
+    return '';
+  }
+
+  isDocumentProcessing(doc: RagDocumentResponse): boolean {
+    const docKey = this.docKeyForRoute(doc);
+    return !!docKey && this.ingestProgress.trackedStatus(docKey)?.backgroundProcessing === true;
+  }
+
   private loadDocuments(): void {
     this.loading.set(true);
     this.message.set('');
@@ -120,7 +160,7 @@ export class DocumentsComponent implements OnInit {
     this.ragApi.listDocuments().subscribe({
       next: (docs) => {
         this.docs.set(docs ?? []);
-        if (!docs?.length) {
+        if (!(docs?.length ?? 0) && this.ingestProgress.trackedStatusesSnapshot().every((status) => !status.usable)) {
           this.message.set('No documents found.');
         }
         this.loading.set(false);
@@ -142,5 +182,31 @@ export class DocumentsComponent implements OnInit {
       return;
     }
     window.dispatchEvent(new CustomEvent(DocumentsComponent.documentsRefreshEvent));
+  }
+
+  private mergeTrackedDocs(docs: RagDocumentResponse[]): RagDocumentResponse[] {
+    const merged = [...docs];
+    const existingDocKeys = new Set(
+      docs
+        .map((doc) => this.docKeyForRoute(doc))
+        .filter((docKey): docKey is string => !!docKey)
+    );
+
+    for (const tracked of this.ingestProgress.trackedStatusesSnapshot()) {
+      const docKey = tracked.docKey?.trim();
+      if (!docKey || !tracked.usable || existingDocKeys.has(docKey)) {
+        continue;
+      }
+
+      merged.unshift({
+        docKey,
+        documentId: tracked.documentId,
+        id: tracked.documentId,
+        mode: tracked.mode
+      });
+      existingDocKeys.add(docKey);
+    }
+
+    return merged;
   }
 }
