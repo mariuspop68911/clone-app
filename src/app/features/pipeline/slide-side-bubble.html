@@ -1,6 +1,8 @@
 <aside
   class="slide-side-bubble"
   [class.slide-side-bubble-open]="open"
+  [class.slide-side-bubble-left]="side === 'left'"
+  [class.slide-side-bubble-wide]="wide"
   [attr.aria-hidden]="!open"
   (click)="$event.stopPropagation()"
 >
@@ -15,6 +17,7 @@
     </button>
 
     <div class="slide-side-bubble-card">
+      @if (showHeader) {
       <div class="slide-side-bubble-header">
         <div class="slide-side-bubble-icon" [class.slide-side-bubble-icon-ask]="variant === 'ask'">
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -29,8 +32,9 @@
           <h2>{{ title }}</h2>
         </div>
       </div>
+      }
 
-      <div class="slide-side-bubble-content">
+      <div class="slide-side-bubble-content" [class.slide-side-bubble-content-headerless]="!showHeader">
         <ng-content></ng-content>
       </div>
     </div>

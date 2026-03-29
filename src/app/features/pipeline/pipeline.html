@@ -481,7 +481,7 @@
                             @for (page of learningSourcePages(slide); track page) {
                               <button
                                 type="button"
-                                style="border:0;background:#efe4d1;color:#5b4630;border-radius:999px;padding:2px 7px;font-size:0.68rem;font-weight:700;cursor:pointer;"
+                                class="slide-page-chip"
                                 (click)="toggleSourcePanel()"
                               >
                                 Page {{ page }}
@@ -494,7 +494,7 @@
                           <div style="display:grid;gap:0.45rem;justify-items:end;align-items:center;">
                             <button
                               type="button"
-                              style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                              class="slide-action-button slide-action-button-soft"
                               (click)="generateOrOpenChapterQuizFromTakeaways(slide)"
                             >
                               Quiz
@@ -503,7 +503,7 @@
                             @if (shouldShowNextChapterButton(slide)) {
                               <button
                                 type="button"
-                                style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                                class="slide-action-button slide-action-button-primary"
                                 (click)="goToNextChapterFromTakeaways(slide)"
                               >
                                 Next chapter
@@ -513,7 +513,7 @@
                         } @else if (isReviewQuizLearningSlide(slide) && isLastReviewQuizSlideForChapter(slide) && shouldShowNextChapterButton(slide)) {
                           <button
                             type="button"
-                            style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                            class="slide-action-button slide-action-button-primary"
                             [disabled]="!allQuizQuestionsAnswered(slide)"
                             (click)="advanceToNextChapterAfterReviewQuiz(slide)"
                           >
@@ -522,7 +522,7 @@
                         } @else if (isQuizLearningSlide(slide) && shouldShowQuizNextButton(slide)) {
                           <button
                             type="button"
-                            style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                            class="slide-action-button slide-action-button-primary"
                             [disabled]="!allQuizQuestionsAnswered(slide)"
                             (click)="advanceAfterQuiz(slide)"
                           >
@@ -531,7 +531,7 @@
                         } @else if (isReviewLearningSlide(slide) && isLastReviewSlideForChapter(slide)) {
                           <button
                             type="button"
-                            style="border:0;background:#17486c;color:#ffffff;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                            class="slide-action-button slide-action-button-primary"
                             (click)="advanceAfterReview(slide)"
                           >
                             Next
@@ -539,7 +539,7 @@
                         } @else if (canExplainLearningSlide(slide)) {
                           <button
                             type="button"
-                            style="border:0;background:#d8ebf8;color:#17486c;border-radius:999px;padding:6px 12px;font-size:0.875rem;font-weight:700;cursor:pointer;"
+                            class="slide-action-button slide-action-button-soft"
                             (click)="explainFullSummary(slide)"
                           >
                             Explain
@@ -626,10 +626,10 @@
   }
 
   @if (!askOpen() && !explainOpen()) {
-    @if (canShowSourceButton()) {
+    @if (!sourceOpen() && canShowSourceButton()) {
       <button
         type="button"
-        class="ask-fab ask-fab-pill ask-fab-source"
+        class="ask-fab ask-fab-source-fab"
         (click)="toggleSourcePanel()"
         [attr.aria-expanded]="sourceOpen()"
         aria-controls="pipeline-source-panel"
@@ -683,27 +683,16 @@
     </div>
   </app-slide-side-bubble>
 
-  <aside
-    id="pipeline-source-panel"
-    class="ask-drawer"
-    style="width:min(94vw,760px);left:0;right:auto;border-left:0;border-right:1px solid rgba(23,72,108,0.14);box-shadow:none;"
-    [style.transform]="sourceOpen() ? 'translateX(0)' : 'translateX(-100%)'"
-    [attr.aria-hidden]="!sourceOpen()"
-    (click)="$event.stopPropagation()"
+  <app-slide-side-bubble
+    title="Source"
+    variant="source"
+    side="left"
+    [wide]="true"
+    [showHeader]="false"
+    [open]="sourceOpen()"
+    (closeRequested)="sourceOpen.set(false)"
   >
-    <div class="ask-drawer-header">
-      <p class="ask-drawer-eyebrow">Source</p>
-      <button
-        type="button"
-        class="ask-drawer-close"
-        (click)="sourceOpen.set(false)"
-        aria-label="Close source panel"
-      >
-        Close
-      </button>
-    </div>
-
-    <div style="flex:1;overflow:auto;padding:1rem;">
+    <div class="source-bubble-content">
       @if (sourceLoading()) {
         <p class="status">Loading source pages...</p>
       } @else if (sourceMessage()) {
@@ -711,14 +700,11 @@
       }
 
       @if (sourcePages().length > 0) {
-        <div style="display:grid;gap:1rem;">
+        <div class="source-bubble-pages">
           @for (page of sourcePages(); track page.pageNumber) {
-            <article style="padding:0.9rem;border:1px solid #d7e2ec;border-radius:16px;background:#ffffff;">
-              <p style="margin:0 0 0.75rem;color:#1f4d6d;font-size:0.9rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;">
-                Page {{ page.pageNumber }}
-              </p>
+            <article class="source-bubble-page">
               <object
-                style="display:block;width:100%;height:78vh;border:0;border-radius:12px;background:#eef4fa;box-shadow:0 18px 36px rgba(15,23,42,0.14);"
+                class="source-bubble-pdf"
                 [data]="page.trustedPdfUrl"
                 type="application/pdf"
               >
@@ -732,7 +718,7 @@
         </div>
       }
     </div>
-  </aside>
+  </app-slide-side-bubble>
 
   @if (imageViewerOpen()) {
     <app-image-viewer-modal

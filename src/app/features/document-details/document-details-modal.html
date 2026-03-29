@@ -1,13 +1,16 @@
 <section class="details-modal-shell">
   <div class="details-modal-scrim"></div>
 
-  <div class="details-modal-toolbar">
-    <a class="details-modal-close" routerLink="/documents" aria-label="Close document details">
-      X
-    </a>
-  </div>
-
   <div class="details-modal-content">
+    <button
+      type="button"
+      class="details-modal-close"
+      (click)="closeModal()"
+      aria-label="Close document details"
+    >
+      X
+    </button>
+
     <div class="details-modal-layout">
       <aside class="details-modal-chapters-rail" aria-label="Document chapters">
         @if (documentTitle()) {

@@ -8,7 +8,10 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 export class SlideSideBubbleComponent {
   @Input() open = false;
   @Input() title = '';
-  @Input() variant: 'ask' | 'explain' = 'explain';
+  @Input() variant: 'ask' | 'explain' | 'source' = 'explain';
+  @Input() side: 'left' | 'right' = 'right';
+  @Input() wide = false;
+  @Input() showHeader = true;
   @Output() closeRequested = new EventEmitter<void>();
 
   requestClose(): void {
