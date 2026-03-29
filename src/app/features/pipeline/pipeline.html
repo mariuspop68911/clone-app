@@ -1,6 +1,6 @@
 <section class="pipeline-page" [class.pipeline-page-modal]="modalMode" [style.max-width]="modalMode ? 'none' : '1320px'">
   <section class="slides-layout-main" [class.panel]="!modalMode" [class.slides-layout-main-modal]="modalMode" style="min-width:0;display:block;">
-      @if (docKey()) {
+      @if (docKey() && !modalMode) {
         <h2 class="book-title">{{ docKey() }}</h2>
       }
 
@@ -276,7 +276,7 @@
                     @if (!isQuizLearningSlide(slide) && learningTitle(slide)) {
                       <div class="learning-slide-title" [class.learning-slide-title-no-image]="!learningImageUrls(slide).length">
                         <h2
-                          style="margin:0;color:#1f2937;font-size:1.25rem;line-height:1.1;font-weight:800;"
+                          style="margin:0;color:#1f2937;font-size:1.0625rem;line-height:1.1;font-weight:800;"
                         >
                           {{ learningTitle(slide) }}
                         </h2>

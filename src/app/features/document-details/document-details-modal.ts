@@ -1,4 +1,4 @@
-import { Component, ViewChild, inject, signal } from '@angular/core';
+import { Component, ViewChild, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AppShellUiService } from '../../app-shell-ui.service';
 import { PipelineComponent } from '../pipeline';
@@ -14,8 +14,6 @@ export class DocumentDetailsModalComponent {
   @ViewChild('pipelineRef') private pipelineRef?: PipelineComponent;
   private readonly appShellUi = inject(AppShellUiService);
 
-  chaptersOpen = signal(false);
-
   constructor() {
     this.appShellUi.setBrowseButtonVisible(false);
   }
@@ -24,12 +22,8 @@ export class DocumentDetailsModalComponent {
     this.appShellUi.setBrowseButtonVisible(true);
   }
 
-  toggleChapters(): void {
-    this.chaptersOpen.update((current) => !current);
-  }
-
-  closeChapters(): void {
-    this.chaptersOpen.set(false);
+  documentTitle(): string {
+    return this.pipelineRef?.docKey().trim() ?? '';
   }
 
   chapterItems() {
@@ -54,6 +48,5 @@ export class DocumentDetailsModalComponent {
 
   goToChapterSection(event: Parameters<PipelineComponent['goToChapterSection']>[0]): void {
     this.pipelineRef?.goToChapterSection(event);
-    this.closeChapters();
   }
 }
