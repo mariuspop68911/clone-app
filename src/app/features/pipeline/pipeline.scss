@@ -222,6 +222,10 @@
   flex-direction: column;
 }
 
+.learning-slide-main-takeaways {
+  min-height: 0;
+}
+
 .learning-slide-main-no-image {
   justify-content: center;
   gap: 1.25rem;
@@ -240,6 +244,10 @@
   text-align: center;
 }
 
+.learning-slide-title-takeaways {
+  margin-bottom: 1rem;
+}
+
 .learning-slide-body {
   display: flex;
   flex: 1;
@@ -247,8 +255,24 @@
   gap: 1rem;
 }
 
+.learning-slide-body-takeaways {
+  display: grid;
+  grid-template-columns: minmax(0, 43%) minmax(0, 57%);
+  gap: 0;
+  min-height: 0;
+  flex: none;
+  align-items: stretch;
+}
+
 .learning-slide-card-no-image .learning-slide-body {
   flex: 0;
+}
+
+.learning-slide-media-shell-takeaways {
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  border-radius: 1.5rem 0 0 1.5rem;
 }
 
 .learning-quiz-shell {
@@ -312,7 +336,7 @@
 }
 
 .slide-page-chip {
-  padding: 0.28rem 0.58rem;
+  padding: 0.38rem 0.72rem;
   background: linear-gradient(135deg, rgba(255, 241, 219, 0.96), rgba(246, 226, 193, 0.92));
   color: #6d5231;
   font-size: 0.72rem;
@@ -320,7 +344,7 @@
 }
 
 .slide-action-button {
-  padding: 0.5rem 0.95rem;
+  padding: 0.72rem 1.22rem;
   font-size: 0.875rem;
   box-shadow: 0 12px 24px rgba(40, 88, 143, 0.14);
 }
@@ -343,6 +367,14 @@
   justify-content: center;
   align-items: center;
   min-height: 0;
+}
+
+.learning-slide-summary-shell-takeaways {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  padding: 2rem 2rem 1.5rem 1.5rem;
 }
 
 .learning-slide-summary {
@@ -389,8 +421,31 @@
   flex-direction: column;
 }
 
+.learning-slide-card-takeaways {
+  min-height: 0 !important;
+  height: auto !important;
+  align-self: flex-start;
+}
+
+.learning-slide-card-takeaways .learning-slide-main {
+  flex: 0 0 auto;
+}
+
+.learning-slide-card-takeaways .learning-slide-bottom {
+  margin-top: 0;
+  padding: 0 1.5rem 1.25rem;
+}
+
 .story-slide-card {
   width: 100%;
+}
+
+.learning-takeaways-image {
+  width: 100% !important;
+  height: 29rem !important;
+  max-height: 29rem !important;
+  object-fit: cover !important;
+  display: block;
 }
 
 .slide-visual {
@@ -530,11 +585,11 @@
   background: #ffffff;
   color: #173955;
   border-radius: 999px;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2.35rem;
+  height: 2.35rem;
   display: inline-grid;
   place-items: center;
-  padding: 0;
+  padding: 0.35rem;
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
 }

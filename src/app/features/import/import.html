@@ -15,7 +15,7 @@
       File
       <input
         type="file"
-        accept=".pdf,application/pdf"
+        accept=".pdf,.epub,application/pdf,application/epub+zip"
         (change)="onFileChange($event)"
         [disabled]="loading() || ingestActive()"
       />

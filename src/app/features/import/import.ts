@@ -4,7 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { BookImportPreviewPage, BooksApiService } from '../../core/api/books-api.service';
-import { RagIngestMode } from '../../core/api/rag-api.service';
+import { RagApiService, RagIngestMode } from '../../core/api/rag-api.service';
 import {
   IngestProgressService
 } from './ingest-progress.service';
@@ -29,6 +29,7 @@ export class ImportComponent implements OnInit, OnDestroy {
   private ingestUploadSubscription: Subscription | null = null;
   private ingestStateSubscription: Subscription | null = null;
   private ingestOverlayToken: symbol | null = null;
+  private autoIngestAfterLoad = false;
 
   docKey = '';
   selectedFile: File | null = null;
@@ -44,6 +45,7 @@ export class ImportComponent implements OnInit, OnDestroy {
   constructor(
     private readonly booksApi: BooksApiService,
     private readonly route: ActivatedRoute,
+    private readonly ragApi: RagApiService,
     private readonly ingestProgress: IngestProgressService,
     private readonly loadingOverlay: LoadingOverlayService
   ) {}
@@ -51,7 +53,31 @@ export class ImportComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.route.queryParamMap.subscribe((params) => {
       const editionId = params.get('editionId')?.trim();
+      const modeParam = params.get('mode')?.trim();
+      const requestedMode =
+        modeParam === 'Learning Mode' || modeParam === 'Story Mode'
+          ? modeParam
+          : null;
+      this.autoIngestAfterLoad = params.get('autoIngest') === 'true';
+      if (requestedMode) {
+        this.ingestMode.set(requestedMode);
+      }
       if (!editionId) {
+        const source = params.get('source')?.trim();
+        const sourceId = params.get('sourceId')?.trim();
+        const title = params.get('title')?.trim();
+        const readerUrl = params.get('readerUrl')?.trim();
+        const downloadUrl = params.get('downloadUrl')?.trim();
+        if (!source || !sourceId || (!readerUrl && !downloadUrl)) {
+          return;
+        }
+        void this.loadStorySourceImportFile({
+          source,
+          sourceId,
+          title,
+          readerUrl,
+          downloadUrl
+        });
         return;
       }
       void this.loadBookImportFile(editionId);
@@ -66,15 +92,13 @@ export class ImportComponent implements OnInit, OnDestroy {
   onFileChange(event: Event): void {
     const input = event.target as HTMLInputElement;
     const nextFile = input.files?.[0] ?? null;
-    const isPdf =
-      !!nextFile &&
-      (nextFile.type === 'application/pdf' || nextFile.name.toLowerCase().endsWith('.pdf'));
+    const isSupported = !!nextFile && this.isSupportedImportFile(nextFile);
 
-    if (nextFile && !isPdf) {
+    if (nextFile && !isSupported) {
       this.selectedFile = null;
       this.reviewFile.set(null);
       this.resetIngestProgress();
-      this.message.set('Please select a PDF file.');
+      this.message.set('Please select a PDF or EPUB file.');
       input.value = '';
       return;
     }
@@ -106,7 +130,7 @@ export class ImportComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.ingestMode() === 'Story Mode') {
+    if (this.ingestMode() === 'Story Mode' && this.isPdfFile(this.selectedFile)) {
       this.reviewFile.set(this.selectedFile);
       this.message.set('');
       return;
@@ -124,7 +148,7 @@ export class ImportComponent implements OnInit, OnDestroy {
     }
 
     if (!this.selectedFile) {
-      this.message.set('Please select a PDF file.');
+      this.message.set('Please select a PDF or EPUB file.');
       return;
     }
 
@@ -377,6 +401,163 @@ export class ImportComponent implements OnInit, OnDestroy {
         this.loading.set(false);
       }
     });
+  }
+
+  private async loadStorySourceImportFile(sourceBook: {
+    source?: string;
+    sourceId?: string;
+    title?: string;
+    readerUrl?: string;
+    downloadUrl?: string;
+  }): Promise<void> {
+    this.loading.set(true);
+    this.message.set('Loading source book for import...');
+    this.sourceLabel.set('');
+    this.selectedFile = null;
+    this.reviewFile.set(null);
+    this.reviewPages.set([]);
+    this.resetIngestProgress();
+
+    this.ragApi
+      .importStorySourceBookFile({
+        source: sourceBook.source?.trim() || '',
+        sourceId: sourceBook.sourceId?.trim() || '',
+        title: sourceBook.title?.trim() || undefined,
+        readerUrl:
+          sourceBook.source?.trim() === 'STANDARD_EBOOKS'
+            ? sourceBook.readerUrl?.trim() || null
+            : sourceBook.readerUrl?.trim() || null,
+        downloadUrl:
+          sourceBook.source?.trim() === 'STANDARD_EBOOKS'
+            ? null
+            : sourceBook.downloadUrl?.trim() || null
+      })
+      .subscribe({
+        next: async (response) => {
+          const blob = response.body;
+          if (!blob) {
+            this.message.set('The selected source book did not return an importable file.');
+            this.loading.set(false);
+            return;
+          }
+
+          const fileName =
+            this.extractFileName(response) ?? this.sourceFileName(sourceBook, blob.type);
+          const normalizedFileType = blob.type || this.fileTypeFromName(fileName);
+          const file = new File([blob], fileName, { type: normalizedFileType });
+          const bookTitle =
+            response.headers.get('X-Book-Title')?.trim() || sourceBook.title?.trim();
+          const suggestedDocKey = response.headers.get('X-Suggested-Doc-Key')?.trim();
+          const sourceName = this.storySourceLabel(sourceBook.source);
+
+          this.docKey =
+            suggestedDocKey ||
+            this.suggestDocKey(bookTitle || file.name) ||
+            this.suggestDocKey(sourceBook.sourceId || '') ||
+            'document';
+          this.selectedFile = file;
+          this.reviewFile.set(null);
+          const requestedMode = this.route.snapshot.queryParamMap.get('mode')?.trim();
+          const isLearningMode = requestedMode === 'Learning Mode';
+          this.ingestMode.set(isLearningMode ? 'Learning Mode' : 'Story Mode');
+          this.sourceLabel.set(
+            bookTitle ? `Loaded from ${sourceName}: "${bookTitle}"` : `Loaded from ${sourceName}`
+          );
+
+          const isPdf = this.isPdfFile(file);
+          this.message.set(
+            isPdf
+              ? ''
+              : 'Loaded source book. Page preview is only available for PDF source files.'
+          );
+          this.loading.set(false);
+
+          if (this.autoIngestAfterLoad) {
+            await this.submit();
+          } else if (!isLearningMode && isPdf) {
+            this.reviewFile.set(file);
+            this.message.set('');
+          }
+        },
+        error: (error) => {
+          console.error('[Import] Failed to load source book', error);
+          this.message.set(`Could not load the selected source book: ${this.readApiError(error)}`);
+          this.loading.set(false);
+        }
+      });
+  }
+
+  private sourceFileName(
+    sourceBook: { title?: string; sourceId?: string; downloadUrl?: string; readerUrl?: string },
+    contentType?: string
+  ): string {
+    try {
+      const candidateUrl = sourceBook.downloadUrl?.trim() || sourceBook.readerUrl?.trim() || '';
+      const url = new URL(candidateUrl);
+      const pathName = url.pathname.split('/').filter(Boolean).at(-1)?.trim();
+      if (pathName && /\.[a-z0-9]+$/i.test(pathName)) {
+        return decodeURIComponent(pathName);
+      }
+    } catch {
+      // ignore URL parsing failure and fall back below
+    }
+
+    const title = sourceBook.title?.trim() || sourceBook.sourceId?.trim() || 'source-book';
+    const stem = this.suggestDocKey(title) || 'source-book';
+    const normalizedType = (contentType || '').toLowerCase();
+    if (normalizedType.includes('html')) {
+      return `${stem}.html`;
+    }
+    if (normalizedType.includes('epub')) {
+      return `${stem}.epub`;
+    }
+    if (normalizedType.includes('pdf')) {
+      return `${stem}.pdf`;
+    }
+    return stem;
+  }
+
+  private storySourceLabel(source?: string): string {
+    switch ((source || '').trim()) {
+      case 'STANDARD_EBOOKS':
+        return 'Standard Ebooks';
+      case 'OPENSTAX':
+        return 'OpenStax';
+      case 'WIKIBOOKS':
+        return 'Wikibooks';
+      case 'LIBRETEXTS':
+        return 'LibreTexts';
+      default:
+        return 'Source book';
+    }
+  }
+
+  private fileTypeFromName(fileName: string): string {
+    const normalized = fileName.trim().toLowerCase();
+    if (normalized.endsWith('.pdf')) {
+      return 'application/pdf';
+    }
+    if (normalized.endsWith('.epub')) {
+      return 'application/epub+zip';
+    }
+    if (normalized.endsWith('.html') || normalized.endsWith('.htm')) {
+      return 'text/html';
+    }
+    return 'application/octet-stream';
+  }
+
+  private isPdfFile(file: File): boolean {
+    const normalizedName = file.name.trim().toLowerCase();
+    return file.type === 'application/pdf' || normalizedName.endsWith('.pdf');
+  }
+
+  private isEpubFile(file: File): boolean {
+    const normalizedName = file.name.trim().toLowerCase();
+    return file.type === 'application/epub+zip' || normalizedName.endsWith('.epub');
+  }
+
+  private isSupportedImportFile(file: File): boolean {
+    return this.isPdfFile(file) || this.isEpubFile(file);
   }
 
   private extractFileName(response: { headers: { get(name: string): string | null } }): string | null {

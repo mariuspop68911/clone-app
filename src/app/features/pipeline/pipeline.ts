@@ -1504,6 +1504,10 @@ export class PipelineComponent {
       return 'padding:18px;background:#fff8ef;border-color:#e8d7bc;box-shadow:0 8px 16px rgba(17,38,58,0.045), 0 1px 4px rgba(17,38,58,0.025);';
     }
 
+    if (this.isKeyTakeawaysLearningSlide(slide)) {
+      return 'padding:0;background:#fffdf8;border-color:#eadfce;box-shadow:0 8px 16px rgba(17,38,58,0.045), 0 1px 4px rgba(17,38,58,0.025);';
+    }
+
     return 'padding:18px;background:#fffdf8;border-color:#eadfce;box-shadow:0 8px 16px rgba(17,38,58,0.045), 0 1px 4px rgba(17,38,58,0.025);';
   }
 

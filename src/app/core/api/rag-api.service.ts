@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { concat, EMPTY, map, Observable, of, switchMap, timeout } from 'rxjs';
 
@@ -33,6 +33,32 @@ export interface RagDocumentResponse {
   coverUrl?: string;
   lastSlide?: number;
   [key: string]: unknown;
+}
+
+export interface StorySourceBookResponse {
+  source?: 'STANDARD_EBOOKS' | string;
+  sourceId?: string;
+  title?: string;
+  authors?: string[];
+  firstPublishYear?: number | null;
+  totalPages?: number | null;
+  pageCount?: number | null;
+  pages?: number | null;
+  languages?: string[];
+  tags?: string[];
+  coverUrl?: string;
+  summary?: string;
+  readerUrl?: string | null;
+  downloadUrl?: string | null;
+  [key: string]: unknown;
+}
+
+export interface StorySourceImportFileRequest {
+  source: string;
+  sourceId: string;
+  title?: string;
+  readerUrl?: string | null;
+  downloadUrl?: string | null;
 }
 
 export interface RagDocumentLastSlideRequest {
@@ -597,6 +623,20 @@ export class RagApiService {
           return Array.isArray(response?.value) ? response.value.map((doc) => this.toDocumentResponse(doc)) : [];
         })
       );
+  }
+
+  getRandomStorySourceBooks(limit = 20): Observable<StorySourceBookResponse[]> {
+    const params = new HttpParams().set('limit', Math.max(1, Math.floor(limit)));
+    return this.http.get<StorySourceBookResponse[]>('/api/story-source-books/random', { params });
+  }
+
+  importStorySourceBookFile(
+    req: StorySourceImportFileRequest
+  ): Observable<HttpResponse<Blob>> {
+    return this.http.post('/api/story-source-books/import-file', req, {
+      observe: 'response',
+      responseType: 'blob'
+    });
   }
 
   saveDocumentLastSlide(

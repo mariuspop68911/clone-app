@@ -1,0 +1,80 @@
+<section class="source-books-page">
+  <header class="source-books-hero">
+    <div>
+      <p class="eyebrow">Browse Standard Ebooks</p>
+      <h1>Standard Ebooks</h1>
+      <p class="subtitle">
+        Explore randomly surfaced public-domain books from Standard Ebooks and create comic ingests from their full text.
+      </p>
+    </div>
+
+    <button type="button" class="refresh-button" (click)="loadBooks()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Refresh List' }}
+    </button>
+  </header>
+
+  @if (message()) {
+    <p class="message">{{ message() }}</p>
+  }
+
+  @if (books().length) {
+    <section class="source-books-grid">
+      @for (book of books(); track book.source + ':' + book.sourceId) {
+        <article class="source-book-card">
+          <div class="source-book-cover">
+            @if (book.coverUrl) {
+              <img [src]="book.coverUrl" [alt]="'Cover for ' + (book.title || 'book')" loading="lazy" />
+            } @else {
+              <div class="source-book-cover-fallback">No Cover</div>
+            }
+          </div>
+
+          <div class="source-book-body">
+            <p class="source-book-meta">{{ metaText(book) }}</p>
+            <h2>{{ book.title || 'Untitled book' }}</h2>
+            <p class="source-book-authors">{{ authorsText(book) }}</p>
+
+            @if (book.summary) {
+              <p class="source-book-summary">{{ book.summary }}</p>
+            }
+
+            @if (tagsText(book).length) {
+              <div class="source-book-tags">
+                @for (tag of tagsText(book); track tag) {
+                  <span>{{ tag }}</span>
+                }
+              </div>
+            }
+
+            <div class="source-book-actions">
+              @if (canCreateComic(book)) {
+                <a
+                  class="source-book-link"
+                  [routerLink]="['/import']"
+                  [queryParams]="importRouteParams(book)"
+                >
+                  Create Comic
+                </a>
+              }
+              @if (book.readerUrl) {
+                <a class="source-book-link source-book-link-secondary" [href]="book.readerUrl" target="_blank" rel="noreferrer">
+                  Open Reader
+                </a>
+              }
+              @if (book.downloadUrl) {
+                <a
+                  class="source-book-link source-book-link-tertiary"
+                  [href]="book.downloadUrl"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Download
+                </a>
+              }
+            </div>
+          </div>
+        </article>
+      }
+    </section>
+  }
+</section>

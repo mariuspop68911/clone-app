@@ -267,13 +267,15 @@
                   <article
                     class="slide-card learning-slide-card"
                     [class.learning-slide-card-no-image]="!learningImageUrls(slide).length"
+                    [class.learning-slide-card-takeaways]="isKeyTakeawaysLearningSlide(slide)"
                     [style]="learningSlideCardStyle(slide)"
                   >
                     <div
                       class="learning-slide-main"
                       [class.learning-slide-main-no-image]="!learningImageUrls(slide).length"
+                      [class.learning-slide-main-takeaways]="isKeyTakeawaysLearningSlide(slide)"
                     >
-                    @if (!isQuizLearningSlide(slide) && learningTitle(slide)) {
+                    @if (!isQuizLearningSlide(slide) && learningTitle(slide) && !isKeyTakeawaysLearningSlide(slide)) {
                       <div class="learning-slide-title" [class.learning-slide-title-no-image]="!learningImageUrls(slide).length">
                         <h2
                           style="margin:0;color:#1f2937;font-size:1.0625rem;line-height:1.1;font-weight:800;"
@@ -283,9 +285,9 @@
                       </div>
                     }
 
-                    <div class="learning-slide-body">
+                    <div class="learning-slide-body" [class.learning-slide-body-takeaways]="isKeyTakeawaysLearningSlide(slide)">
                       @if (learningImageUrls(slide).length) {
-                        <div>
+                        <div class="learning-slide-media-shell" [class.learning-slide-media-shell-takeaways]="isKeyTakeawaysLearningSlide(slide)">
                           @if (hasMultipleLearningImages(slide)) {
                             <div style="overflow:hidden;touch-action:pan-x;">
                               <swiper-container
@@ -371,7 +373,12 @@
                               </button>
                             } @else {
                               <img
-                                style="width:100%;max-height:16rem;display:block;object-fit:contain;user-select:none;-webkit-user-drag:none;"
+                                [class.learning-takeaways-image]="isKeyTakeawaysLearningSlide(slide)"
+                                [style.width]="'100%'"
+                                [style.max-height]="isKeyTakeawaysLearningSlide(slide) ? null : '16rem'"
+                                [style.display]="'block'"
+                                [style.object-fit]="isKeyTakeawaysLearningSlide(slide) ? 'cover' : 'contain'"
+                                style="user-select:none;-webkit-user-drag:none;"
                                 [src]="imageSrc(imageUrl)"
                                 [alt]="learningTitle(slide)"
                                 draggable="false"
@@ -419,6 +426,7 @@
                       } @else {
                         <div
                           class="learning-slide-summary-shell"
+                          [class.learning-slide-summary-shell-takeaways]="isKeyTakeawaysLearningSlide(slide)"
                           style="position:relative;max-width:68ch;"
                           [style.max-width]="'none'"
                           [style.width]="'100%'"
@@ -427,6 +435,16 @@
                           [style.border-radius]="selectionModeEnabled() ? '14px' : null"
                           [style.background]="selectionModeEnabled() ? 'rgba(248,251,255,0.76)' : null"
                         >
+                          @if (isKeyTakeawaysLearningSlide(slide) && learningTitle(slide)) {
+                            <div class="learning-slide-title learning-slide-title-takeaways">
+                              <h2
+                                style="margin:0;color:#1f2937;font-size:1.0625rem;line-height:1.1;font-weight:800;"
+                              >
+                                {{ learningTitle(slide) }}
+                              </h2>
+                            </div>
+                          }
+
                           @if (selectionModeEnabled()) {
                             <span
                               style="position:absolute;top:0.45rem;left:0.7rem;color:#2a5878;font-size:0.68rem;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;"
