@@ -77,7 +77,7 @@
           @if (viewMode() === 'comic' && slides().length > 0) {
             <swiper-container
               #carouselEl
-              class="carousel learning-carousel"
+              class="carousel story-carousel"
               style="padding:0.2rem 1.1rem 0.8rem 0.75rem;box-sizing:border-box;overflow:visible;"
               slides-per-view="1"
               space-between="0"
@@ -87,7 +87,7 @@
             >
               @for (slide of slides(); track slide.comicNote?.id ?? $index; let cardIndex = $index) {
                 <swiper-slide class="carousel-slide">
-                  <article class="slide-card">
+                  <article class="slide-card story-slide-card">
                     <div class="slide-visual">
                       @if (slideImageUrl(slide); as imageUrl) {
                           <button

@@ -202,6 +202,11 @@
   margin-right: auto;
 }
 
+.story-carousel {
+  width: min(100%, 23rem);
+  max-width: 23rem;
+}
+
 .slide-progress-below {
   display: block;
   margin-top: 0.75rem;
@@ -382,6 +387,10 @@
   min-height: 36rem;
   display: flex;
   flex-direction: column;
+}
+
+.story-slide-card {
+  width: 100%;
 }
 
 .slide-visual {
