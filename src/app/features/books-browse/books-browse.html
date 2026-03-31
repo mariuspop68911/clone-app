@@ -48,7 +48,7 @@
                     <p class="meta">{{ bookMeta(book) || 'Metadata limited for this result' }}</p>
                     <div class="book-actions">
                       <a class="book-link" [routerLink]="['/books', book.editionId]">Go to book</a>
-                      <a class="book-link book-link-secondary" [routerLink]="['/import']" [queryParams]="{ editionId: book.editionId }">
+                      <a class="book-link book-link-secondary" [routerLink]="['/import']" [queryParams]="{ editionId: book.editionId, thumbnailUrl: book.coverUrl }">
                         Create Comic
                       </a>
                     </div>

@@ -3,6 +3,7 @@ import { Component, Inject, OnDestroy, OnInit, PLATFORM_ID, computed, signal } f
 import { RouterLink } from '@angular/router';
 import { RagApiService, RagDocumentResponse } from '../../core/api/rag-api.service';
 import { IngestProgressService } from '../import/ingest-progress.service';
+import { DocumentCoverCacheService } from '../../shared/document-cover-cache.service';
 
 @Component({
   selector: 'app-documents',
@@ -22,6 +23,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   constructor(
     private readonly ragApi: RagApiService,
     private readonly ingestProgress: IngestProgressService,
+    private readonly documentCoverCache: DocumentCoverCacheService,
     @Inject(PLATFORM_ID) private readonly platformId: object
   ) {}
 
@@ -81,7 +83,12 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   }
 
   coverUrl(doc: RagDocumentResponse): string {
-    return typeof doc.coverUrl === 'string' ? doc.coverUrl.trim() : '';
+    const backendCoverUrl = typeof doc.coverUrl === 'string' ? doc.coverUrl.trim() : '';
+    if (backendCoverUrl) {
+      return backendCoverUrl;
+    }
+
+    return this.documentCoverCache.coverUrl(this.docKeyForRoute(doc));
   }
 
   docKeyForRoute(doc: RagDocumentResponse): string | null {
@@ -110,6 +117,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
           current.filter((entry) => this.docKeyForRoute(entry) !== docKey)
         );
         this.ingestProgress.stopTrackingDoc(docKey);
+        this.documentCoverCache.forget(docKey);
         this.deletingDocKey.set('');
         this.message.set(`Deleted document "${docKey}".`);
         this.dispatchDocumentsRefresh();

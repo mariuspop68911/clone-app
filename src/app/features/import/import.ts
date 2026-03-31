@@ -11,6 +11,7 @@ import {
 import { ImportModeSelectorComponent } from './import-mode-selector';
 import { PdfPageReviewComponent } from './pdf-page-review';
 import { LoadingOverlayService } from '../../shared/loading-overlay.service';
+import { DocumentCoverCacheService } from '../../shared/document-cover-cache.service';
 
 @Component({
   selector: 'app-import',
@@ -30,6 +31,8 @@ export class ImportComponent implements OnInit, OnDestroy {
   private ingestStateSubscription: Subscription | null = null;
   private ingestOverlayToken: symbol | null = null;
   private autoIngestAfterLoad = false;
+  private coverThumbnailFile: File | null = null;
+  private coverThumbnailUrl = '';
 
   docKey = '';
   selectedFile: File | null = null;
@@ -47,12 +50,14 @@ export class ImportComponent implements OnInit, OnDestroy {
     private readonly route: ActivatedRoute,
     private readonly ragApi: RagApiService,
     private readonly ingestProgress: IngestProgressService,
-    private readonly loadingOverlay: LoadingOverlayService
+    private readonly loadingOverlay: LoadingOverlayService,
+    private readonly documentCoverCache: DocumentCoverCacheService
   ) {}
 
   ngOnInit(): void {
     this.route.queryParamMap.subscribe((params) => {
       const editionId = params.get('editionId')?.trim();
+      const thumbnailUrl = params.get('thumbnailUrl')?.trim();
       const modeParam = params.get('mode')?.trim();
       const requestedMode =
         modeParam === 'Learning Mode' || modeParam === 'Story Mode'
@@ -80,7 +85,7 @@ export class ImportComponent implements OnInit, OnDestroy {
         });
         return;
       }
-      void this.loadBookImportFile(editionId);
+      void this.loadBookImportFile(editionId, thumbnailUrl);
     });
   }
 
@@ -118,6 +123,8 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.sourceLabel.set('');
     this.reviewPages.set([]);
     this.ingestMode.set('Story Mode');
+    this.coverThumbnailFile = null;
+    this.coverThumbnailUrl = '';
     this.resetIngestProgress();
   }
 
@@ -152,6 +159,10 @@ export class ImportComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.coverThumbnailUrl) {
+      this.documentCoverCache.remember(docKey, this.coverThumbnailUrl);
+    }
+
     this.loading.set(true);
     this.message.set('Preparing PDF for ingest...');
     this.showIngestOverlay('Preparing document...');
@@ -169,7 +180,7 @@ export class ImportComponent implements OnInit, OnDestroy {
       }
     }
 
-    const thumbnailFile = await this.createThumbnailFile(fileForIngest);
+    const thumbnailFile = this.coverThumbnailFile ?? await this.createThumbnailFile(fileForIngest);
     const task = this.ingestProgress.startIngest({
       docKey,
       mode: this.ingestMode(),
@@ -198,6 +209,7 @@ export class ImportComponent implements OnInit, OnDestroy {
           this.hideIngestOverlay();
           this.selectedFile = null;
           this.reviewFile.set(null);
+          this.coverThumbnailFile = null;
           this.sourceLabel.set('');
           this.reviewPages.set([]);
           this.ingestMode.set('Story Mode');
@@ -344,14 +356,20 @@ export class ImportComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async loadBookImportFile(editionId: string): Promise<void> {
+  private async loadBookImportFile(editionId: string, thumbnailUrl?: string | null): Promise<void> {
     this.loading.set(true);
     this.message.set('Loading book content for import...');
     this.sourceLabel.set('');
     this.selectedFile = null;
     this.reviewFile.set(null);
     this.reviewPages.set([]);
+    this.coverThumbnailFile = null;
+    this.coverThumbnailUrl = typeof thumbnailUrl === 'string' ? thumbnailUrl.trim() : '';
     this.resetIngestProgress();
+
+    if (this.coverThumbnailUrl) {
+      this.coverThumbnailFile = await this.loadRemoteThumbnail(this.coverThumbnailUrl);
+    }
 
     this.booksApi.getBookImportPreview(editionId).subscribe({
       next: (preview) => {
@@ -372,6 +390,9 @@ export class ImportComponent implements OnInit, OnDestroy {
             const bookTitle = response.headers.get('X-Book-Title')?.trim();
 
             this.docKey = suggestedDocKey || this.suggestDocKey(file.name) || editionId.toLowerCase();
+            if (this.coverThumbnailUrl) {
+              this.documentCoverCache.remember(this.docKey, this.coverThumbnailUrl);
+            }
             this.selectedFile = file;
             this.reviewFile.set(null);
             this.sourceLabel.set(bookTitle ? `Loaded from "${bookTitle}"` : 'Loaded from selected book');
@@ -416,6 +437,8 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.selectedFile = null;
     this.reviewFile.set(null);
     this.reviewPages.set([]);
+    this.coverThumbnailFile = null;
+    this.coverThumbnailUrl = '';
     this.resetIngestProgress();
 
     this.ragApi
@@ -558,6 +581,28 @@ export class ImportComponent implements OnInit, OnDestroy {
 
   private isSupportedImportFile(file: File): boolean {
     return this.isPdfFile(file) || this.isEpubFile(file);
+  }
+
+  private async loadRemoteThumbnail(thumbnailUrl: string): Promise<File | null> {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    try {
+      const response = await fetch(thumbnailUrl);
+      if (!response.ok) {
+        return null;
+      }
+
+      const blob = await response.blob();
+      const url = new URL(thumbnailUrl, window.location.origin);
+      const pathName = url.pathname.split('/').filter(Boolean).at(-1) || 'thumbnail';
+      const fileName = /\.[a-z0-9]+$/i.test(pathName) ? pathName : `${pathName}.jpg`;
+      return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+    } catch (error) {
+      console.warn('[Import] Failed to load remote thumbnail', error);
+      return null;
+    }
   }
 
   private extractFileName(response: { headers: { get(name: string): string | null } }): string | null {

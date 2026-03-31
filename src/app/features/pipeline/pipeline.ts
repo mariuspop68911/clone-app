@@ -16,6 +16,7 @@ import { DocumentChatComponent } from '../document-chat';
 import { IngestProgressService, IngestProgressStatus } from '../import/ingest-progress.service';
 import {
   RagApiService,
+  RagCharacterReferenceImageResponse,
   RagGenerateChapterQuizRequest,
   RagGenerateChapterReviewSlidesResponse,
   RagComicBookGenerateResponse,
@@ -139,6 +140,7 @@ export class PipelineComponent {
   private currentObjectUrl: string | null = null;
   private sourcePdfLoadToken = 0;
   private loadedSourceSignature = '';
+  private loadedCharactersDocKey = '';
   private lastAutoLoadTriggerKey = '';
   private selectionModeLongPressTimer: ReturnType<typeof setTimeout> | null = null;
   private chapterQuizCheckTimer: ReturnType<typeof setTimeout> | null = null;
@@ -160,6 +162,16 @@ export class PipelineComponent {
   private readonly learningImageActiveIndexMap = signal<Record<string, number>>({});
   private readonly onFirstInteractionBound = () => {
     void this.ensureAudioUnlocked();
+  };
+  private readonly onCharactersRefreshBound = (event: Event) => {
+    const refreshedDocKey =
+      event instanceof CustomEvent && typeof event.detail === 'string' ? event.detail.trim() : '';
+    if (!refreshedDocKey || refreshedDocKey !== this.docKey().trim()) {
+      return;
+    }
+
+    this.loadedCharactersDocKey = '';
+    void this.loadCharactersForCurrentDoc(true);
   };
   private readonly learningExplainService = inject(LearningExplainService);
   private readonly appShellUi = inject(AppShellUiService);
@@ -209,6 +221,9 @@ export class PipelineComponent {
   sourcePages = signal<SourcePreviewPage[]>([]);
   sourceLoading = signal(false);
   sourceMessage = signal('');
+  characterReferences = signal<RagCharacterReferenceImageResponse[]>([]);
+  charactersLoading = signal(false);
+  charactersMessage = signal('');
   docId = signal<number | null>(null);
   learningContext = signal<RagLearningPipelineContextResponse | null>(null);
   learningContextLoading = signal(false);
@@ -414,6 +429,10 @@ export class PipelineComponent {
     if (typeof window !== 'undefined') {
       this.audio = new Audio();
       window.addEventListener('pointerdown', this.onFirstInteractionBound, { passive: true });
+      window.addEventListener(
+        PipelineComponent.charactersRefreshEvent,
+        this.onCharactersRefreshBound as EventListener
+      );
     }
 
     this.route.paramMap.subscribe((params) => {
@@ -465,6 +484,10 @@ export class PipelineComponent {
       this.sourcePages.set([]);
       this.sourceLoading.set(false);
       this.sourceMessage.set('');
+      this.characterReferences.set([]);
+      this.charactersLoading.set(false);
+      this.charactersMessage.set('');
+      this.loadedCharactersDocKey = '';
       this.docId.set(null);
       this.desiredInitialSlideIndex = null;
       this.lastPersistedSlideIndex = null;
@@ -492,6 +515,7 @@ export class PipelineComponent {
       this.clearBackgroundLearningRefreshTimer();
 
       if (key.trim()) {
+        void this.loadCharactersForCurrentDoc();
         this.loadDocumentMode(key);
         this.loadContextAndSlides(key);
       }
@@ -508,6 +532,10 @@ export class PipelineComponent {
     this.clearBackgroundLearningRefreshTimer();
     if (typeof window !== 'undefined') {
       window.removeEventListener('pointerdown', this.onFirstInteractionBound);
+      window.removeEventListener(
+        PipelineComponent.charactersRefreshEvent,
+        this.onCharactersRefreshBound as EventListener
+      );
     }
     this.stopCardTts();
     this.clearObjectUrl();
@@ -963,10 +991,7 @@ export class PipelineComponent {
 
   isCardPlaying(item: RagComicSlide, index: number): boolean {
     const key = this.cardKey(item, index);
-    return (
-      (this.ttsPlaying() && this.playingCardKey() === key) ||
-      (this.autoPlayEnabled() && this.currentSlideCardKey() === key)
-    );
+    return (this.ttsPlaying() || this.ttsLoading()) && this.playingCardKey() === key;
   }
 
   toggleCardTts(item: RagComicSlide, index: number): void {
@@ -982,10 +1007,7 @@ export class PipelineComponent {
 
   isLearningCardPlaying(index: number): boolean {
     const key = this.learningCardKey(index);
-    return (
-      (this.ttsPlaying() && this.playingCardKey() === key) ||
-      (this.autoPlayEnabled() && this.viewMode() === 'learning' && this.currentSlide() === index)
-    );
+    return (this.ttsPlaying() || this.ttsLoading()) && this.playingCardKey() === key;
   }
 
   toggleLearningTts(item: RagLearnSlide, index: number): void {
@@ -1194,7 +1216,11 @@ export class PipelineComponent {
   }
 
   shouldShowLoadMoreSlides(): boolean {
-    return this.viewMode() === 'learning' ? this.showLoadMoreLearningSlide() : this.showLoadMoreSlide();
+    if (this.viewMode() === 'learning') {
+      return !!this.docKey().trim();
+    }
+
+    return this.showLoadMoreSlide();
   }
 
   learningSummary(slide: RagLearnSlide | null): string {
@@ -1333,10 +1359,10 @@ export class PipelineComponent {
   }
 
   triggerSelectionExplain(): void {
-    this.learningExplainService.triggerSelectionExplain(this.docKey(), () => {
-      this.askOpen.set(false);
-      this.sourceOpen.set(false);
-    });
+      this.learningExplainService.triggerSelectionExplain(this.docKey(), () => {
+        this.askOpen.set(false);
+        this.sourceOpen.set(false);
+      });
   }
 
   explainFullSummary(slide: RagLearnSlide): void {
@@ -1681,6 +1707,13 @@ export class PipelineComponent {
     );
   }
 
+  shouldShowCharactersPanel(): boolean {
+    return (
+      this.viewMode() === 'comic' &&
+      (this.charactersLoading() || !!this.charactersMessage() || this.characterReferences().length > 0)
+    );
+  }
+
   visibleSourcePageNumbers(): number[] {
     const slide = this.currentLearningSlide();
     if (!slide || !Array.isArray(slide.sourcePageNumbers)) {
@@ -1698,6 +1731,26 @@ export class PipelineComponent {
     if (nextOpen) {
       void this.loadSourcePagesForCurrentSlide();
     }
+  }
+
+  toggleAskPanel(): void {
+    const nextOpen = !this.askOpen();
+    this.learningExplainService.hideSelectionButton();
+    this.sourceOpen.set(false);
+    this.learningExplainService.closePanel();
+    this.askOpen.set(nextOpen);
+  }
+
+  closeAllSidePanels(): void {
+    this.askOpen.set(false);
+    this.sourceOpen.set(false);
+    this.learningExplainService.closePanel();
+    this.learningExplainService.hideSelectionButton();
+  }
+
+  characterName(character: RagCharacterReferenceImageResponse): string {
+    const name = typeof character.characterName === 'string' ? character.characterName.trim() : '';
+    return name || 'Character';
   }
 
   private showSlidesOverlay(message = 'Loading slides...'): void {
@@ -3423,6 +3476,10 @@ export class PipelineComponent {
     this.currentSlide.set(0);
     this.viewMode.set('comic');
     this.summaryHiddenCardKey.set('');
+    this.characterReferences.set([]);
+    this.charactersLoading.set(false);
+    this.charactersMessage.set('');
+    this.loadedCharactersDocKey = '';
     this.failedUriMap.set({});
     this.stopCardTts();
     this.writeBatchState(docKey, PipelineComponent.learningBatchStateStorageKey, {
@@ -3702,6 +3759,7 @@ export class PipelineComponent {
 
     this.stopCardTts();
     const token = ++this.playbackToken;
+    this.playingCardKey.set(key);
     this.ttsLoading.set(true);
     this.ttsPlaying.set(true);
     this.ttsCurrentWord.set(-1);
@@ -3994,6 +4052,68 @@ export class PipelineComponent {
     this.activeHeadCardKey.set('');
     this.ttsCurrentWord.set(-1);
     this.ttsTotalWords.set(0);
+  }
+
+  private async loadCharactersForCurrentDoc(force = false): Promise<void> {
+    const docKey = this.docKey().trim();
+    if (!docKey) {
+      this.characterReferences.set([]);
+      this.charactersLoading.set(false);
+      this.charactersMessage.set('No document selected.');
+      this.loadedCharactersDocKey = '';
+      return;
+    }
+
+    if (!force && this.loadedCharactersDocKey === docKey && this.characterReferences().length > 0) {
+      this.charactersLoading.set(false);
+      this.charactersMessage.set('');
+      return;
+    }
+
+    this.charactersLoading.set(true);
+    this.charactersMessage.set('');
+
+    try {
+      const response = await firstValueFrom(this.ragApi.getCharacterReferenceImages(docKey));
+      const seen = new Set<string>();
+      const characters = (Array.isArray(response.characters) ? response.characters : [])
+        .map((character) => {
+          const characterName =
+            typeof character.characterName === 'string' ? character.characterName.trim() : '';
+          const imageUrl = typeof character.imageUrl === 'string' ? character.imageUrl.trim() : '';
+          return {
+            ...character,
+            characterName,
+            imageUrl
+          };
+        })
+        .filter((character) => {
+          if (!character.characterName && !character.imageUrl) {
+            return false;
+          }
+
+          const dedupeKey = `${character.characterName.toLowerCase()}|${character.imageUrl}`;
+          if (seen.has(dedupeKey)) {
+            return false;
+          }
+          seen.add(dedupeKey);
+          return true;
+        });
+
+      this.characterReferences.set(characters);
+      this.loadedCharactersDocKey = docKey;
+      this.charactersMessage.set(characters.length ? '' : 'No characters available yet.');
+    } catch (err) {
+      console.warn('[Pipeline] Failed to load characters', {
+        docKey,
+        error: this.readApiError(err)
+      });
+      this.characterReferences.set([]);
+      this.charactersMessage.set(`Could not load characters: ${this.readApiError(err)}`);
+      this.loadedCharactersDocKey = '';
+    } finally {
+      this.charactersLoading.set(false);
+    }
   }
 
   private async ensureSlideHeadsLoaded(item: RagComicSlide, index: number): Promise<void> {

@@ -73,7 +73,43 @@
           ></app-slide-progress>
         }
 
-        <div style="min-width:0;">
+        <div style="min-width:0;" [class.story-slides-layout]="viewMode() === 'comic'">
+          @if (shouldShowCharactersPanel()) {
+            <aside class="story-characters-panel">
+              <div class="story-characters-panel-card">
+                @if (charactersLoading()) {
+                  <p class="status">Loading characters...</p>
+                } @else if (charactersMessage()) {
+                  <p class="status">{{ charactersMessage() }}</p>
+                }
+
+                @if (characterReferences().length > 0) {
+                  <div class="characters-bubble-grid">
+                    @for (character of characterReferences(); track (character.characterName ?? character.imageUrl ?? $index)) {
+                      <article class="character-card">
+                        <div class="character-card-image-shell">
+                          @if (character.imageUrl) {
+                            <img
+                              class="character-card-image"
+                              [src]="imageSrc(character.imageUrl)"
+                              [alt]="characterName(character)"
+                              (error)="onImageError(character.imageUrl, $event)"
+                            />
+                          } @else {
+                            <div class="character-card-placeholder" aria-hidden="true">
+                              {{ characterName(character).charAt(0) }}
+                            </div>
+                          }
+                        </div>
+                        <p class="character-card-name">{{ characterName(character) }}</p>
+                      </article>
+                    }
+                  </div>
+                }
+              </div>
+            </aside>
+          }
+
           @if (viewMode() === 'comic' && slides().length > 0) {
             <swiper-container
               #carouselEl
@@ -613,13 +649,13 @@
   </section>
 
   @if (askOpen() || sourceOpen() || explainOpen()) {
-    <button
-      type="button"
-      class="ask-backdrop"
-      (click)="askOpen.set(false); sourceOpen.set(false); explainOpen.set(false)"
-      aria-label="Close side panel"
-    ></button>
-  }
+      <button
+        type="button"
+        class="ask-backdrop"
+        (click)="closeAllSidePanels()"
+        aria-label="Close side panel"
+      ></button>
+    }
 
   @if (explainSelectionVisible()) {
     @for (box of explainSelectionBoxes(); track box.left + '-' + box.top + '-' + box.width + '-' + box.height) {
@@ -661,7 +697,7 @@
       type="button"
       class="ask-fab"
       [class.ask-fab-open]="askOpen()"
-      (click)="sourceOpen.set(false); askOpen.set(!askOpen())"
+      (click)="toggleAskPanel()"
       [attr.aria-expanded]="askOpen()"
       aria-controls="pipeline-ask-panel"
       aria-label="Open ask panel"
