@@ -1,9 +1,7 @@
 import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { BookImportPreviewPage, BooksApiService } from '../../core/api/books-api.service';
 import { RagApiService, RagIngestMode } from '../../core/api/rag-api.service';
 import {
   IngestProgressService
@@ -31,8 +29,6 @@ export class ImportComponent implements OnInit, OnDestroy {
   private ingestStateSubscription: Subscription | null = null;
   private ingestOverlayToken: symbol | null = null;
   private autoIngestAfterLoad = false;
-  private coverThumbnailFile: File | null = null;
-  private coverThumbnailUrl = '';
 
   docKey = '';
   selectedFile: File | null = null;
@@ -40,13 +36,11 @@ export class ImportComponent implements OnInit, OnDestroy {
   loading = signal(false);
   message = signal('');
   sourceLabel = signal('');
-  reviewPages = signal<BookImportPreviewPage[]>([]);
   ingestMode = signal<RagIngestMode>('Story Mode');
   ingestActive = signal(false);
   usableDocKey = signal('');
 
   constructor(
-    private readonly booksApi: BooksApiService,
     private readonly route: ActivatedRoute,
     private readonly ragApi: RagApiService,
     private readonly ingestProgress: IngestProgressService,
@@ -56,8 +50,6 @@ export class ImportComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.route.queryParamMap.subscribe((params) => {
-      const editionId = params.get('editionId')?.trim();
-      const thumbnailUrl = params.get('thumbnailUrl')?.trim();
       const modeParam = params.get('mode')?.trim();
       const requestedMode =
         modeParam === 'Learning Mode' || modeParam === 'Story Mode'
@@ -67,25 +59,23 @@ export class ImportComponent implements OnInit, OnDestroy {
       if (requestedMode) {
         this.ingestMode.set(requestedMode);
       }
-      if (!editionId) {
-        const source = params.get('source')?.trim();
-        const sourceId = params.get('sourceId')?.trim();
-        const title = params.get('title')?.trim();
-        const readerUrl = params.get('readerUrl')?.trim();
-        const downloadUrl = params.get('downloadUrl')?.trim();
-        if (!source || !sourceId || (!readerUrl && !downloadUrl)) {
-          return;
-        }
-        void this.loadStorySourceImportFile({
-          source,
-          sourceId,
-          title,
-          readerUrl,
-          downloadUrl
-        });
+
+      const source = params.get('source')?.trim();
+      const sourceId = params.get('sourceId')?.trim();
+      const title = params.get('title')?.trim();
+      const readerUrl = params.get('readerUrl')?.trim();
+      const downloadUrl = params.get('downloadUrl')?.trim();
+      if (!source || !sourceId || (!readerUrl && !downloadUrl)) {
         return;
       }
-      void this.loadBookImportFile(editionId, thumbnailUrl);
+
+      void this.loadStorySourceImportFile({
+        source,
+        sourceId,
+        title,
+        readerUrl,
+        downloadUrl
+      });
     });
   }
 
@@ -121,10 +111,7 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.reviewFile.set(null);
     this.message.set('');
     this.sourceLabel.set('');
-    this.reviewPages.set([]);
     this.ingestMode.set('Story Mode');
-    this.coverThumbnailFile = null;
-    this.coverThumbnailUrl = '';
     this.resetIngestProgress();
   }
 
@@ -159,10 +146,6 @@ export class ImportComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.coverThumbnailUrl) {
-      this.documentCoverCache.remember(docKey, this.coverThumbnailUrl);
-    }
-
     this.loading.set(true);
     this.message.set('Preparing PDF for ingest...');
     this.showIngestOverlay('Preparing document...');
@@ -180,7 +163,7 @@ export class ImportComponent implements OnInit, OnDestroy {
       }
     }
 
-    const thumbnailFile = this.coverThumbnailFile ?? await this.createThumbnailFile(fileForIngest);
+    const thumbnailFile = await this.createThumbnailFile(fileForIngest);
     const task = this.ingestProgress.startIngest({
       docKey,
       mode: this.ingestMode(),
@@ -209,9 +192,7 @@ export class ImportComponent implements OnInit, OnDestroy {
           this.hideIngestOverlay();
           this.selectedFile = null;
           this.reviewFile.set(null);
-          this.coverThumbnailFile = null;
           this.sourceLabel.set('');
-          this.reviewPages.set([]);
           this.ingestMode.set('Story Mode');
           this.stopIngestTracking();
         } else if (status.usable) {
@@ -356,72 +337,18 @@ export class ImportComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async loadBookImportFile(editionId: string, thumbnailUrl?: string | null): Promise<void> {
-    this.loading.set(true);
-    this.message.set('Loading book content for import...');
-    this.sourceLabel.set('');
-    this.selectedFile = null;
-    this.reviewFile.set(null);
-    this.reviewPages.set([]);
-    this.coverThumbnailFile = null;
-    this.coverThumbnailUrl = typeof thumbnailUrl === 'string' ? thumbnailUrl.trim() : '';
-    this.resetIngestProgress();
+  private isPdfFile(file: File): boolean {
+    const normalizedName = file.name.trim().toLowerCase();
+    return file.type === 'application/pdf' || normalizedName.endsWith('.pdf');
+  }
 
-    if (this.coverThumbnailUrl) {
-      this.coverThumbnailFile = await this.loadRemoteThumbnail(this.coverThumbnailUrl);
-    }
+  private isEpubFile(file: File): boolean {
+    const normalizedName = file.name.trim().toLowerCase();
+    return file.type === 'application/epub+zip' || normalizedName.endsWith('.epub');
+  }
 
-    this.booksApi.getBookImportPreview(editionId).subscribe({
-      next: (preview) => {
-        this.reviewPages.set(preview.pages ?? []);
-
-        this.booksApi.getBookImportFile(editionId).subscribe({
-          next: (response) => {
-            const blob = response.body;
-            if (!blob) {
-              this.message.set('The selected book did not return an importable file.');
-              this.loading.set(false);
-              return;
-            }
-
-            const fileName = this.extractFileName(response) ?? `${editionId}.pdf`;
-            const file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
-            const suggestedDocKey = response.headers.get('X-Suggested-Doc-Key')?.trim();
-            const bookTitle = response.headers.get('X-Book-Title')?.trim();
-
-            this.docKey = suggestedDocKey || this.suggestDocKey(file.name) || editionId.toLowerCase();
-            if (this.coverThumbnailUrl) {
-              this.documentCoverCache.remember(this.docKey, this.coverThumbnailUrl);
-            }
-            this.selectedFile = file;
-            this.reviewFile.set(null);
-            this.sourceLabel.set(bookTitle ? `Loaded from "${bookTitle}"` : 'Loaded from selected book');
-            this.ingestMode.set('Story Mode');
-            this.resetIngestProgress();
-            this.message.set('');
-            this.loading.set(false);
-          },
-          error: (err) => {
-            const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
-            const backendMessage =
-              typeof err?.error === 'string'
-                ? err.error
-                : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-            this.message.set(`Could not load the selected book (${status}): ${backendMessage}`);
-            this.loading.set(false);
-          }
-        });
-      },
-      error: (err) => {
-        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
-        const backendMessage =
-          typeof err?.error === 'string'
-            ? err.error
-            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-        this.message.set(`Could not load the selected book preview (${status}): ${backendMessage}`);
-        this.loading.set(false);
-      }
-    });
+  private isSupportedImportFile(file: File): boolean {
+    return this.isPdfFile(file) || this.isEpubFile(file);
   }
 
   private async loadStorySourceImportFile(sourceBook: {
@@ -436,9 +363,6 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.sourceLabel.set('');
     this.selectedFile = null;
     this.reviewFile.set(null);
-    this.reviewPages.set([]);
-    this.coverThumbnailFile = null;
-    this.coverThumbnailUrl = '';
     this.resetIngestProgress();
 
     this.ragApi
@@ -567,42 +491,6 @@ export class ImportComponent implements OnInit, OnDestroy {
       return 'text/html';
     }
     return 'application/octet-stream';
-  }
-
-  private isPdfFile(file: File): boolean {
-    const normalizedName = file.name.trim().toLowerCase();
-    return file.type === 'application/pdf' || normalizedName.endsWith('.pdf');
-  }
-
-  private isEpubFile(file: File): boolean {
-    const normalizedName = file.name.trim().toLowerCase();
-    return file.type === 'application/epub+zip' || normalizedName.endsWith('.epub');
-  }
-
-  private isSupportedImportFile(file: File): boolean {
-    return this.isPdfFile(file) || this.isEpubFile(file);
-  }
-
-  private async loadRemoteThumbnail(thumbnailUrl: string): Promise<File | null> {
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    try {
-      const response = await fetch(thumbnailUrl);
-      if (!response.ok) {
-        return null;
-      }
-
-      const blob = await response.blob();
-      const url = new URL(thumbnailUrl, window.location.origin);
-      const pathName = url.pathname.split('/').filter(Boolean).at(-1) || 'thumbnail';
-      const fileName = /\.[a-z0-9]+$/i.test(pathName) ? pathName : `${pathName}.jpg`;
-      return new File([blob], fileName, { type: blob.type || 'image/jpeg' });
-    } catch (error) {
-      console.warn('[Import] Failed to load remote thumbnail', error);
-      return null;
-    }
   }
 
   private extractFileName(response: { headers: { get(name: string): string | null } }): string | null {

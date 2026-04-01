@@ -44,8 +44,8 @@ import {
   ChapterSectionSelection
 } from './pipeline-chapters-sidebar';
 import { PipelineSlideProgressItem } from './slide-progress.service';
-import { AppShellUiService } from '../../app-shell-ui.service';
 import { LoadingOverlayService } from '../../shared/loading-overlay.service';
+import { AppShellUiService } from '../../app-shell-ui.service';
 import { register } from 'swiper/element/bundle';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
@@ -1831,9 +1831,7 @@ export class PipelineComponent {
     this.storyProcessRequestDocKey = '';
     this.suppressStoryAutoProcessStart = false;
     this.processAllRunning.set(false);
-    console.log("LOADING THE FUCKING SLIDES");
     this.loadSlides(normalizedDocKey);
-        console.log("LOADING THE FUCKING startStoryProcessAll");
     this.startStoryProcessAll(normalizedDocKey, false, true);
   }
 

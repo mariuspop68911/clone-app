@@ -35,32 +35,6 @@ export interface RagDocumentResponse {
   [key: string]: unknown;
 }
 
-export interface StorySourceBookResponse {
-  source?: 'STANDARD_EBOOKS' | string;
-  sourceId?: string;
-  title?: string;
-  authors?: string[];
-  firstPublishYear?: number | null;
-  totalPages?: number | null;
-  pageCount?: number | null;
-  pages?: number | null;
-  languages?: string[];
-  tags?: string[];
-  coverUrl?: string;
-  summary?: string;
-  readerUrl?: string | null;
-  downloadUrl?: string | null;
-  [key: string]: unknown;
-}
-
-export interface StorySourceImportFileRequest {
-  source: string;
-  sourceId: string;
-  title?: string;
-  readerUrl?: string | null;
-  downloadUrl?: string | null;
-}
-
 export interface RagDocumentLastSlideRequest {
   lastSlide: number;
 }
@@ -102,6 +76,32 @@ export interface RagImageGenerateResponse {
   mimeType?: string;
   imageBase64?: string;
   [key: string]: unknown;
+}
+
+export interface StorySourceBookResponse {
+  source?: string;
+  sourceId?: string;
+  title?: string;
+  pageCount?: number;
+  firstPublishYear?: number;
+  authors?: string[];
+  languages?: string[];
+  tags?: string[];
+  coverUrl?: string;
+  summary?: string;
+  readerUrl?: string;
+  downloadUrl?: string;
+  totalPages?: number;
+  pages?: number;
+  [key: string]: unknown;
+}
+
+export interface StorySourceImportFileRequest {
+  source: string;
+  sourceId: string;
+  title?: string;
+  readerUrl?: string | null;
+  downloadUrl?: string | null;
 }
 
 export interface RagComicSlideCharacter {
@@ -626,20 +626,6 @@ export class RagApiService {
       );
   }
 
-  getRandomStorySourceBooks(limit = 20): Observable<StorySourceBookResponse[]> {
-    const params = new HttpParams().set('limit', Math.max(1, Math.floor(limit)));
-    return this.http.get<StorySourceBookResponse[]>('/api/story-source-books/random', { params });
-  }
-
-  importStorySourceBookFile(
-    req: StorySourceImportFileRequest
-  ): Observable<HttpResponse<Blob>> {
-    return this.http.post('/api/story-source-books/import-file', req, {
-      observe: 'response',
-      responseType: 'blob'
-    });
-  }
-
   saveDocumentLastSlide(
     docId: number,
     lastSlide: number
@@ -740,6 +726,21 @@ export class RagApiService {
 
   getDocumentPdfUrl(docId: number): string {
     return `${this.baseUrl}/documents/${encodeURIComponent(String(docId))}/pdf`;
+  }
+
+  getRandomStorySourceBooks(limit = 20): Observable<StorySourceBookResponse[]> {
+    const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 20;
+    const params = new HttpParams().set('limit', String(safeLimit));
+    return this.http.get<StorySourceBookResponse[]>(`/api/story-source-books/random`, { params });
+  }
+
+  importStorySourceBookFile(
+    request: StorySourceImportFileRequest
+  ): Observable<HttpResponse<Blob>> {
+    return this.http.post(`/api/story-source-books/import-file`, request, {
+      observe: 'response',
+      responseType: 'blob'
+    });
   }
 
   resetComicBook(docKey: string): Observable<void> {

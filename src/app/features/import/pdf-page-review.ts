@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, signal } from '@angular/core';
-import { BookImportPreviewPage } from '../../core/api/books-api.service';
 import { RagIngestMode } from '../../core/api/rag-api.service';
 
 interface PdfReviewPage {
@@ -33,7 +32,6 @@ export class PdfPageReviewComponent {
   private pdfDocument: any = null;
 
   @Input() file: File | null = null;
-  @Input() externalPages: BookImportPreviewPage[] = [];
   @Input() busy = false;
   @Input() selectedMode: RagIngestMode = 'Story Mode';
   @Input() showModePicker = true;
@@ -50,11 +48,7 @@ export class PdfPageReviewComponent {
   totalPageCount = signal(0);
 
   ngOnChanges(changes: SimpleChanges): void {
-    if ('externalPages' in changes) {
-      this.loadExternalPages(this.externalPages);
-    }
-
-    if ('file' in changes && (!Array.isArray(this.externalPages) || !this.externalPages.length)) {
+    if ('file' in changes) {
       void this.loadPages(this.file);
     }
   }
@@ -330,33 +324,6 @@ export class PdfPageReviewComponent {
       }
     }
     this.previewUrls = [];
-  }
-
-  private loadExternalPages(externalPages: BookImportPreviewPage[] | null | undefined): void {
-    this.clearPreviewUrls();
-    this.selectedPages.set([]);
-    this.activePageNumber.set(null);
-    this.message.set('');
-
-    if (!Array.isArray(externalPages) || !externalPages.length) {
-      this.pages.set([]);
-      this.totalPageCount.set(0);
-      return;
-    }
-
-    const pages = externalPages.map((page) => ({
-      pageNumber: page.pageNumber,
-      thumbnailUrl: page.imageUrl,
-      fullPageUrl: page.imageUrl,
-      included: true,
-      textSnippet: page.pageType ?? ''
-    }));
-
-    this.pages.set(pages);
-    this.totalPageCount.set(pages.length);
-    this.activePageNumber.set(pages[0]?.pageNumber ?? null);
-    this.activePageLoading.set(false);
-    this.loading.set(false);
   }
 
   private ensureActivePageVisible(): void {

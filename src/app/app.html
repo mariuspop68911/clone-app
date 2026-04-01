@@ -21,23 +21,20 @@
       (click)="closeDrawer()"
       aria-label="Close browse panel"
     ></button>
+    <aside
+      id="app-drawer"
+      class="drawer drawer-open"
+      aria-hidden="false"
+      (click)="$event.stopPropagation()"
+    >
+      <h1>RAG Console</h1>
+      <nav>
+        <a routerLink="/browse-gutenberg" routerLinkActive="active" (click)="closeDrawer()">Browse Gutenberg</a>
+        <a routerLink="/documents" routerLinkActive="active" (click)="closeDrawer()">Documents</a>
+        <a routerLink="/import" routerLinkActive="active" (click)="closeDrawer()">Import</a>
+      </nav>
+    </aside>
   }
-
-  <aside
-    id="app-drawer"
-    class="drawer"
-    [class.drawer-open]="drawerOpen()"
-    [attr.aria-hidden]="!drawerOpen()"
-    (click)="$event.stopPropagation()"
-  >
-    <h1>RAG Console</h1>
-    <nav>
-      <a routerLink="/books" routerLinkActive="active" (click)="closeDrawer()">Search Books</a>
-      <a routerLink="/browse" routerLinkActive="active" (click)="closeDrawer()">Browse</a>
-      <a routerLink="/browse-gutenberg" routerLinkActive="active" (click)="closeDrawer()">Browse Gutenberg</a>
-      <a routerLink="/documents" routerLinkActive="active" (click)="closeDrawer()">View Documents</a>
-    </nav>
-  </aside>
 
   <main class="content">
     <router-outlet />

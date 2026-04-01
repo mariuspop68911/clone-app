@@ -1,15 +1,12 @@
 <section class="source-books-page">
-  <header class="source-books-hero">
+  <header class="hero">
     <div>
       <p class="eyebrow">Browse Standard Ebooks</p>
-      <h1>Standard Ebooks</h1>
-      <p class="subtitle">
-        Explore randomly surfaced public-domain books from Standard Ebooks and create comic ingests from their full text.
-      </p>
+      <h1>Browse Gutenberg</h1>
+      <p class="subtitle">Pick a public-domain title and send it straight into the comic pipeline.</p>
     </div>
-
-    <button type="button" class="refresh-button" (click)="loadBooks()" [disabled]="loading()">
-      {{ loading() ? 'Loading...' : 'Refresh List' }}
+    <button type="button" class="refresh-btn" (click)="loadBooks()" [disabled]="loading()">
+      {{ loading() ? 'Loading...' : 'Refresh' }}
     </button>
   </header>
 
@@ -18,63 +15,46 @@
   }
 
   @if (books().length) {
-    <section class="source-books-grid">
+    <div class="books-grid">
       @for (book of books(); track book.source + ':' + book.sourceId) {
-        <article class="source-book-card">
-          <div class="source-book-cover">
-            @if (book.coverUrl) {
-              <img [src]="book.coverUrl" [alt]="'Cover for ' + (book.title || 'book')" loading="lazy" />
-            } @else {
-              <div class="source-book-cover-fallback">No Cover</div>
-            }
-          </div>
+        <article class="book-card">
+          @if (book.coverUrl) {
+            <img class="cover" [src]="book.coverUrl" [alt]="book.title || 'Book cover'" loading="lazy" />
+          } @else {
+            <div class="cover placeholder">No cover</div>
+          }
 
-          <div class="source-book-body">
-            <p class="source-book-meta">{{ metaText(book) }}</p>
-            <h2>{{ book.title || 'Untitled book' }}</h2>
-            <p class="source-book-authors">{{ authorsText(book) }}</p>
+          <div class="content">
+            <h2>{{ book.title || 'Untitled' }}</h2>
+            <p class="authors">{{ authorsText(book) }}</p>
+            <p class="meta">{{ metaText(book) }}</p>
 
             @if (book.summary) {
-              <p class="source-book-summary">{{ book.summary }}</p>
+              <p class="summary">{{ book.summary }}</p>
             }
 
             @if (tagsText(book).length) {
-              <div class="source-book-tags">
+              <div class="tags">
                 @for (tag of tagsText(book); track tag) {
                   <span>{{ tag }}</span>
                 }
               </div>
             }
 
-            <div class="source-book-actions">
+            <div class="actions">
               @if (canCreateComic(book)) {
-                <a
-                  class="source-book-link"
-                  [routerLink]="['/import']"
-                  [queryParams]="importRouteParams(book)"
-                >
-                  Create Comic
-                </a>
+                <a class="primary" [routerLink]="['/import']" [queryParams]="importRouteParams(book)">Import</a>
               }
               @if (book.readerUrl) {
-                <a class="source-book-link source-book-link-secondary" [href]="book.readerUrl" target="_blank" rel="noreferrer">
-                  Open Reader
-                </a>
+                <a class="secondary" [href]="book.readerUrl" target="_blank" rel="noreferrer">Read</a>
               }
               @if (book.downloadUrl) {
-                <a
-                  class="source-book-link source-book-link-tertiary"
-                  [href]="book.downloadUrl"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Download
-                </a>
+                <a class="secondary" [href]="book.downloadUrl" target="_blank" rel="noreferrer">Download</a>
               }
             </div>
           </div>
         </article>
       }
-    </section>
+    </div>
   }
 </section>
