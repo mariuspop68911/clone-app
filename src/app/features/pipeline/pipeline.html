@@ -70,19 +70,14 @@
             class="slide-progress-below"
             [items]="slideProgressItems()"
             [currentIndex]="slideProgressCurrentIndex()"
+            [loading]="processAllRunning()"
           ></app-slide-progress>
         }
 
-        <div style="min-width:0;" [class.story-slides-layout]="viewMode() === 'comic'">
+        <div style="min-width:0;" [class.story-slides-layout]="viewMode() === 'comic' && shouldShowCharactersPanel()">
           @if (shouldShowCharactersPanel()) {
             <aside class="story-characters-panel">
               <div class="story-characters-panel-card">
-                @if (charactersLoading()) {
-                  <p class="status">Loading characters...</p>
-                } @else if (charactersMessage()) {
-                  <p class="status">{{ charactersMessage() }}</p>
-                }
-
                 @if (characterReferences().length > 0) {
                   <div class="characters-bubble-grid">
                     @for (character of characterReferences(); track (character.characterName ?? character.imageUrl ?? $index)) {
@@ -121,17 +116,19 @@
               resistance-ratio="0.85"
               (swiperslidechange)="onSlideIndexChange($event)"
             >
-              @for (slide of slides(); track slide.comicNote?.id ?? $index; let cardIndex = $index) {
+              @for (slide of slides(); track slide.id ?? slide.comicNote?.id ?? $index; let cardIndex = $index) {
                 <swiper-slide class="carousel-slide">
                   <article class="slide-card story-slide-card">
+                    @if (storySlideTitle(slide)) {
+                      <header class="story-slide-header">
+                        @if (storySlideTypeLabel(slide)) {
+                          <span class="story-slide-type">{{ storySlideTypeLabel(slide) }}</span>
+                        }
+                        <h3 class="story-slide-title">{{ storySlideTitle(slide) }}</h3>
+                      </header>
+                    }
                     <div class="slide-visual">
                       @if (slideImageUrl(slide); as imageUrl) {
-                          <button
-                            type="button"
-                            class="slide-image-button"
-                            style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
-                            (click)="openImageViewer(imageUrl, 'Slide ' + (slide.id ?? $index + 1), null)"
-                          >
                           <img
                             class="slide-image"
                             [class.slide-image-zoom-left]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-left'"
@@ -141,7 +138,6 @@
                             [alt]="'Slide ' + (slide.id ?? $index + 1)"
                             (error)="onImageError(imageUrl, $event)"
                           />
-                        </button>
                         @if (isFailed(imageUrl)) {
                           <p class="image-error">
                             Preview failed (likely private object). Open this URI with an authorized

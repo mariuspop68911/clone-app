@@ -6,5 +6,14 @@
     "timeout": 1800000,
     "proxyTimeout": 1800000,
     "logLevel": "debug"
+  },
+  "/ws": {
+    "target": "http://127.0.0.1:8080",
+    "secure": false,
+    "changeOrigin": true,
+    "ws": true,
+    "timeout": 1800000,
+    "proxyTimeout": 1800000,
+    "logLevel": "debug"
   }
 }

@@ -15,9 +15,10 @@ export class SlideProgressComponent {
 
   @Input() items: PipelineSlideProgressItem[] = [];
   @Input() currentIndex = 0;
+  @Input() loading = false;
 
   indicatorItems(): PipelineSlideProgressViewItem[] {
-    return this.slideProgressService.buildIndicators(this.items, this.currentIndex);
+    return this.slideProgressService.buildIndicators(this.items, this.currentIndex, this.loading);
   }
 
   hasLineAfter(index: number): boolean {

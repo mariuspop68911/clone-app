@@ -17,6 +17,7 @@ export interface PipelineSlideProgressViewItem extends PipelineSlideProgressItem
   current: boolean;
   viewed: boolean;
   future: boolean;
+  loading: boolean;
   dotBackground: string;
   dotBorder: string;
   dotColor: string;
@@ -28,13 +29,17 @@ export interface PipelineSlideProgressViewItem extends PipelineSlideProgressItem
 export class SlideProgressService {
   buildIndicators(
     items: PipelineSlideProgressItem[],
-    currentIndex: number
+    currentIndex: number,
+    loading = false
   ): PipelineSlideProgressViewItem[] {
+    const firstUnseenIndex = items.findIndex((_, index) => index >= currentIndex);
+
     return items.map((item, index) => {
       const color = this.kindColor(item.kind);
       const viewed = index < currentIndex;
       const current = index === currentIndex;
       const future = index > currentIndex;
+      const loadingItem = loading && index === firstUnseenIndex;
 
       return {
         ...item,
@@ -42,9 +47,14 @@ export class SlideProgressService {
         current,
         viewed,
         future,
-        dotBackground: current || viewed ? color : '#ffffff',
-        dotBorder: current || viewed ? color : this.transparentize(color, 0.42),
-        dotColor: viewed ? '#ffffff' : color,
+        loading: loadingItem,
+        dotBackground: loadingItem ? 'transparent' : current || viewed ? color : '#ffffff',
+        dotBorder: loadingItem
+          ? this.transparentize(color, 0.24)
+          : current || viewed
+            ? color
+            : this.transparentize(color, 0.42),
+        dotColor: loadingItem ? this.darken(color, 0.18) : viewed ? '#ffffff' : color,
         lineColor: index < currentIndex ? color : this.transparentize(color, 0.22),
         opacity: future ? 0.55 : 1
       };
@@ -70,6 +80,19 @@ export class SlideProgressService {
   }
 
   private transparentize(hex: string, alpha: number): string {
+    const { red, green, blue } = this.hexToRgb(hex);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  private darken(hex: string, amount: number): string {
+    const { red, green, blue } = this.hexToRgb(hex);
+    const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+    const factor = 1 - amount;
+
+    return `rgb(${clamp(red * factor)}, ${clamp(green * factor)}, ${clamp(blue * factor)})`;
+  }
+
+  private hexToRgb(hex: string): { red: number; green: number; blue: number } {
     const normalized = hex.replace('#', '');
     const value = normalized.length === 3
       ? normalized
@@ -78,9 +101,10 @@ export class SlideProgressService {
           .join('')
       : normalized;
 
-    const red = Number.parseInt(value.slice(0, 2), 16);
-    const green = Number.parseInt(value.slice(2, 4), 16);
-    const blue = Number.parseInt(value.slice(4, 6), 16);
-    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    return {
+      red: Number.parseInt(value.slice(0, 2), 16),
+      green: Number.parseInt(value.slice(2, 4), 16),
+      blue: Number.parseInt(value.slice(4, 6), 16)
+    };
   }
 }

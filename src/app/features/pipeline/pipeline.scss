@@ -464,6 +464,28 @@
   min-height: 46rem;
 }
 
+.story-slide-header {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1rem 1.15rem 0;
+}
+
+.story-slide-type {
+  color: #5379a3;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.story-slide-title {
+  margin: 0;
+  color: #172a3d;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
 .learning-takeaways-image {
   width: 100% !important;
   height: 29rem !important;

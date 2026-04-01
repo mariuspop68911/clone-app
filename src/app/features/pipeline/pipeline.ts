@@ -19,7 +19,6 @@ import {
   RagCharacterReferenceImageResponse,
   RagGenerateChapterQuizRequest,
   RagGenerateChapterReviewSlidesResponse,
-  RagComicBookGenerateResponse,
   RagComicSlide,
   RagDocumentResponse,
   RagIngestMode,
@@ -48,7 +47,8 @@ import { PipelineSlideProgressItem } from './slide-progress.service';
 import { AppShellUiService } from '../../app-shell-ui.service';
 import { LoadingOverlayService } from '../../shared/loading-overlay.service';
 import { register } from 'swiper/element/bundle';
-import { firstValueFrom } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
+import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import { marked } from 'marked';
 
 register();
@@ -106,6 +106,22 @@ interface SourcePreviewPage {
   trustedPdfUrl: SafeResourceUrl;
 }
 
+interface StoryProcessEventEnvelope {
+  eventType?: string;
+  type?: string;
+  event?: string;
+  event_name?: string;
+  kind?: string;
+  status?: string;
+  message?: string;
+  error?: string;
+  payload?: unknown;
+  data?: unknown;
+  slides?: unknown;
+  slide?: unknown;
+  [key: string]: unknown;
+}
+
 type ActiveVisualMode = 'none' | 'dialogue' | 'context';
 type PipelineViewMode = 'comic' | 'learning';
 
@@ -122,7 +138,6 @@ type PipelineViewMode = 'comic' | 'learning';
   schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class PipelineComponent {
-  private static readonly charactersRefreshEvent = 'codex:characters-refresh';
   private static readonly comicBatchSize = 10;
   private static readonly learningBatchStateStorageKey = 'pipeline-learning-batch-state';
   private static readonly keyTakeawaysImageAssetUrl = '/assets/key-takeaways.svg';
@@ -140,8 +155,13 @@ export class PipelineComponent {
   private currentObjectUrl: string | null = null;
   private sourcePdfLoadToken = 0;
   private loadedSourceSignature = '';
-  private loadedCharactersDocKey = '';
   private lastAutoLoadTriggerKey = '';
+  private storyProcessRequestDocKey = '';
+  private storyProcessStartedDocKey = '';
+  private storyProcessClient: Client | null = null;
+  private storyProcessSubscription: StompSubscription | null = null;
+  private activeProcessAllId = '';
+  private suppressStoryAutoProcessStart = false;
   private selectionModeLongPressTimer: ReturnType<typeof setTimeout> | null = null;
   private chapterQuizCheckTimer: ReturnType<typeof setTimeout> | null = null;
   private learningImagePointerStart: { x: number; y: number; moved: boolean } | null = null;
@@ -154,7 +174,7 @@ export class PipelineComponent {
   private playbackToken = 0;
   private onSegmentEnd: (() => void) | null = null;
   private audioUnlocked = false;
-  private generateAllStartedAt = 0;
+  private readonly pendingTtsRequests = new Set<Subscription>();
   private autoRequestedInitialSlides = false;
   private learningRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly failedUriMap = signal<Record<string, true>>({});
@@ -163,15 +183,12 @@ export class PipelineComponent {
   private readonly onFirstInteractionBound = () => {
     void this.ensureAudioUnlocked();
   };
-  private readonly onCharactersRefreshBound = (event: Event) => {
-    const refreshedDocKey =
-      event instanceof CustomEvent && typeof event.detail === 'string' ? event.detail.trim() : '';
-    if (!refreshedDocKey || refreshedDocKey !== this.docKey().trim()) {
+  private readonly onVisibilityChangeBound = () => {
+    if (typeof document === 'undefined' || !document.hidden) {
       return;
     }
-
-    this.loadedCharactersDocKey = '';
-    void this.loadCharactersForCurrentDoc(true);
+    this.autoPlayEnabled.set(false);
+    this.stopCardTts();
   };
   private readonly learningExplainService = inject(LearningExplainService);
   private readonly appShellUi = inject(AppShellUiService);
@@ -188,6 +205,7 @@ export class PipelineComponent {
   learningBatchStart = signal(0);
   learningBatchEnd = signal(PipelineComponent.comicBatchSize);
   showLoadMoreLearningSlide = signal(false);
+  processAllRunning = signal(false);
   ttsMessage = signal('');
   ttsLoading = signal(false);
   ttsPlaying = signal(false);
@@ -222,8 +240,6 @@ export class PipelineComponent {
   sourceLoading = signal(false);
   sourceMessage = signal('');
   characterReferences = signal<RagCharacterReferenceImageResponse[]>([]);
-  charactersLoading = signal(false);
-  charactersMessage = signal('');
   docId = signal<number | null>(null);
   learningContext = signal<RagLearningPipelineContextResponse | null>(null);
   learningContextLoading = signal(false);
@@ -429,10 +445,7 @@ export class PipelineComponent {
     if (typeof window !== 'undefined') {
       this.audio = new Audio();
       window.addEventListener('pointerdown', this.onFirstInteractionBound, { passive: true });
-      window.addEventListener(
-        PipelineComponent.charactersRefreshEvent,
-        this.onCharactersRefreshBound as EventListener
-      );
+      document.addEventListener('visibilitychange', this.onVisibilityChangeBound);
     }
 
     this.route.paramMap.subscribe((params) => {
@@ -484,10 +497,12 @@ export class PipelineComponent {
       this.sourcePages.set([]);
       this.sourceLoading.set(false);
       this.sourceMessage.set('');
+      this.closeStoryProcessStream();
+      this.storyProcessStartedDocKey = '';
+      this.storyProcessRequestDocKey = '';
+      this.suppressStoryAutoProcessStart = false;
+      this.processAllRunning.set(false);
       this.characterReferences.set([]);
-      this.charactersLoading.set(false);
-      this.charactersMessage.set('');
-      this.loadedCharactersDocKey = '';
       this.docId.set(null);
       this.desiredInitialSlideIndex = null;
       this.lastPersistedSlideIndex = null;
@@ -515,8 +530,6 @@ export class PipelineComponent {
       this.clearBackgroundLearningRefreshTimer();
 
       if (key.trim()) {
-        void this.loadCharactersForCurrentDoc();
-        this.loadDocumentMode(key);
         this.loadContextAndSlides(key);
       }
     });
@@ -530,12 +543,12 @@ export class PipelineComponent {
     this.clearSelectionModeLongPressTimer();
     this.clearChapterQuizCheckTimer();
     this.clearBackgroundLearningRefreshTimer();
+    this.closeStoryProcessStream();
+    this.suppressStoryAutoProcessStart = false;
+    this.processAllRunning.set(false);
     if (typeof window !== 'undefined') {
       window.removeEventListener('pointerdown', this.onFirstInteractionBound);
-      window.removeEventListener(
-        PipelineComponent.charactersRefreshEvent,
-        this.onCharactersRefreshBound as EventListener
-      );
+      document.removeEventListener('visibilitychange', this.onVisibilityChangeBound);
     }
     this.stopCardTts();
     this.clearObjectUrl();
@@ -552,16 +565,12 @@ export class PipelineComponent {
     }
 
     this.viewMode.set('comic');
-    this.loading.set(true);
-    this.generateAllStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     console.info('[Pipeline] Generate all requested', {
       docKey: key,
       startedAt: new Date().toISOString()
     });
-    this.message.set('Processing next chapters...');
     this.lastAutoLoadTriggerKey = '';
-    this.showLoadMoreSlide.set(false);
-    this.generateAllBatch(key);
+    this.loadSlides(key);
   }
 
   generateLearning(): void {
@@ -605,14 +614,7 @@ export class PipelineComponent {
       const nextStart = this.learningBatchEnd();
       const nextEnd = nextStart + PipelineComponent.comicBatchSize;
       this.generateLearningBatch(key, nextStart, nextEnd);
-      return;
     }
-
-    if (!this.showLoadMoreSlide()) {
-      return;
-    }
-
-    this.generateAllBatch(key);
   }
 
   clearSlides(): void {
@@ -654,33 +656,24 @@ export class PipelineComponent {
 
     const currentBatchStart =
       Math.floor(nextIndex / PipelineComponent.comicBatchSize) * PipelineComponent.comicBatchSize;
-    const triggerIndex = currentBatchStart + 1;
+    const triggerIndex = currentBatchStart;
     if (nextIndex < triggerIndex) {
       return;
     }
 
     if (this.viewMode() === 'learning') {
-      const triggerKey = `learning-quiz:${currentBatchStart}`;
+      if (!this.showLoadMoreLearningSlide() || currentBatchStart === 0 || nextIndex !== currentBatchStart) {
+        return;
+      }
+
+      const triggerKey = `learning:${currentBatchStart}`;
       if (this.lastAutoLoadTriggerKey === triggerKey) {
         return;
       }
 
       this.lastAutoLoadTriggerKey = triggerKey;
-      return;
+      this.loadMoreSlides();
     }
-
-    if (!this.showLoadMoreSlide()) {
-      return;
-    }
-
-    const remainingSlides = this.slides().length - nextIndex - 1;
-    const triggerKey = `comic:${this.slides().length}`;
-    if (this.lastAutoLoadTriggerKey === triggerKey || remainingSlides > 1) {
-      return;
-    }
-
-    this.lastAutoLoadTriggerKey = triggerKey;
-    this.generateAllBatch(docKey);
   }
 
   onSlideIndexChange(event: Event): void {
@@ -698,9 +691,7 @@ export class PipelineComponent {
     this.summaryHiddenCardKey.set('');
     this.learningExplainService.hideSelectionButton();
     this.playCurrentSlideIfAutoPlayEnabled();
-    if (this.viewMode() !== 'learning') {
-      this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
-    }
+    this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
     if (this.viewMode() === 'learning' && this.sourceOpen()) {
       void this.loadSourcePagesForCurrentSlide();
     }
@@ -719,6 +710,7 @@ export class PipelineComponent {
       this.summaryHiddenCardKey.set('');
       this.learningExplainService.hideSelectionButton();
       this.playCurrentSlideIfAutoPlayEnabled();
+      this.maybeAutoLoadMoreAfterSlideAdvance(index);
       if (this.viewMode() === 'learning' && this.sourceOpen()) {
         void this.loadSourcePagesForCurrentSlide();
       }
@@ -989,6 +981,28 @@ export class PipelineComponent {
     return this.cardKey(slide, this.currentSlide());
   }
 
+  storySlideType(slide: RagComicSlide | null | undefined): string {
+    return typeof slide?.slideType === 'string' ? slide.slideType.trim().toUpperCase() : '';
+  }
+
+  storySlideTypeLabel(slide: RagComicSlide | null | undefined): string {
+    switch (this.storySlideType(slide)) {
+      case 'BOOK_OVERVIEW':
+        return 'Book Overview';
+      case 'CHARACTER_INTRO':
+        return 'Character Intro';
+      case 'STORY':
+        return 'Story';
+      default:
+        return '';
+    }
+  }
+
+  storySlideTitle(slide: RagComicSlide | null | undefined): string {
+    const title = typeof slide?.title === 'string' ? slide.title.trim() : '';
+    return title || this.storySlideTypeLabel(slide);
+  }
+
   isCardPlaying(item: RagComicSlide, index: number): boolean {
     const key = this.cardKey(item, index);
     return (this.ttsPlaying() || this.ttsLoading()) && this.playingCardKey() === key;
@@ -1220,7 +1234,7 @@ export class PipelineComponent {
       return !!this.docKey().trim();
     }
 
-    return this.showLoadMoreSlide();
+    return false;
   }
 
   learningSummary(slide: RagLearnSlide | null): string {
@@ -1708,10 +1722,7 @@ export class PipelineComponent {
   }
 
   shouldShowCharactersPanel(): boolean {
-    return (
-      this.viewMode() === 'comic' &&
-      (this.charactersLoading() || !!this.charactersMessage() || this.characterReferences().length > 0)
-    );
+    return this.viewMode() === 'comic' && this.characterReferences().length > 0;
   }
 
   visibleSourcePageNumbers(): number[] {
@@ -1791,36 +1802,64 @@ export class PipelineComponent {
     }
   }
 
-  private loadContextAndSlides(docKey: string): void {
+  private async loadContextAndSlides(docKey: string): Promise<void> {
     const normalizedDocKey = docKey.trim();
     if (!normalizedDocKey) {
       return;
     }
 
+    await this.loadDocumentMode(normalizedDocKey);
+    if (this.docKey().trim() !== normalizedDocKey) {
+      return;
+    }
+
     this.slidesLoading.set(true);
     this.showSlidesOverlay('Loading slides...');
+    this.loadLearningContext(normalizedDocKey);
+    if (this.shouldUseLearningFlow()) {
+      this.closeStoryProcessStream();
+      this.storyProcessStartedDocKey = '';
+      this.storyProcessRequestDocKey = '';
+      this.suppressStoryAutoProcessStart = false;
+      this.processAllRunning.set(false);
+      this.loadLearningSlidesFallback(normalizedDocKey, typeof performance !== 'undefined' ? performance.now() : Date.now());
+      return;
+    }
+
+    this.closeStoryProcessStream();
+    this.storyProcessStartedDocKey = '';
+    this.storyProcessRequestDocKey = '';
+    this.suppressStoryAutoProcessStart = false;
+    this.processAllRunning.set(false);
+    console.log("LOADING THE FUCKING SLIDES");
+    this.loadSlides(normalizedDocKey);
+        console.log("LOADING THE FUCKING startStoryProcessAll");
+    this.startStoryProcessAll(normalizedDocKey, false, true);
+  }
+
+  private loadLearningContext(docKey: string): void {
     this.learningContextLoading.set(true);
     this.learningContextError.set('');
     this.learningContext.set(null);
 
-    this.ragApi.getLearningPipelineContext(normalizedDocKey).subscribe({
+    this.ragApi.getLearningPipelineContext(docKey).subscribe({
       next: (response) => {
         this.learningContext.set(response);
         this.docId.set(this.toNullableFiniteNumber(response.docId));
         this.learningContextLoading.set(false);
-        this.loadSlides(normalizedDocKey);
       },
       error: (err) => {
         this.learningContext.set(null);
         this.learningContextError.set(`Failed to load chapters: ${this.readApiError(err)}`);
         this.learningContextLoading.set(false);
-        this.loadSlides(normalizedDocKey);
       }
     });
   }
 
   private loadSlides(docKey: string): void {
     const loadStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const shouldStartStoryAfterLoad = !this.shouldUseLearningFlow();
+    this.suppressStoryAutoProcessStart = shouldStartStoryAfterLoad;
     this.slidesLoading.set(true);
     this.slidesMessage.set('');
     this.lastAutoLoadTriggerKey = '';
@@ -1834,7 +1873,7 @@ export class PipelineComponent {
     this.ragApi.getComicSlidesWithImages(docKey, this.selectedLanguage()).subscribe({
       next: (response) => {
         const nextSlides = Array.isArray(response.slides) ? response.slides : [];
-        if (!nextSlides.length) {
+        if (!nextSlides.length && this.shouldUseLearningFlow()) {
           this.loadLearningSlidesFallback(docKey, loadStartedAt);
           return;
         }
@@ -1849,17 +1888,11 @@ export class PipelineComponent {
         const nextCursor = backendLastLimit !== null ? backendLastLimit : returnedCount;
         const elapsedMs =
           (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
-        this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
-        this.slides.set(nextSlides);
-        this.learningSlides.set([]);
-        this.viewMode.set('comic');
-        this.slidesLoading.set(false);
-        this.showLoadMoreSlide.set(totalCount > returnedCount);
-        this.autoRequestedInitialSlides = false;
-        const nextIndex = this.initialSlideIndex(this.visibleLearningSlides().length);
-        this.currentSlide.set(nextIndex);
-        this.syncSwiperSlide(nextIndex);
-        void this.loadCurrentSlideDialogs();
+        if (this.shouldUseLearningFlow()) {
+          this.applyFetchedComicSlides(response, nextSlides);
+        } else {
+          this.applyFetchedComicSlides(response, nextSlides);
+        }
         console.info('[Pipeline] Slide reload finished', {
           docKey,
           languageCode: this.selectedLanguage(),
@@ -1870,9 +1903,15 @@ export class PipelineComponent {
           nextCursor,
           elapsedMs: Math.round(elapsedMs)
         });
+      },
+      complete: () => {
         this.hideSlidesOverlay();
+        if (!shouldStartStoryAfterLoad) {
+          this.suppressStoryAutoProcessStart = false;
+        }
       },
       error: (err) => {
+        this.suppressStoryAutoProcessStart = false;
         const elapsedMs =
           (typeof performance !== 'undefined' ? performance.now() : Date.now()) - loadStartedAt;
         const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
@@ -1964,6 +2003,400 @@ export class PipelineComponent {
         }
       }
     });
+  }
+
+  private shouldUseLearningFlow(): boolean {
+    return this.shouldShowLearningActions();
+  }
+
+  private applyFetchedComicSlides(
+    response: { docId?: number; count?: number; returnedCount?: number },
+    nextSlides: RagComicSlide[]
+  ): void {
+    this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
+    this.slides.set(nextSlides);
+    this.syncCharacterReferencesFromSlides(nextSlides);
+    this.learningSlides.set([]);
+    this.viewMode.set('comic');
+    this.slidesLoading.set(false);
+    this.showLoadMoreSlide.set(false);
+    this.autoRequestedInitialSlides = false;
+    const nextIndex = this.initialSlideIndex(nextSlides.length);
+    this.currentSlide.set(nextIndex);
+    this.syncSwiperSlide(nextIndex);
+    void this.loadCurrentSlideDialogs();
+    this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
+  }
+
+  private startStoryProcessAll(docKey: string, manual: boolean, onlyOnce = false): void {
+    if (!docKey.trim()) {
+      console.info('[Pipeline] startStoryProcessAll skipped', {
+        docKey,
+        reason: 'missing-doc-key'
+      });
+      return;
+    }
+
+    if (this.shouldUseLearningFlow()) {
+      console.info('[Pipeline] startStoryProcessAll skipped', {
+        docKey,
+        reason: 'learning-flow'
+      });
+      return;
+    }
+
+    if (onlyOnce && this.storyProcessStartedDocKey === docKey) {
+      console.info('[Pipeline] startStoryProcessAll skipped', {
+        docKey,
+        reason: 'already-started-once'
+      });
+      return;
+    }
+
+    if (this.loading() && this.storyProcessRequestDocKey === docKey) {
+      console.info('[Pipeline] startStoryProcessAll skipped', {
+        docKey,
+        reason: 'request-already-in-flight'
+      });
+      return;
+    }
+
+    this.suppressStoryAutoProcessStart = false;
+    this.storyProcessStartedDocKey = docKey;
+    this.storyProcessRequestDocKey = docKey;
+    this.processAllRunning.set(true);
+    this.loading.set(true);
+    this.showLoadMoreSlide.set(false);
+    this.message.set(manual ? 'Processing next chapters...' : 'Starting story processing...');
+    const processAllId = this.createProcessAllId();
+    console.info('[Pipeline] startStoryProcessAll starting process_all', {
+      docKey,
+      manual,
+      onlyOnce,
+      processAllId
+    });
+    void this.startStoryProcessRun(docKey, processAllId);
+  }
+
+  private async startStoryProcessRun(docKey: string, processAllId: string): Promise<void> {
+    const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const streamPromise = this.openStoryProcessStream(docKey, processAllId);
+
+    void streamPromise.catch((err) => {
+      const backendMessage = this.readApiError(err);
+      if (this.storyProcessRequestDocKey !== docKey || !this.processAllRunning()) {
+        return;
+      }
+
+      this.finishStoryProcessRun(`Story processing stream failed: ${backendMessage}`);
+      console.warn('[Pipeline] Story process stream failed', {
+        docKey,
+        processAllId,
+        backendMessage
+      });
+    });
+
+    try {
+      await firstValueFrom(
+        this.ragApi.generateComicBookAll({
+          docKey,
+          processAllId,
+          start: null,
+          end: null
+        })
+      );
+
+      console.info('[Pipeline] process_all request acknowledged', {
+        docKey,
+        processAllId,
+        requestElapsedMs: Math.round(
+          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - requestStartedAt
+        )
+      });
+    } catch (err) {
+      const status = err instanceof HttpErrorResponse && err.status ? `HTTP ${err.status}` : 'Request failed';
+      const backendMessage =
+        err instanceof HttpErrorResponse
+          ? typeof err.error === 'string'
+            ? err.error
+            : err.error?.message ?? err.error?.error ?? err.message ?? 'unknown error'
+          : this.readApiError(err);
+
+      this.finishStoryProcessRun(`Failed to generate all (${status}): ${backendMessage}`);
+      console.warn('[Pipeline] Generate all failed', {
+        docKey,
+        processAllId,
+        status,
+        backendMessage
+      });
+    }
+  }
+
+  private openStoryProcessStream(docKey: string, processAllId: string): Promise<void> {
+    this.closeStoryProcessStream();
+
+    return new Promise((resolve, reject) => {
+      const client = new Client({
+        brokerURL: this.storyProcessBrokerUrl(),
+        reconnectDelay: 0,
+        heartbeatIncoming: 0,
+        heartbeatOutgoing: 0,
+        debug: (message: string) => {
+          console.info('[Pipeline][WS]', message);
+        }
+      });
+
+      let settled = false;
+
+      client.onConnect = () => {
+        if (settled) {
+          return;
+        }
+
+        this.storyProcessClient = client;
+        this.activeProcessAllId = processAllId;
+        console.info('[Pipeline] WebSocket connected', {
+          docKey,
+          processAllId,
+          brokerURL: this.storyProcessBrokerUrl()
+        });
+        this.storyProcessSubscription = client.subscribe(
+          `/topic/pipeline/${processAllId}`,
+          (message) => this.handleStoryProcessMessage(docKey, processAllId, message)
+        );
+        console.info('[Pipeline] WebSocket subscribed', {
+          docKey,
+          processAllId,
+          destination: `/topic/pipeline/${processAllId}`
+        });
+        settled = true;
+        resolve();
+      };
+
+      client.onStompError = (frame) => {
+        const details = frame.headers['message'] || frame.body || 'STOMP error';
+        if (!settled) {
+          settled = true;
+          reject(new Error(details));
+          return;
+        }
+
+        this.finishStoryProcessRun(`Story processing failed: ${details}`);
+      };
+
+      client.onWebSocketError = () => {
+        console.warn('[Pipeline] WebSocket low-level error', {
+          docKey,
+          processAllId,
+          brokerURL: this.storyProcessBrokerUrl()
+        });
+        if (!settled) {
+          settled = true;
+          reject(new Error('WebSocket connection failed.'));
+        }
+      };
+
+      client.onWebSocketClose = (event) => {
+        console.warn('[Pipeline] WebSocket closed', {
+          docKey,
+          processAllId,
+          brokerURL: this.storyProcessBrokerUrl(),
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        });
+        if (this.storyProcessClient !== client) {
+          return;
+        }
+
+        const isCurrentRun =
+          this.activeProcessAllId === processAllId || this.storyProcessRequestDocKey === docKey;
+        if (!settled) {
+          settled = true;
+          reject(new Error('WebSocket connection closed before subscribing.'));
+          return;
+        }
+
+        if (isCurrentRun && this.processAllRunning()) {
+          this.finishStoryProcessRun('Story processing connection closed unexpectedly.');
+        }
+      };
+
+      client.activate();
+    });
+  }
+
+  private handleStoryProcessMessage(docKey: string, processAllId: string, message: IMessage): void {
+    if (
+      this.docKey().trim() !== docKey ||
+      this.activeProcessAllId !== processAllId
+    ) {
+      return;
+    }
+
+    let payload: StoryProcessEventEnvelope;
+    try {
+      payload = JSON.parse(message.body) as StoryProcessEventEnvelope;
+    } catch (err) {
+      console.warn('[Pipeline] Failed to parse story process event', err);
+      return;
+    }
+
+    const eventType = this.storyProcessEventType(payload);
+    if (!eventType) {
+      console.warn('[Pipeline] Received story process event without type', payload);
+      return;
+    }
+
+    console.info('[Pipeline] Received event', { eventType, payload });
+
+    switch (eventType) {
+      case 'process_started':
+        this.loading.set(true);
+        this.processAllRunning.set(true);
+        this.message.set(payload.message || 'Processing story slides...');
+        break;
+      case 'character_slide_ready': {
+        const slides = this.storyProcessEventSlides(payload);
+        this.appendStorySlidesFromEvent(slides);
+        this.mergeCharacterReferencesFromSlides(slides);
+        break;
+      }
+      case 'story_slides_ready': {
+        const slides = this.storyProcessEventSlides(payload);
+        this.appendStorySlidesFromEvent(slides);
+        break;
+      }
+      case 'process_completed':
+        this.finishStoryProcessRun('');
+        void this.loadCurrentSlideDialogs();
+        break;
+      case 'process_failed':
+        this.finishStoryProcessRun(payload.message || payload.error || 'Story processing failed.');
+        break;
+      default:
+        console.info('[Pipeline] Ignored story process event', { eventType, payload });
+    }
+  }
+
+  private storyProcessEventType(payload: StoryProcessEventEnvelope): string {
+    const rawType =
+      payload.eventType ?? payload.type ?? payload.event ?? payload.event_name ?? payload.kind ?? payload.status;
+    return typeof rawType === 'string' ? rawType.trim().toLowerCase() : '';
+  }
+
+  private storyProcessEventSlides(payload: StoryProcessEventEnvelope): RagComicSlide[] {
+    return this.ragApi.normalizeComicSlidesPayload(
+      payload.payload ?? payload.data ?? payload.slides ?? payload.slide ?? payload
+    );
+  }
+
+  private appendStorySlidesFromEvent(incomingSlides: RagComicSlide[]): void {
+    if (!incomingSlides.length) {
+      return;
+    }
+
+    const combinedSlides = this.mergeComicSlidesById(this.slides(), incomingSlides);
+    const nextIndex = this.clampSlideIndex(this.currentSlide(), combinedSlides.length);
+    this.slides.set(combinedSlides);
+    this.currentSlide.set(nextIndex);
+    this.syncSwiperSlide(nextIndex);
+    this.viewMode.set('comic');
+    this.message.set('');
+    void this.loadCurrentSlideDialogs();
+    this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
+  }
+
+  private finishStoryProcessRun(message: string): void {
+    this.loading.set(false);
+    this.processAllRunning.set(false);
+    this.storyProcessRequestDocKey = '';
+    this.message.set(message);
+  }
+
+  private closeStoryProcessStream(): void {
+    const client = this.storyProcessClient;
+
+    try {
+      this.storyProcessSubscription?.unsubscribe();
+    } catch {}
+
+    this.storyProcessSubscription = null;
+    this.storyProcessClient = null;
+    this.activeProcessAllId = '';
+
+    if (client) {
+      void client.deactivate();
+    }
+  }
+
+  private storyProcessBrokerUrl(): string {
+    if (typeof window === 'undefined') {
+      return 'ws://127.0.0.1:8080/ws/pipeline';
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const isLocalDevHost =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocalDevHost && window.location.port === '4200') {
+      return `${protocol}//127.0.0.1:8080/ws/pipeline`;
+    }
+    return `${protocol}//${window.location.host}/ws/pipeline`;
+  }
+
+  private createProcessAllId(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+
+    return `process-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  private mergeComicSlidesById(currentSlides: RagComicSlide[], incomingSlides: RagComicSlide[]): RagComicSlide[] {
+    if (!currentSlides.length) {
+      return incomingSlides;
+    }
+
+    const merged = new Map<string, RagComicSlide>();
+    const orderedKeys: string[] = [];
+    const seenKeys = new Set<string>();
+
+    const pushKey = (key: string): void => {
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        orderedKeys.push(key);
+      }
+    };
+
+    currentSlides.forEach((slide, index) => {
+      const key = this.comicSlideMergeKey(slide, index);
+      merged.set(key, slide);
+      pushKey(key);
+    });
+
+    incomingSlides.forEach((slide, index) => {
+      const key = this.comicSlideMergeKey(slide, index);
+      merged.set(key, slide);
+      pushKey(key);
+    });
+
+    return orderedKeys
+      .map((key) => merged.get(key))
+      .filter((slide): slide is RagComicSlide => slide !== undefined);
+  }
+
+  private comicSlideMergeKey(slide: RagComicSlide, index: number): string {
+    const id = this.toNullableFiniteNumber(slide.id);
+    if (id !== null) {
+      return `id:${id}`;
+    }
+
+    const noteId = this.toNullableFiniteNumber(slide.comicNoteId);
+    if (noteId !== null) {
+      return `note:${noteId}`;
+    }
+
+    return `idx:${index}:${slide.title ?? ''}:${slide.slideType ?? ''}`;
   }
 
   private findSlideIndexForChapter(chapter: RagLearningPipelineChapter): number | null {
@@ -2329,24 +2762,22 @@ export class PipelineComponent {
     }
   }
 
-  private loadDocumentMode(docKey: string): void {
-    this.ragApi.listDocuments().subscribe({
-      next: (docs) => {
-        const normalizedDocKey = docKey.trim();
-        const match = (docs ?? []).find((doc: RagDocumentResponse) => {
-          const candidate = typeof doc.docKey === 'string' ? doc.docKey.trim() : '';
-          return candidate === normalizedDocKey;
-        });
-        const mode = typeof match?.['mode'] === 'string' ? match['mode'].trim() : '';
-        this.documentMode.set(this.toDocumentMode(mode));
-        this.docId.set(this.toNullableFiniteNumber(match?.documentId ?? match?.id) ?? this.docId());
-        this.desiredInitialSlideIndex = this.toNullableFiniteNumber(match?.lastSlide);
-        this.lastPersistedSlideIndex = this.desiredInitialSlideIndex;
-      },
-      error: () => {
-        this.documentMode.set(null);
-      }
-    });
+  private async loadDocumentMode(docKey: string): Promise<void> {
+    try {
+      const docs = await firstValueFrom(this.ragApi.listDocuments());
+      const normalizedDocKey = docKey.trim();
+      const match = (docs ?? []).find((doc: RagDocumentResponse) => {
+        const candidate = typeof doc.docKey === 'string' ? doc.docKey.trim() : '';
+        return candidate === normalizedDocKey;
+      });
+      const mode = typeof match?.['mode'] === 'string' ? match['mode'].trim() : '';
+      this.documentMode.set(this.toDocumentMode(mode));
+      this.docId.set(this.toNullableFiniteNumber(match?.documentId ?? match?.id) ?? this.docId());
+      this.desiredInitialSlideIndex = this.toNullableFiniteNumber(match?.lastSlide);
+      this.lastPersistedSlideIndex = this.desiredInitialSlideIndex;
+    } catch {
+      this.documentMode.set(null);
+    }
   }
 
   private async loadSourcePagesForCurrentSlide(): Promise<void> {
@@ -2487,60 +2918,6 @@ export class PipelineComponent {
     await this.ensureSlideDialogsLoaded(slide);
   }
 
-  private generateAllBatch(docKey: string): void {
-    const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    this.loading.set(true);
-    this.message.set('Processing next chapters...');
-    this.showGenerationOverlay('Generating slides...');
-
-    this.ragApi.generateComicBookAll({ docKey }).subscribe({
-      next: (response) => {
-        const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        const requestElapsedMs = finishedAt - requestStartedAt;
-        const fullElapsedMs = finishedAt - this.generateAllStartedAt;
-        const hasMore = this.shouldShowLoadMore(response);
-        this.loading.set(false);
-        this.viewMode.set('comic');
-        this.showLoadMoreSlide.set(hasMore);
-        this.message.set('Generated characters, slides, dialogs, and images.');
-        console.info('[Pipeline] Generate all response received', {
-          docKey,
-          requestElapsedMs: Math.round(requestElapsedMs),
-          fullElapsedMs: Math.round(fullElapsedMs),
-          processedChunks: response.processedChunks ?? null,
-          lastLimit: response.slides?.lastLimit ?? null,
-          slidesSavedCount: response.slidesSavedCount,
-          slidesReturned: Array.isArray(response.slides?.slides) ? response.slides.slides.length : 0,
-          charactersSavedCount: response.charactersSavedCount,
-          isLastBatch: response.isLastBatch ?? null
-        });
-        this.appendGeneratedSlides(response);
-        this.hideSlidesOverlay();
-        this.hideGenerationOverlay();
-        this.dispatchCharactersRefresh(docKey);
-      },
-      error: (err) => {
-        const elapsedMs =
-          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - requestStartedAt;
-        const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
-        const backendMessage =
-          typeof err?.error === 'string'
-            ? err.error
-            : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-        this.loading.set(false);
-        this.message.set(`Failed to generate all (${status}): ${backendMessage}`);
-        this.hideSlidesOverlay();
-        this.hideGenerationOverlay();
-        console.warn('[Pipeline] Generate all failed', {
-          docKey,
-          elapsedMs: Math.round(elapsedMs),
-          status,
-          backendMessage
-        });
-      }
-    });
-  }
-
   private generateLearningBatch(docKey: string, start: number, end: number): void {
     const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this.loading.set(true);
@@ -2608,21 +2985,6 @@ export class PipelineComponent {
     });
   }
 
-  private shouldShowLoadMore(response: RagComicBookGenerateResponse): boolean {
-    if (response.isLastBatch === true) {
-      return false;
-    }
-
-    if (response.isLastBatch === false) {
-      return true;
-    }
-
-    const returnedSlides = Array.isArray(response.slides?.slides) ? response.slides.slides.length : 0;
-    const processedChunks = this.toNonNegativeInteger(response.processedChunks);
-
-    return returnedSlides > 0 || processedChunks > 0;
-  }
-
   private shouldShowLoadMoreForLearning(response: RagLearnSlidesResponse): boolean {
     const returnedCount = Array.isArray(response.slides) ? response.slides.length : 0;
 
@@ -2644,24 +3006,71 @@ export class PipelineComponent {
     return Math.max(0, Math.min(index, maxIndex));
   }
 
-  private appendGeneratedSlides(response: RagComicBookGenerateResponse): void {
-    const generatedSlides = Array.isArray(response.slides?.slides) ? response.slides.slides : [];
-    if (!generatedSlides.length) {
+  private syncCharacterReferencesFromSlides(slides: RagComicSlide[]): void {
+    this.characterReferences.set(this.characterReferencesFromSlides(slides));
+  }
+
+  private mergeCharacterReferencesFromSlides(slides: RagComicSlide[]): void {
+    if (!slides.length) {
       return;
     }
 
-    const combinedSlides = [...this.slides(), ...generatedSlides];
-    const nextIndex = this.clampSlideIndex(this.currentSlide(), combinedSlides.length);
-    this.slides.set(combinedSlides);
-    this.currentSlide.set(nextIndex);
-    this.syncSwiperSlide(nextIndex);
-    void this.loadCurrentSlideDialogs();
-    console.info('[Pipeline] Slides appended from process_all response', {
-      appendedCount: generatedSlides.length,
-      totalCount: combinedSlides.length,
-      currentSlide: nextIndex
-    });
+    const nextByKey = new Map<string, RagCharacterReferenceImageResponse>();
+    for (const character of this.characterReferences()) {
+      const key = this.characterReferenceKey(character);
+      if (key) {
+        nextByKey.set(key, character);
+      }
+    }
+
+    for (const character of this.characterReferencesFromSlides(slides)) {
+      const key = this.characterReferenceKey(character);
+      if (key) {
+        nextByKey.set(key, character);
+      }
+    }
+
+    this.characterReferences.set(Array.from(nextByKey.values()));
   }
+
+  private characterReferencesFromSlides(slides: RagComicSlide[]): RagCharacterReferenceImageResponse[] {
+    const nextByKey = new Map<string, RagCharacterReferenceImageResponse>();
+
+    for (const slide of slides) {
+      if (this.storySlideType(slide) !== 'CHARACTER_INTRO') {
+        continue;
+      }
+
+      const imageUrl = Array.isArray(slide.imageUrls)
+        ? slide.imageUrls.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim()
+        : '';
+      const names = Array.isArray(slide.charactersInSlide)
+        ? slide.charactersInSlide
+            .map((character) => (typeof character.name === 'string' ? character.name.trim() : ''))
+            .filter((value) => value.length > 0)
+        : [];
+
+      for (const name of names) {
+        const character = {
+          characterName: name,
+          imageUrl: imageUrl || undefined
+        } satisfies RagCharacterReferenceImageResponse;
+        const key = this.characterReferenceKey(character);
+        if (key) {
+          nextByKey.set(key, character);
+        }
+      }
+    }
+
+    return Array.from(nextByKey.values());
+  }
+
+  private characterReferenceKey(character: RagCharacterReferenceImageResponse): string {
+    const name = typeof character.characterName === 'string' ? character.characterName.trim().toLowerCase() : '';
+    const imageUrl = typeof character.imageUrl === 'string' ? character.imageUrl.trim() : '';
+    return name || imageUrl ? `${name}|${imageUrl}` : '';
+  }
+
 
   private appendLearningSlides(response: RagLearnSlidesResponse): void {
     const generatedSlides = Array.isArray(response.slides) ? response.slides : [];
@@ -2675,6 +3084,7 @@ export class PipelineComponent {
     const nextIndex = this.consumePendingLearningContinuationIndex();
     this.currentSlide.set(nextIndex);
     this.syncSwiperSlide(nextIndex);
+    this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
     console.info('[Pipeline] Learning slides appended', {
       appendedCount: generatedSlides.length,
       totalCount: combinedSlides.length,
@@ -3020,8 +3430,7 @@ export class PipelineComponent {
     }
 
     this.viewMode.set('comic');
-    this.generateAllBatch(normalizedDocKey);
-    return true;
+    return false;
   }
 
   private buildGenerateReviewQuizRequest(
@@ -3409,13 +3818,6 @@ export class PipelineComponent {
     void this.playCardTts(slide, index);
   }
 
-  private dispatchCharactersRefresh(docKey: string): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    window.dispatchEvent(new CustomEvent(PipelineComponent.charactersRefreshEvent, { detail: docKey }));
-  }
-
   private readBatchState(docKey: string, storageKey: string): StoredSlideBatchState | null {
     if (!docKey || typeof window === 'undefined') {
       return null;
@@ -3459,6 +3861,7 @@ export class PipelineComponent {
   }
 
   private resetSlideState(docKey: string): void {
+    this.suppressStoryAutoProcessStart = false;
     this.showLoadMoreSlide.set(false);
     this.learningBatchStart.set(0);
     this.learningBatchEnd.set(PipelineComponent.comicBatchSize);
@@ -3477,9 +3880,6 @@ export class PipelineComponent {
     this.viewMode.set('comic');
     this.summaryHiddenCardKey.set('');
     this.characterReferences.set([]);
-    this.charactersLoading.set(false);
-    this.charactersMessage.set('');
-    this.loadedCharactersDocKey = '';
     this.failedUriMap.set({});
     this.stopCardTts();
     this.writeBatchState(docKey, PipelineComponent.learningBatchStateStorageKey, {
@@ -4028,6 +4428,7 @@ export class PipelineComponent {
 
   private stopCardTts(): void {
     this.playbackToken += 1;
+    this.cancelPendingTtsRequests();
     if (this.onSegmentEnd) {
       this.onSegmentEnd();
       this.onSegmentEnd = null;
@@ -4054,66 +4455,11 @@ export class PipelineComponent {
     this.ttsTotalWords.set(0);
   }
 
-  private async loadCharactersForCurrentDoc(force = false): Promise<void> {
-    const docKey = this.docKey().trim();
-    if (!docKey) {
-      this.characterReferences.set([]);
-      this.charactersLoading.set(false);
-      this.charactersMessage.set('No document selected.');
-      this.loadedCharactersDocKey = '';
-      return;
+  private cancelPendingTtsRequests(): void {
+    for (const subscription of this.pendingTtsRequests) {
+      subscription.unsubscribe();
     }
-
-    if (!force && this.loadedCharactersDocKey === docKey && this.characterReferences().length > 0) {
-      this.charactersLoading.set(false);
-      this.charactersMessage.set('');
-      return;
-    }
-
-    this.charactersLoading.set(true);
-    this.charactersMessage.set('');
-
-    try {
-      const response = await firstValueFrom(this.ragApi.getCharacterReferenceImages(docKey));
-      const seen = new Set<string>();
-      const characters = (Array.isArray(response.characters) ? response.characters : [])
-        .map((character) => {
-          const characterName =
-            typeof character.characterName === 'string' ? character.characterName.trim() : '';
-          const imageUrl = typeof character.imageUrl === 'string' ? character.imageUrl.trim() : '';
-          return {
-            ...character,
-            characterName,
-            imageUrl
-          };
-        })
-        .filter((character) => {
-          if (!character.characterName && !character.imageUrl) {
-            return false;
-          }
-
-          const dedupeKey = `${character.characterName.toLowerCase()}|${character.imageUrl}`;
-          if (seen.has(dedupeKey)) {
-            return false;
-          }
-          seen.add(dedupeKey);
-          return true;
-        });
-
-      this.characterReferences.set(characters);
-      this.loadedCharactersDocKey = docKey;
-      this.charactersMessage.set(characters.length ? '' : 'No characters available yet.');
-    } catch (err) {
-      console.warn('[Pipeline] Failed to load characters', {
-        docKey,
-        error: this.readApiError(err)
-      });
-      this.characterReferences.set([]);
-      this.charactersMessage.set(`Could not load characters: ${this.readApiError(err)}`);
-      this.loadedCharactersDocKey = '';
-    } finally {
-      this.charactersLoading.set(false);
-    }
+    this.pendingTtsRequests.clear();
   }
 
   private async ensureSlideHeadsLoaded(item: RagComicSlide, index: number): Promise<void> {
@@ -4334,22 +4680,38 @@ export class PipelineComponent {
 
   private async requestTtsSegmentAudio(segment: TtsSegment): Promise<Blob> {
     const docKey = this.docKey().trim();
-    return firstValueFrom(
-      this.ttsApi.generateOpenAiTts({
-        text: segment.text,
-        characterName:
-          segment.kind === 'dialogue'
-            ? segment.character || PipelineComponent.narratorCharacterName
-            : PipelineComponent.narratorCharacterName,
-        languageCode: this.selectedLanguage() === 'ro' ? 'ro' : undefined,
-        docKey: docKey || undefined,
-        entityType: segment.kind === 'dialogue' ? 'dialog' : 'slide_summary',
-        entityId: segment.entityId,
-        speed: segment.kind === 'dialogue' ? PipelineComponent.dialogueSpeed : undefined,
-        expressiveness: segment.kind === 'dialogue' ? 'high' : undefined,
-        format: 'mp3'
-      })
-    );
+    return new Promise<Blob>((resolve, reject) => {
+      const subscription = this.ttsApi
+        .generateOpenAiTts({
+          text: segment.text,
+          characterName:
+            segment.kind === 'dialogue'
+              ? segment.character || PipelineComponent.narratorCharacterName
+              : PipelineComponent.narratorCharacterName,
+          languageCode: this.selectedLanguage() === 'ro' ? 'ro' : undefined,
+          docKey: docKey || undefined,
+          entityType: segment.kind === 'dialogue' ? 'dialog' : 'slide_summary',
+          entityId: segment.entityId,
+          speed: segment.kind === 'dialogue' ? PipelineComponent.dialogueSpeed : undefined,
+          expressiveness: segment.kind === 'dialogue' ? 'high' : undefined,
+          format: 'mp3'
+        })
+        .subscribe({
+          next: (blob) => {
+            this.pendingTtsRequests.delete(subscription);
+            resolve(blob);
+          },
+          error: (err) => {
+            this.pendingTtsRequests.delete(subscription);
+            reject(err);
+          },
+          complete: () => {
+            this.pendingTtsRequests.delete(subscription);
+          }
+        });
+
+      this.pendingTtsRequests.add(subscription);
+    });
   }
 
   private async ensureAudioUnlocked(): Promise<void> {

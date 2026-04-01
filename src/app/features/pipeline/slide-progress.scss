@@ -23,16 +23,39 @@
   width: 0.86rem;
   height: 0.86rem;
   flex: 0 0 0.86rem;
+  position: relative;
   border-radius: 999px;
   border: 2px solid transparent;
   display: grid;
   place-items: center;
   box-sizing: border-box;
-  transition: background 160ms ease, border-color 160ms ease, opacity 160ms ease;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .slide-progress-dot-current {
   transform: scale(1.06);
+}
+
+.slide-progress-dot-loading {
+  transform: scale(1.34);
+  animation: slide-progress-spin 900ms linear infinite;
+  box-shadow: 0 0 0 0.14rem rgba(23, 72, 108, 0.08);
+}
+
+.slide-progress-dot-loading::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-left-color: transparent;
+  opacity: 1;
 }
 
 .slide-progress-dot-viewed {
@@ -51,4 +74,14 @@
   border-radius: 999px;
   margin: 0 0.2rem;
   transition: background 160ms ease, opacity 160ms ease;
+}
+
+@keyframes slide-progress-spin {
+  from {
+    transform: scale(1.34) rotate(0deg);
+  }
+
+  to {
+    transform: scale(1.34) rotate(360deg);
+  }
 }

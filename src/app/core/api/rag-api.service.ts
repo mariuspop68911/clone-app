@@ -139,6 +139,15 @@ export interface RagComicSlideNote {
 
 export interface RagComicSlide {
   id?: number;
+  title?: string;
+  slideType?: string;
+  chapterIndex?: number;
+  pipelineStage?: string;
+  pipelineRunning?: boolean;
+  pipelineDone?: boolean;
+  pipelineFailed?: boolean;
+  pipelineRevision?: number;
+  pipelineMessage?: string;
   comicGroupNoteId?: number;
   comicNoteId?: number;
   naration?: string;
@@ -168,6 +177,9 @@ export interface RagComicNoteResponse {
 
 export interface RagComicBookGenerateAllRequest {
   docKey: string;
+  processAllId?: string;
+  start?: number | null;
+  end?: number | null;
 }
 
 export interface RagGenerateLearningSlidesRequest {
@@ -414,26 +426,6 @@ export interface RagSlideDialogsResponse {
   [key: string]: unknown;
 }
 
-interface PipelineCharacterRawResponseItem {
-  id?: number;
-  characterName?: string;
-  characterKey?: string;
-  gender?: string;
-  appearance?: string;
-  alternateNames?: string[];
-  imageUrl?: string;
-  promptTxt?: string;
-  [key: string]: unknown;
-}
-
-interface PipelineCharactersRawResponse {
-  docKey?: string;
-  docId?: number;
-  count?: number;
-  characters?: PipelineCharacterRawResponseItem[];
-  [key: string]: unknown;
-}
-
 interface PipelineSlideRawNote {
   note_id?: number;
   chunk_index?: number;
@@ -452,6 +444,15 @@ interface PipelineSlideRawCharacter {
 
 interface PipelineSlideRaw {
   id?: number;
+  title?: string;
+  slideType?: string;
+  chapterIndex?: number;
+  pipelineStage?: string;
+  pipelineRunning?: boolean;
+  pipelineDone?: boolean;
+  pipelineFailed?: boolean;
+  pipelineRevision?: number;
+  pipelineMessage?: string;
   chunkId?: number;
   noteId?: number;
   chunkIndex?: number;
@@ -783,12 +784,29 @@ export class RagApiService {
       );
   }
 
-  getCharacterReferenceImages(docKey: string): Observable<RagCharacterReferenceImageListResponse> {
-    return this.http
-      .get<PipelineCharactersRawResponse>(
-        `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/characters_raw`
-      )
-      .pipe(map((response) => this.toCharacterReferenceImageListResponse(response)));
+  normalizeComicSlidesPayload(payload: unknown): RagComicSlide[] {
+    if (Array.isArray(payload)) {
+      return payload
+        .filter((slide): slide is PipelineSlideRaw => Boolean(slide) && typeof slide === 'object')
+        .map((slide) => this.toComicSlide(slide));
+    }
+
+    if (!payload || typeof payload !== 'object') {
+      return [];
+    }
+
+    const slideContainer = payload as { slides?: unknown; slide?: unknown };
+    if (Array.isArray(slideContainer.slides)) {
+      return slideContainer.slides
+        .filter((slide): slide is PipelineSlideRaw => Boolean(slide) && typeof slide === 'object')
+        .map((slide) => this.toComicSlide(slide));
+    }
+
+    if (slideContainer.slide && typeof slideContainer.slide === 'object') {
+      return [this.toComicSlide(slideContainer.slide as PipelineSlideRaw)];
+    }
+
+    return [this.toComicSlide(payload as PipelineSlideRaw)];
   }
 
   getSlidePrompt(docKey: string, slideId: number, languageCode?: string): Observable<RagSlidePromptResponse> {
@@ -891,34 +909,6 @@ export class RagApiService {
             : firstSlides.length + restSlides.length,
       returnedCount: firstSlides.length + restSlides.length,
       slides: [...firstSlides, ...restSlides]
-    };
-  }
-
-  private toCharacterReferenceImageListResponse(
-    response: PipelineCharactersRawResponse
-  ): RagCharacterReferenceImageListResponse {
-    const characters = Array.isArray(response.characters)
-      ? response.characters.map((character) => ({
-          characterName: this.toTrimmedString(character.characterName),
-          imageUrl: this.toTrimmedString(character.imageUrl),
-          characterKey: this.toTrimmedString(character.characterKey),
-          gender: this.toTrimmedString(character.gender),
-          appearance: this.toTrimmedString(character.appearance),
-          alternateNames: Array.isArray(character.alternateNames)
-            ? character.alternateNames.filter(
-                (name): name is string => typeof name === 'string' && name.trim().length > 0
-              )
-            : [],
-          promptTxt: this.toTrimmedString(character.promptTxt),
-          id: character.id
-        }))
-      : [];
-
-    return {
-      docKey: this.toTrimmedString(response.docKey),
-      docId: response.docId,
-      count: typeof response.count === 'number' ? response.count : characters.length,
-      characters
     };
   }
 
@@ -1182,6 +1172,22 @@ export class RagApiService {
 
     return {
       id: slide.id,
+      title: this.toTrimmedString(slide.title),
+      slideType: this.toTrimmedString(slide.slideType),
+      chapterIndex:
+        typeof slide.chapterIndex === 'number' && Number.isFinite(slide.chapterIndex)
+          ? slide.chapterIndex
+          : undefined,
+      pipelineStage: this.toTrimmedString(slide.pipelineStage),
+      pipelineRunning:
+        typeof slide.pipelineRunning === 'boolean' ? slide.pipelineRunning : undefined,
+      pipelineDone: typeof slide.pipelineDone === 'boolean' ? slide.pipelineDone : undefined,
+      pipelineFailed: typeof slide.pipelineFailed === 'boolean' ? slide.pipelineFailed : undefined,
+      pipelineRevision:
+        typeof slide.pipelineRevision === 'number' && Number.isFinite(slide.pipelineRevision)
+          ? slide.pipelineRevision
+          : undefined,
+      pipelineMessage: this.toTrimmedString(slide.pipelineMessage),
       comicNoteId: slide.noteId,
       naration: narration,
       promptTxt,
