@@ -23,6 +23,7 @@ export interface IngestProgressRequest {
   mode: RagIngestMode;
   file: File;
   thumbnail?: File | null;
+  thumbnailUrl?: string | null;
 }
 
 export interface IngestProgressStatus {
@@ -97,6 +98,9 @@ export class IngestProgressService {
     formData.append('file', request.file, request.file.name);
     if (request.thumbnail) {
       formData.append('thumbnail', request.thumbnail, request.thumbnail.name);
+    }
+    if (typeof request.thumbnailUrl === 'string' && request.thumbnailUrl.trim()) {
+      formData.append('thumbnailUrl', request.thumbnailUrl.trim());
     }
 
     const upload$ = this.http

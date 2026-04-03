@@ -7,7 +7,6 @@ import {
   IngestProgressService
 } from './ingest-progress.service';
 import { ImportModeSelectorComponent } from './import-mode-selector';
-import { PdfPageReviewComponent } from './pdf-page-review';
 import { LoadingOverlayService } from '../../shared/loading-overlay.service';
 import { DocumentCoverCacheService } from '../../shared/document-cover-cache.service';
 
@@ -16,7 +15,6 @@ import { DocumentCoverCacheService } from '../../shared/document-cover-cache.ser
   imports: [
     FormsModule,
     RouterLink,
-    PdfPageReviewComponent,
     ImportModeSelectorComponent
   ],
   templateUrl: './import.html',
@@ -29,10 +27,10 @@ export class ImportComponent implements OnInit, OnDestroy {
   private ingestStateSubscription: Subscription | null = null;
   private ingestOverlayToken: symbol | null = null;
   private autoIngestAfterLoad = false;
+  private sourceCoverUrl: string | null = null;
 
   docKey = '';
   selectedFile: File | null = null;
-  reviewFile = signal<File | null>(null);
   loading = signal(false);
   message = signal('');
   sourceLabel = signal('');
@@ -65,6 +63,7 @@ export class ImportComponent implements OnInit, OnDestroy {
       const title = params.get('title')?.trim();
       const readerUrl = params.get('readerUrl')?.trim();
       const downloadUrl = params.get('downloadUrl')?.trim();
+      const coverUrl = params.get('coverUrl')?.trim();
       if (!source || !sourceId || (!readerUrl && !downloadUrl)) {
         return;
       }
@@ -74,7 +73,8 @@ export class ImportComponent implements OnInit, OnDestroy {
         sourceId,
         title,
         readerUrl,
-        downloadUrl
+        downloadUrl,
+        coverUrl
       });
     });
   }
@@ -91,7 +91,6 @@ export class ImportComponent implements OnInit, OnDestroy {
 
     if (nextFile && !isSupported) {
       this.selectedFile = null;
-      this.reviewFile.set(null);
       this.resetIngestProgress();
       this.message.set('Please select a PDF or EPUB file.');
       input.value = '';
@@ -99,24 +98,20 @@ export class ImportComponent implements OnInit, OnDestroy {
     }
 
     this.selectedFile = nextFile;
-    this.reviewFile.set(null);
+    this.sourceCoverUrl = null;
     this.docKey = nextFile ? this.suggestDocKey(nextFile.name) : '';
     this.ingestMode.set('Story Mode');
     this.resetIngestProgress();
     this.message.set('');
   }
 
-  cancelReview(): void {
+  cancelImport(): void {
     this.selectedFile = null;
-    this.reviewFile.set(null);
+    this.sourceCoverUrl = null;
     this.message.set('');
     this.sourceLabel.set('');
     this.ingestMode.set('Story Mode');
     this.resetIngestProgress();
-  }
-
-  onConfirmSelection(excludedPageNumbers: number[]): void {
-    void this.submit(excludedPageNumbers);
   }
 
   onModeConfirmed(): void {
@@ -124,16 +119,10 @@ export class ImportComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.ingestMode() === 'Story Mode' && this.isPdfFile(this.selectedFile)) {
-      this.reviewFile.set(this.selectedFile);
-      this.message.set('');
-      return;
-    }
-
     void this.submit();
   }
 
-  async submit(excludedPageNumbers?: number[]): Promise<void> {
+  async submit(): Promise<void> {
     const docKey = this.docKey.trim();
 
     if (!docKey) {
@@ -150,25 +139,18 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.message.set('Preparing PDF for ingest...');
     this.showIngestOverlay('Preparing document...');
 
-    let fileForIngest = this.selectedFile;
-    if (Array.isArray(excludedPageNumbers)) {
-      try {
-        fileForIngest = await this.createFilteredPdf(this.selectedFile, excludedPageNumbers);
-      } catch (error) {
-        console.error('[Import] Failed to prepare filtered PDF', error);
-        this.message.set('Could not prepare the filtered PDF for ingest.');
-        this.loading.set(false);
-        this.hideIngestOverlay();
-        return;
-      }
-    }
-
-    const thumbnailFile = await this.createThumbnailFile(fileForIngest);
+    const fileForIngest = this.selectedFile;
+    const thumbnailUrl =
+      typeof this.sourceCoverUrl === 'string' && this.sourceCoverUrl.trim()
+        ? this.sourceCoverUrl.trim()
+        : null;
+    const thumbnailFile = thumbnailUrl ? null : await this.createThumbnailFile(fileForIngest);
     const task = this.ingestProgress.startIngest({
       docKey,
       mode: this.ingestMode(),
       file: fileForIngest,
-      thumbnail: thumbnailFile
+      thumbnail: thumbnailFile,
+      thumbnailUrl
     });
 
     this.stopIngestTracking();
@@ -191,7 +173,6 @@ export class ImportComponent implements OnInit, OnDestroy {
           this.message.set(status.message || 'File ingested successfully.');
           this.hideIngestOverlay();
           this.selectedFile = null;
-          this.reviewFile.set(null);
           this.sourceLabel.set('');
           this.ingestMode.set('Story Mode');
           this.stopIngestTracking();
@@ -216,6 +197,9 @@ export class ImportComponent implements OnInit, OnDestroy {
       next: (response) => {
         this.loading.set(false);
         const usableDocKey = response.docKey?.trim() || docKey;
+        if (thumbnailUrl) {
+          this.documentCoverCache.remember(usableDocKey, thumbnailUrl);
+        }
         this.usableDocKey.set(usableDocKey);
         this.message.set(
           'First chapter ready. You can open the document now while the remaining chapters keep processing in the background.'
@@ -247,42 +231,6 @@ export class ImportComponent implements OnInit, OnDestroy {
 
   setIngestMode(mode: RagIngestMode): void {
     this.ingestMode.set(mode);
-  }
-
-  private async createFilteredPdf(sourceFile: File, excludedPageNumbers: number[]): Promise<File> {
-    const { PDFDocument } = await import('pdf-lib');
-    const sourceBytes = await sourceFile.arrayBuffer();
-    const sourceDocument = await PDFDocument.load(sourceBytes);
-    const totalPages = sourceDocument.getPageCount();
-    const excludedIndexes = new Set(
-      excludedPageNumbers
-        .map((pageNumber) => pageNumber - 1)
-        .filter((pageIndex) => pageIndex >= 0 && pageIndex < totalPages)
-    );
-    const keptIndexes = Array.from({ length: totalPages }, (_, pageIndex) => pageIndex).filter(
-      (pageIndex) => !excludedIndexes.has(pageIndex)
-    );
-
-    if (!keptIndexes.length) {
-      throw new Error('No pages selected for ingest.');
-    }
-
-    if (keptIndexes.length === totalPages) {
-      return sourceFile;
-    }
-
-    const filteredDocument = await PDFDocument.create();
-    const copiedPages = await filteredDocument.copyPages(sourceDocument, keptIndexes);
-    for (const page of copiedPages) {
-      filteredDocument.addPage(page);
-    }
-
-    const filteredBytes = await filteredDocument.save();
-    const normalizedBuffer = new ArrayBuffer(filteredBytes.byteLength);
-    new Uint8Array(normalizedBuffer).set(filteredBytes);
-    return new File([normalizedBuffer], sourceFile.name, {
-      type: sourceFile.type || 'application/pdf'
-    });
   }
 
   private async createThumbnailFile(sourceFile: File): Promise<File | null> {
@@ -357,12 +305,13 @@ export class ImportComponent implements OnInit, OnDestroy {
     title?: string;
     readerUrl?: string;
     downloadUrl?: string;
+    coverUrl?: string;
   }): Promise<void> {
     this.loading.set(true);
     this.message.set('Loading source book for import...');
     this.sourceLabel.set('');
     this.selectedFile = null;
-    this.reviewFile.set(null);
+    this.sourceCoverUrl = null;
     this.resetIngestProgress();
 
     this.ragApi
@@ -403,7 +352,10 @@ export class ImportComponent implements OnInit, OnDestroy {
             this.suggestDocKey(sourceBook.sourceId || '') ||
             'document';
           this.selectedFile = file;
-          this.reviewFile.set(null);
+          this.sourceCoverUrl =
+            typeof sourceBook.coverUrl === 'string' && sourceBook.coverUrl.trim()
+              ? sourceBook.coverUrl.trim()
+              : null;
           const requestedMode = this.route.snapshot.queryParamMap.get('mode')?.trim();
           const isLearningMode = requestedMode === 'Learning Mode';
           this.ingestMode.set(isLearningMode ? 'Learning Mode' : 'Story Mode');
@@ -411,19 +363,11 @@ export class ImportComponent implements OnInit, OnDestroy {
             bookTitle ? `Loaded from ${sourceName}: "${bookTitle}"` : `Loaded from ${sourceName}`
           );
 
-          const isPdf = this.isPdfFile(file);
-          this.message.set(
-            isPdf
-              ? ''
-              : 'Loaded source book. Page preview is only available for PDF source files.'
-          );
+          this.message.set('');
           this.loading.set(false);
 
           if (this.autoIngestAfterLoad) {
             await this.submit();
-          } else if (!isLearningMode && isPdf) {
-            this.reviewFile.set(file);
-            this.message.set('');
           }
         },
         error: (error) => {

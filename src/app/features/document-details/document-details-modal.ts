@@ -1,4 +1,4 @@
-import { Component, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ViewChild, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AppShellUiService } from '../../app-shell-ui.service';
 import { PipelineComponent } from '../pipeline';
@@ -10,7 +10,7 @@ import { PipelineChaptersSidebarComponent } from '../pipeline/pipeline-chapters-
   templateUrl: './document-details-modal.html',
   styleUrl: './document-details-modal.scss'
 })
-export class DocumentDetailsModalComponent {
+export class DocumentDetailsModalComponent implements AfterViewInit {
   @ViewChild('pipelineRef') private pipelineRef?: PipelineComponent;
   private readonly appShellUi = inject(AppShellUiService);
 
@@ -18,8 +18,17 @@ export class DocumentDetailsModalComponent {
     this.appShellUi.setBrowseButtonVisible(false);
   }
 
+  ngAfterViewInit(): void {
+    this.pipelineRef?.stopAutoplayPlayback();
+  }
+
   ngOnDestroy(): void {
+    this.pipelineRef?.stopAutoplayPlayback();
     this.appShellUi.setBrowseButtonVisible(true);
+  }
+
+  closeModal(): void {
+    this.pipelineRef?.stopAutoplayPlayback();
   }
 
   documentTitle(): string {

@@ -38,10 +38,6 @@ export class TtsApiService {
     return this.http.post(`${this.baseUrl}/stream`, { text }, { responseType: 'blob' });
   }
 
-  listOpenAiVoices(): Observable<unknown> {
-    return this.http.get<unknown>(`${this.baseUrl}/voices`);
-  }
-
   generateOpenAiTts(req: OpenAiTtsGenerateRequest): Observable<Blob> {
     console.info('[TTS] POST /api/tts', {
       textLength: req.text?.length ?? 0,

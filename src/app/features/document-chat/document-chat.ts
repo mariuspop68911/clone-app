@@ -16,6 +16,7 @@ interface ChatMessage {
 })
 export class DocumentChatComponent {
   @Input() embedded = false;
+  @Input() docKeyInput = '';
   @Input() languageCode = 'en';
   @Input() requestedQuestion = '';
   @Input() requestKey = 0;
@@ -66,7 +67,7 @@ export class DocumentChatComponent {
 
   private submitQuestion(rawQuestion: string): void {
     const question = rawQuestion.trim();
-    const key = this.docKey().trim();
+    const key = this.docKeyInput.trim() || this.docKey().trim();
 
     if (!key) {
       this.message.set('Missing document key.');

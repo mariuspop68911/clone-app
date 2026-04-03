@@ -100,7 +100,7 @@ export class StorySourceBrowseComponent implements OnInit {
         return null;
       }
 
-      return {
+      const params: Record<string, string> = {
         source,
         sourceId,
         title,
@@ -108,13 +108,17 @@ export class StorySourceBrowseComponent implements OnInit {
         mode: 'Story Mode',
         autoIngest: 'true'
       };
+      if (typeof book.coverUrl === 'string' && book.coverUrl.trim()) {
+        params['coverUrl'] = book.coverUrl.trim();
+      }
+      return params;
     }
 
     if (!downloadUrl) {
       return null;
     }
 
-    return {
+    const params: Record<string, string> = {
       source,
       sourceId,
       title,
@@ -122,6 +126,10 @@ export class StorySourceBrowseComponent implements OnInit {
       mode: 'Story Mode',
       autoIngest: 'true'
     };
+    if (typeof book.coverUrl === 'string' && book.coverUrl.trim()) {
+      params['coverUrl'] = book.coverUrl.trim();
+    }
+    return params;
   }
 
   private pageCount(book: StorySourceBookResponse): number | null {

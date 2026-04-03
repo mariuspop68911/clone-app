@@ -20,23 +20,13 @@
         [disabled]="loading() || ingestActive()"
       />
     </label>
-  } @else if (!reviewFile()) {
+  } @else {
     <app-import-mode-selector
       [selectedMode]="ingestMode()"
       [busy]="loading() || ingestActive()"
       (selectedModeChange)="setIngestMode($event)"
       (confirmRequested)="onModeConfirmed()"
-      (cancelRequested)="cancelReview()"
-    />
-  } @else {
-    <app-pdf-page-review
-      [file]="reviewFile()"
-      [busy]="loading() || ingestActive()"
-      [selectedMode]="ingestMode()"
-      [showModePicker]="false"
-      (cancelReview)="cancelReview()"
-      (selectedModeChange)="setIngestMode($event)"
-      (confirmSelectionRequested)="onConfirmSelection($event)"
+      (cancelRequested)="cancelImport()"
     />
   }
 

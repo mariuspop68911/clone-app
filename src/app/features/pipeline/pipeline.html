@@ -52,6 +52,22 @@
         <p class="status">{{ ttsMessage() }}</p>
       }
 
+      <div class="tts-speed-control">
+        <label class="tts-speed-label" for="pipeline-tts-speed">
+          TTS speed: <span>{{ ttsSpeedLabel() }}x</span>
+        </label>
+        <input
+          id="pipeline-tts-speed"
+          class="tts-speed-slider"
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.05"
+          [value]="ttsSpeed()"
+          (input)="onTtsSpeedInput($event)"
+        />
+      </div>
+
       <section class="slides-section">
         <div class="section-heading">
           @if (slidesLoading()) {
@@ -81,23 +97,26 @@
                 @if (characterReferences().length > 0) {
                   <div class="characters-bubble-grid">
                     @for (character of characterReferences(); track (character.characterName ?? character.imageUrl ?? $index)) {
-                      <article class="character-card">
-                        <div class="character-card-image-shell">
-                          @if (character.imageUrl) {
-                            <img
-                              class="character-card-image"
-                              [src]="imageSrc(character.imageUrl)"
-                              [alt]="characterName(character)"
-                              (error)="onImageError(character.imageUrl, $event)"
-                            />
-                          } @else {
-                            <div class="character-card-placeholder" aria-hidden="true">
-                              {{ characterName(character).charAt(0) }}
-                            </div>
-                          }
-                        </div>
+                      <button
+                        type="button"
+                        class="character-card"
+                        (click)="openCharacterInfo(character)"
+                        [attr.aria-label]="'Open character details for ' + characterName(character)"
+                      >
+                        @if (character.imageUrl) {
+                          <img
+                            class="character-card-image"
+                            [src]="imageSrc(character.imageUrl)"
+                            [alt]="characterName(character)"
+                            (error)="onImageError(character.imageUrl, $event)"
+                          />
+                        } @else {
+                          <div class="character-card-placeholder" aria-hidden="true">
+                            {{ characterName(character).charAt(0) }}
+                          </div>
+                        }
                         <p class="character-card-name">{{ characterName(character) }}</p>
-                      </article>
+                      </button>
                     }
                   </div>
                 }
@@ -644,7 +663,7 @@
 
   </section>
 
-  @if (askOpen() || sourceOpen() || explainOpen()) {
+  @if (askOpen() || sourceOpen() || characterInfoOpen() || explainOpen()) {
       <button
         type="button"
         class="ask-backdrop"
@@ -675,7 +694,7 @@
     </button>
   }
 
-  @if (!askOpen() && !explainOpen()) {
+  @if (!askOpen() && !characterInfoOpen() && !explainOpen()) {
     @if (!sourceOpen() && canShowSourceButton()) {
       <button
         type="button"
@@ -710,10 +729,36 @@
   >
     <app-document-chat
       [embedded]="true"
+      [docKeyInput]="docKey()"
       [languageCode]="selectedLanguage()"
       [requestedQuestion]="askRequestedQuestion()"
       [requestKey]="askRequestKey()"
     ></app-document-chat>
+  </app-slide-side-bubble>
+
+  <app-slide-side-bubble
+    [title]="characterIntroTitle()"
+    variant="explain"
+    side="left"
+    [open]="characterInfoOpen()"
+    (closeRequested)="characterInfoOpen.set(false)"
+  >
+    <div class="character-intro-bubble">
+      @if (characterIntroImageUrl(); as imageUrl) {
+        <img
+          class="character-intro-bubble-image"
+          [src]="imageSrc(imageUrl)"
+          [alt]="characterIntroTitle()"
+          (error)="onImageError(imageUrl, $event)"
+        />
+      }
+
+      @if (characterIntroSlideTitle()) {
+        <p class="character-intro-bubble-label">{{ characterIntroSlideTitle() }}</p>
+      }
+
+      <p class="character-intro-bubble-text">{{ characterIntroText() }}</p>
+    </div>
   </app-slide-side-bubble>
 
   <app-slide-side-bubble

@@ -100,6 +100,13 @@ interface SlideBubbleAnchor {
   topPercent: number;
 }
 
+interface CharacterIntroDetails {
+  name: string;
+  imageUrl: string | null;
+  slideTitle: string;
+  introText: string;
+}
+
 interface SourcePreviewPage {
   pageNumber: number;
   pdfUrl: string;
@@ -145,7 +152,6 @@ export class PipelineComponent {
   private static readonly highlightLeadSeconds = 1;
   private static readonly ttsPrefetchConcurrency = 3;
   private static readonly defaultLanguage = 'en';
-  private static readonly dialogueSpeed = 1;
   private static readonly narratorCharacterName = 'Narrator';
   private static readonly silentWavDataUrl =
     'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
@@ -221,9 +227,11 @@ export class PipelineComponent {
   ttsCurrentWord = signal(-1);
   ttsTotalWords = signal(0);
   selectedLanguage = signal(PipelineComponent.defaultLanguage);
+  ttsSpeed = signal(1);
   currentSlide = signal(0);
   askOpen = signal(false);
   sourceOpen = signal(false);
+  characterInfoOpen = signal(false);
   explainOpen = this.learningExplainService.panelOpen;
   documentMode = signal<RagIngestMode | null>(null);
   slides = signal<RagComicSlide[]>([]);
@@ -240,6 +248,7 @@ export class PipelineComponent {
   sourceLoading = signal(false);
   sourceMessage = signal('');
   characterReferences = signal<RagCharacterReferenceImageResponse[]>([]);
+  selectedCharacterIntro = signal<CharacterIntroDetails | null>(null);
   docId = signal<number | null>(null);
   learningContext = signal<RagLearningPipelineContextResponse | null>(null);
   learningContextLoading = signal(false);
@@ -420,7 +429,7 @@ export class PipelineComponent {
   ) {
     effect(() => {
       this.appShellUi.setBrowseButtonVisible(
-        !(this.askOpen() || this.sourceOpen() || this.explainOpen())
+        !(this.askOpen() || this.sourceOpen() || this.characterInfoOpen() || this.explainOpen())
       );
     });
 
@@ -480,6 +489,7 @@ export class PipelineComponent {
       this.currentSlide.set(0);
       this.askOpen.set(false);
       this.sourceOpen.set(false);
+      this.characterInfoOpen.set(false);
       this.learningExplainService.reset();
       this.clearSelectionModeLongPressTimer();
       this.clearChapterQuizCheckTimer();
@@ -503,6 +513,7 @@ export class PipelineComponent {
       this.suppressStoryAutoProcessStart = false;
       this.processAllRunning.set(false);
       this.characterReferences.set([]);
+      this.selectedCharacterIntro.set(null);
       this.docId.set(null);
       this.desiredInitialSlideIndex = null;
       this.lastPersistedSlideIndex = null;
@@ -1036,6 +1047,11 @@ export class PipelineComponent {
     void this.playLearningCardTts(item, index);
   }
 
+  stopAutoplayPlayback(): void {
+    this.autoPlayEnabled.set(false);
+    this.stopCardTts();
+  }
+
   isLearningCardLoading(index: number): boolean {
     return this.ttsLoading() && this.playingCardKey() === this.learningCardKey(index);
   }
@@ -1067,7 +1083,7 @@ export class PipelineComponent {
       return null;
     }
 
-    const anchor = this.dialogueBubbleAnchor(item, this.activeDialogueCharacter(), line);
+    const anchor = this.dialogueBubbleAnchor(item, index, this.activeDialogueCharacter(), line);
     if (!anchor) {
       return null;
     }
@@ -1737,6 +1753,7 @@ export class PipelineComponent {
     const nextOpen = !this.sourceOpen();
     this.learningExplainService.hideSelectionButton();
     this.askOpen.set(false);
+    this.characterInfoOpen.set(false);
     this.explainOpen.set(false);
     this.sourceOpen.set(nextOpen);
     if (nextOpen) {
@@ -1748,6 +1765,7 @@ export class PipelineComponent {
     const nextOpen = !this.askOpen();
     this.learningExplainService.hideSelectionButton();
     this.sourceOpen.set(false);
+    this.characterInfoOpen.set(false);
     this.learningExplainService.closePanel();
     this.askOpen.set(nextOpen);
   }
@@ -1755,6 +1773,7 @@ export class PipelineComponent {
   closeAllSidePanels(): void {
     this.askOpen.set(false);
     this.sourceOpen.set(false);
+    this.characterInfoOpen.set(false);
     this.learningExplainService.closePanel();
     this.learningExplainService.hideSelectionButton();
   }
@@ -1762,6 +1781,45 @@ export class PipelineComponent {
   characterName(character: RagCharacterReferenceImageResponse): string {
     const name = typeof character.characterName === 'string' ? character.characterName.trim() : '';
     return name || 'Character';
+  }
+
+  onTtsSpeedInput(event: Event): void {
+    const target = event.target as HTMLInputElement | null;
+    const value = target ? Number(target.value) : NaN;
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    this.ttsSpeed.set(Math.max(0.5, Math.min(2, Math.round(value * 100) / 100)));
+  }
+
+  ttsSpeedLabel(): string {
+    return this.ttsSpeed().toFixed(2).replace(/\.00$/, '');
+  }
+
+  openCharacterInfo(character: RagCharacterReferenceImageResponse): void {
+    const details = this.characterIntroDetails(character);
+    this.learningExplainService.hideSelectionButton();
+    this.askOpen.set(false);
+    this.sourceOpen.set(false);
+    this.learningExplainService.closePanel();
+    this.selectedCharacterIntro.set(details);
+    this.characterInfoOpen.set(true);
+  }
+
+  characterIntroTitle(): string {
+    return this.selectedCharacterIntro()?.name || 'Character';
+  }
+
+  characterIntroSlideTitle(): string {
+    return this.selectedCharacterIntro()?.slideTitle || '';
+  }
+
+  characterIntroText(): string {
+    return this.selectedCharacterIntro()?.introText || 'No introduction available.';
+  }
+
+  characterIntroImageUrl(): string | null {
+    return this.selectedCharacterIntro()?.imageUrl || null;
   }
 
   private showSlidesOverlay(message = 'Loading slides...'): void {
@@ -2014,6 +2072,7 @@ export class PipelineComponent {
     this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
     this.slides.set(nextSlides);
     this.syncCharacterReferencesFromSlides(nextSlides);
+    void this.loadCharacterReferences(this.docKey().trim(), nextSlides);
     this.learningSlides.set([]);
     this.viewMode.set('comic');
     this.slidesLoading.set(false);
@@ -3015,17 +3074,11 @@ export class PipelineComponent {
 
     const nextByKey = new Map<string, RagCharacterReferenceImageResponse>();
     for (const character of this.characterReferences()) {
-      const key = this.characterReferenceKey(character);
-      if (key) {
-        nextByKey.set(key, character);
-      }
+      this.upsertCharacterReference(nextByKey, character);
     }
 
     for (const character of this.characterReferencesFromSlides(slides)) {
-      const key = this.characterReferenceKey(character);
-      if (key) {
-        nextByKey.set(key, character);
-      }
+      this.upsertCharacterReference(nextByKey, character);
     }
 
     this.characterReferences.set(Array.from(nextByKey.values()));
@@ -3053,10 +3106,7 @@ export class PipelineComponent {
           characterName: name,
           imageUrl: imageUrl || undefined
         } satisfies RagCharacterReferenceImageResponse;
-        const key = this.characterReferenceKey(character);
-        if (key) {
-          nextByKey.set(key, character);
-        }
+        this.upsertCharacterReference(nextByKey, character);
       }
     }
 
@@ -3064,9 +3114,154 @@ export class PipelineComponent {
   }
 
   private characterReferenceKey(character: RagCharacterReferenceImageResponse): string {
-    const name = typeof character.characterName === 'string' ? character.characterName.trim().toLowerCase() : '';
+    const name = this.normalizedCharacterReferenceName(character.characterName);
     const imageUrl = typeof character.imageUrl === 'string' ? character.imageUrl.trim() : '';
-    return name || imageUrl ? `${name}|${imageUrl}` : '';
+    return name || imageUrl;
+  }
+
+  private upsertCharacterReference(
+    nextByKey: Map<string, RagCharacterReferenceImageResponse>,
+    character: RagCharacterReferenceImageResponse
+  ): void {
+    const key = this.characterReferenceKey(character);
+    if (!key) {
+      return;
+    }
+
+    const existing = nextByKey.get(key);
+    if (!existing) {
+      nextByKey.set(key, character);
+      return;
+    }
+
+    const existingName =
+      typeof existing.characterName === 'string' ? existing.characterName.trim() : '';
+    const nextName =
+      typeof character.characterName === 'string' ? character.characterName.trim() : '';
+    const existingImageUrl =
+      typeof existing.imageUrl === 'string' ? existing.imageUrl.trim() : '';
+    const nextImageUrl =
+      typeof character.imageUrl === 'string' ? character.imageUrl.trim() : '';
+
+    nextByKey.set(key, {
+      characterName: this.preferredCharacterReferenceName(existingName, nextName) || undefined,
+      imageUrl: nextImageUrl || existingImageUrl || undefined
+    });
+  }
+
+  private normalizedCharacterReferenceName(value: unknown): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private preferredCharacterReferenceName(existingName: string, nextName: string): string {
+    if (!existingName) {
+      return nextName;
+    }
+    if (!nextName) {
+      return existingName;
+    }
+
+    return this.characterReferenceNameScore(nextName) > this.characterReferenceNameScore(existingName)
+      ? nextName
+      : existingName;
+  }
+
+  private characterReferenceNameScore(name: string): number {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return 0;
+    }
+
+    let score = trimmed.length;
+    if (/[A-Z]/.test(trimmed)) {
+      score += 20;
+    }
+    if (trimmed.includes(' ')) {
+      score += 10;
+    }
+    if (/[-_]/.test(trimmed)) {
+      score -= 10;
+    }
+    if (trimmed === trimmed.toLowerCase()) {
+      score -= 5;
+    }
+
+    return score;
+  }
+
+  private characterIntroDetails(character: RagCharacterReferenceImageResponse): CharacterIntroDetails {
+    const fallbackName = this.characterName(character);
+    const normalizedName = this.normalizedCharacterReferenceName(character.characterName);
+    const fallbackImageUrl =
+      typeof character.imageUrl === 'string' && character.imageUrl.trim() ? character.imageUrl.trim() : null;
+    const introSlide = this.slides().find((slide) => {
+      if (this.storySlideType(slide) !== 'CHARACTER_INTRO') {
+        return false;
+      }
+
+      const names = Array.isArray(slide.charactersInSlide)
+        ? slide.charactersInSlide
+            .map((entry) => this.normalizedCharacterReferenceName(entry.name))
+            .filter((value) => value.length > 0)
+        : [];
+      return names.includes(normalizedName);
+    });
+
+    if (!introSlide) {
+      return {
+        name: fallbackName,
+        imageUrl: fallbackImageUrl,
+        slideTitle: '',
+        introText: 'No introduction available.'
+      };
+    }
+
+    const slideImageUrl = this.slideImageUrl(introSlide);
+    const narration = this.mainNote(introSlide);
+    const dialogue = this.dialogue(introSlide).join('\n\n').trim();
+    return {
+      name: fallbackName,
+      imageUrl: slideImageUrl || fallbackImageUrl,
+      slideTitle: this.storySlideTitle(introSlide),
+      introText: dialogue || narration || 'No introduction available.'
+    };
+  }
+
+  private async loadCharacterReferences(docKey: string, slides: RagComicSlide[]): Promise<void> {
+    const normalizedDocKey = docKey.trim();
+    if (!normalizedDocKey) {
+      return;
+    }
+
+    try {
+      const references = await firstValueFrom(this.ragApi.getCharacterReferences(normalizedDocKey));
+      if (this.docKey().trim() !== normalizedDocKey) {
+        return;
+      }
+
+      const nextByKey = new Map<string, RagCharacterReferenceImageResponse>();
+      for (const character of this.characterReferencesFromSlides(slides)) {
+        this.upsertCharacterReference(nextByKey, character);
+      }
+
+      for (const character of Array.isArray(references) ? references : []) {
+        this.upsertCharacterReference(nextByKey, character);
+      }
+
+      this.characterReferences.set(Array.from(nextByKey.values()));
+    } catch {
+      // Keep the slide-derived references when the character reference list is unavailable.
+    }
   }
 
 
@@ -3912,9 +4107,18 @@ export class PipelineComponent {
 
   private dialogueBubbleAnchor(
     item: RagComicSlide,
+    index: number,
     characterName: string,
     line: string
   ): SlideBubbleAnchor | null {
+    const marker = this.findMarkerForCharacter(this.headMarkers(item, index), characterName);
+    if (marker) {
+      return {
+        leftPercent: marker.leftPercent,
+        topPercent: marker.topPercent
+      };
+    }
+
     const orderedCharacters = this.orderedSlideCharacters(item);
     if (!orderedCharacters.length) {
       return null;
@@ -4690,7 +4894,7 @@ export class PipelineComponent {
           docKey: docKey || undefined,
           entityType: segment.kind === 'dialogue' ? 'dialog' : 'slide_summary',
           entityId: segment.entityId,
-          speed: segment.kind === 'dialogue' ? PipelineComponent.dialogueSpeed : undefined,
+          speed: this.ttsSpeed(),
           expressiveness: segment.kind === 'dialogue' ? 'high' : undefined,
           format: 'mp3'
         })
@@ -4716,22 +4920,27 @@ export class PipelineComponent {
     if (this.audioUnlocked || !this.audio) {
       return;
     }
+    const previousSrc = this.audio.src;
+    const previousMuted = this.audio.muted;
     try {
-      const previousSrc = this.audio.src;
-      const previousMuted = this.audio.muted;
       this.audio.muted = true;
       this.audio.src = PipelineComponent.silentWavDataUrl;
       await this.audio.play();
       this.audio.pause();
       this.audio.currentTime = 0;
-      this.audio.src = previousSrc;
-      this.audio.muted = previousMuted;
       this.audioUnlocked = true;
       if (typeof window !== 'undefined') {
         window.removeEventListener('pointerdown', this.onFirstInteractionBound);
       }
     } catch {
       this.audioUnlocked = false;
+    } finally {
+      if (this.audio) {
+        this.audio.pause();
+        this.audio.currentTime = 0;
+        this.audio.src = previousSrc;
+        this.audio.muted = previousMuted;
+      }
     }
   }
 

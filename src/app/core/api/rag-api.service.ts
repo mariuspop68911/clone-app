@@ -351,24 +351,6 @@ export interface RagCharacterReferenceImageResponse {
   [key: string]: unknown;
 }
 
-export interface RagCharacterReferenceImageListResponse {
-  docKey?: string;
-  docId?: number;
-  folder?: string;
-  count?: number;
-  characters?: RagCharacterReferenceImageResponse[];
-  [key: string]: unknown;
-}
-
-export interface RagSlidePromptResponse {
-  docKey?: string;
-  docId?: number;
-  slideId?: number;
-  folder?: string;
-  promptText?: string;
-  [key: string]: unknown;
-}
-
 export interface RagSlideHeadCharacter {
   characterName?: string;
   declaredOrder?: number;
@@ -744,7 +726,7 @@ export class RagApiService {
   }
 
   resetComicBook(docKey: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/reset`);
+    return this.http.delete<void>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/reset`);
   }
 
   resetPipelineDocument(docKey: string): Observable<void> {
@@ -785,6 +767,12 @@ export class RagApiService {
       );
   }
 
+  getCharacterReferences(docKey: string): Observable<RagCharacterReferenceImageResponse[]> {
+    return this.http.get<RagCharacterReferenceImageResponse[]>(
+      `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/character-references`
+    );
+  }
+
   normalizeComicSlidesPayload(payload: unknown): RagComicSlide[] {
     if (Array.isArray(payload)) {
       return payload
@@ -810,29 +798,9 @@ export class RagApiService {
     return [this.toComicSlide(payload as PipelineSlideRaw)];
   }
 
-  getSlidePrompt(docKey: string, slideId: number, languageCode?: string): Observable<RagSlidePromptResponse> {
-    return this.http
-      .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides`, {
-        params: this.languageParams(languageCode, true)
-      })
-      .pipe(
-        map((response) => {
-          const slide = Array.isArray(response.slides)
-            ? response.slides.find((entry) => entry.id === slideId)
-            : null;
-          return {
-            docKey: response.docKey,
-            docId: response.docId,
-            slideId,
-            promptText: this.toTrimmedString(slide?.promptTxt)
-          };
-        })
-      );
-  }
-
   getSlideHeads(docKey: string, slideId: number): Observable<RagSlideHeadsResponse> {
     return this.http.get<RagSlideHeadsResponse>(
-      `${this.baseUrl}/comic-book/${encodeURIComponent(docKey)}/gcs-slide-heads/${slideId}`
+      `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/slides/${slideId}/heads`
     );
   }
 
