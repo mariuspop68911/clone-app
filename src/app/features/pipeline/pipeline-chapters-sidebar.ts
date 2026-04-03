@@ -38,6 +38,15 @@ export class PipelineChaptersSidebarComponent {
   }
 
   pageRange(chapter: RagLearningPipelineChapter): string {
+    const printedStart = this.validNumber(chapter.printedStartPageNumber);
+    const printedEnd = this.validNumber(chapter.printedEndPageNumber);
+    if (printedStart !== null) {
+      if (printedEnd !== null && printedEnd >= printedStart) {
+        return printedStart === printedEnd ? `Page ${printedStart}` : `Pages ${printedStart}-${printedEnd}`;
+      }
+      return `Starts at page ${printedStart}`;
+    }
+
     const start = this.validNumber(chapter.startPageNumber);
     const end = this.validNumber(chapter.endPageNumber);
     if (start === null || end === null) {

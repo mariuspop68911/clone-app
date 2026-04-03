@@ -1,6 +1,6 @@
 @if (indicatorItems().length > 0) {
   <div class="slide-progress" aria-label="Slide progress">
-    @for (item of indicatorItems(); track item.index) {
+    @for (item of indicatorItems(); track item.index; let renderedIndex = $index) {
       <div class="slide-progress-segment">
         <div
           class="slide-progress-dot"
@@ -14,11 +14,11 @@
           [attr.aria-current]="item.current ? 'step' : null"
         >
           @if (item.viewed) {
-            <span class="slide-progress-check">✓</span>
+            <span class="slide-progress-check">&#10003;</span>
           }
         </div>
 
-        @if (hasLineAfter(item.index)) {
+        @if (hasLineAfter(renderedIndex, indicatorItems())) {
           <div
             class="slide-progress-line"
             [style.background]="item.lineColor"

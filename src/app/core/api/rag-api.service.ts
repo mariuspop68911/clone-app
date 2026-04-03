@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { concat, EMPTY, map, Observable, of, switchMap, timeout } from 'rxjs';
+import { map, Observable, timeout } from 'rxjs';
 
 export interface RagIngestResponse {
   docKey: string;
@@ -142,6 +142,9 @@ export interface RagComicSlide {
   title?: string;
   slideType?: string;
   chapterIndex?: number;
+  displayOrder?: number;
+  chunkIndex?: number;
+  chunkIndexes?: number[];
   pipelineStage?: string;
   pipelineRunning?: boolean;
   pipelineDone?: boolean;
@@ -218,6 +221,8 @@ export interface RagLearningPipelineChapter {
   endChunkIndex?: number;
   startPageNumber?: number;
   endPageNumber?: number;
+  printedStartPageNumber?: number;
+  printedEndPageNumber?: number;
   keyTakeaways?: string[];
   quiz?: RagLearningChapterQuiz;
   reviewQuiz?: RagLearningChapterQuiz;
@@ -429,6 +434,7 @@ interface PipelineSlideRaw {
   title?: string;
   slideType?: string;
   chapterIndex?: number;
+  displayOrder?: number;
   pipelineStage?: string;
   pipelineRunning?: boolean;
   pipelineDone?: boolean;
@@ -743,34 +749,21 @@ export class RagApiService {
 
     return this.http
       .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodedDocKey}/slides`, {
-        params: this.slideParams(languageCode, 0, 10)
+        params: this.slideParams(languageCode)
       })
-      .pipe(
-        switchMap((firstResponse) =>
-          concat(
-            of(this.toComicSlidesWithImagesResponse(firstResponse)),
-            this.shouldFetchRemainingSlides(firstResponse)
-              ? this.http
-                  .get<PipelineSlidesResponse>(`${this.pipelineBaseUrl}/${encodedDocKey}/slides`, {
-                    params: this.slideParams(languageCode, 10)
-                  })
-                  .pipe(
-                    map((restResponse) =>
-                      this.toComicSlidesWithImagesResponse(
-                        this.mergeSlidesResponses(firstResponse, restResponse)
-                      )
-                    )
-                  )
-              : EMPTY
-          )
-        )
-      );
+      .pipe(map((response) => this.toComicSlidesWithImagesResponse(response)));
   }
 
   getCharacterReferences(docKey: string): Observable<RagCharacterReferenceImageResponse[]> {
     return this.http.get<RagCharacterReferenceImageResponse[]>(
       `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/character-references`
     );
+  }
+
+  bindPipelineLiveSession(docKey: string, processAllId: string): Observable<void> {
+    const encodedDocKey = encodeURIComponent(docKey);
+    const params = new HttpParams().set('processAllId', processAllId);
+    return this.http.post<void>(`${this.pipelineBaseUrl}/${encodedDocKey}/session`, null, { params });
   }
 
   normalizeComicSlidesPayload(payload: unknown): RagComicSlide[] {
@@ -845,40 +838,6 @@ export class RagApiService {
     }
 
     return params;
-  }
-
-  private shouldFetchRemainingSlides(response: PipelineSlidesResponse): boolean {
-    const totalCount = typeof response.count === 'number' ? response.count : 0;
-    const returnedCount =
-      typeof response.returnedCount === 'number'
-        ? response.returnedCount
-        : Array.isArray(response.slides)
-          ? response.slides.length
-          : 0;
-
-    return totalCount > returnedCount;
-  }
-
-  private mergeSlidesResponses(
-    firstResponse: PipelineSlidesResponse,
-    restResponse: PipelineSlidesResponse
-  ): PipelineSlidesResponse {
-    const firstSlides = Array.isArray(firstResponse.slides) ? firstResponse.slides : [];
-    const restSlides = Array.isArray(restResponse.slides) ? restResponse.slides : [];
-
-    return {
-      ...restResponse,
-      docKey: this.toTrimmedString(firstResponse.docKey) ?? this.toTrimmedString(restResponse.docKey),
-      docId: firstResponse.docId ?? restResponse.docId,
-      count:
-        typeof restResponse.count === 'number'
-          ? restResponse.count
-          : typeof firstResponse.count === 'number'
-            ? firstResponse.count
-            : firstSlides.length + restSlides.length,
-      returnedCount: firstSlides.length + restSlides.length,
-      slides: [...firstSlides, ...restSlides]
-    };
   }
 
   private toDocumentResponse(response: RagDocumentResponse): RagDocumentResponse {
@@ -997,6 +956,16 @@ export class RagApiService {
             endPageNumber:
               typeof chapter.endPageNumber === 'number' && Number.isFinite(chapter.endPageNumber)
                 ? chapter.endPageNumber
+                : undefined,
+            printedStartPageNumber:
+              typeof chapter['printedStartPageNumber'] === 'number' &&
+              Number.isFinite(chapter['printedStartPageNumber'])
+                ? chapter['printedStartPageNumber']
+                : undefined,
+            printedEndPageNumber:
+              typeof chapter['printedEndPageNumber'] === 'number' &&
+              Number.isFinite(chapter['printedEndPageNumber'])
+                ? chapter['printedEndPageNumber']
                 : undefined,
             keyTakeaways: [],
             quiz: chapter.quiz ? this.toLearningChapterQuiz(chapter.quiz) : undefined,
@@ -1147,6 +1116,18 @@ export class RagApiService {
         typeof slide.chapterIndex === 'number' && Number.isFinite(slide.chapterIndex)
           ? slide.chapterIndex
           : undefined,
+      displayOrder:
+        typeof slide.displayOrder === 'number' && Number.isFinite(slide.displayOrder)
+          ? slide.displayOrder
+          : undefined,
+      chunkIndex: typeof slide.chunkIndex === 'number' && Number.isFinite(slide.chunkIndex)
+        ? slide.chunkIndex
+        : undefined,
+      chunkIndexes: Array.isArray(slide.chunkIndexes)
+        ? slide.chunkIndexes.filter(
+            (value): value is number => typeof value === 'number' && Number.isFinite(value)
+          )
+        : [],
       pipelineStage: this.toTrimmedString(slide.pipelineStage),
       pipelineRunning:
         typeof slide.pipelineRunning === 'boolean' ? slide.pipelineRunning : undefined,

@@ -11,6 +11,7 @@ import {
   styleUrl: './slide-progress.scss'
 })
 export class SlideProgressComponent {
+  private static readonly maxVisibleIndicators = 10;
   private readonly slideProgressService = inject(SlideProgressService);
 
   @Input() items: PipelineSlideProgressItem[] = [];
@@ -18,10 +19,20 @@ export class SlideProgressComponent {
   @Input() loading = false;
 
   indicatorItems(): PipelineSlideProgressViewItem[] {
-    return this.slideProgressService.buildIndicators(this.items, this.currentIndex, this.loading);
+    const allItems = this.slideProgressService.buildIndicators(this.items, this.currentIndex, this.loading);
+    if (allItems.length <= SlideProgressComponent.maxVisibleIndicators) {
+      return allItems;
+    }
+
+    const normalizedCurrentIndex = Math.max(0, Math.min(this.currentIndex, allItems.length - 1));
+    const startIndex = Math.min(
+      normalizedCurrentIndex,
+      Math.max(0, allItems.length - SlideProgressComponent.maxVisibleIndicators)
+    );
+    return allItems.slice(startIndex, startIndex + SlideProgressComponent.maxVisibleIndicators);
   }
 
-  hasLineAfter(index: number): boolean {
-    return index < this.items.length - 1;
+  hasLineAfter(renderedIndex: number, renderedItems: PipelineSlideProgressViewItem[]): boolean {
+    return renderedIndex < renderedItems.length - 1;
   }
 }

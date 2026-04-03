@@ -15,6 +15,10 @@
   display: block;
 }
 
+:host-context(body.pipeline-reader-fullscreen-open) {
+  overflow: visible;
+}
+
 .panel {
   border: 1px solid #dde3eb;
   border-radius: 12px;
@@ -29,6 +33,13 @@
   padding: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.slides-layout-main-fullscreen {
+  width: 100%;
+  min-height: 100dvh;
+  padding: 0;
+  background: #000000;
 }
 
 .book-title {
@@ -100,6 +111,14 @@
   justify-content: space-between;
   gap: 1rem;
   margin-top: 1.4rem;
+}
+
+.section-heading-fullscreen {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  z-index: 30;
+  margin-top: 0;
 }
 
 .chapter-title {
@@ -194,6 +213,45 @@
   touch-action: pan-y;
 }
 
+.fullscreen-toggle {
+  margin-top: 0;
+}
+
+.fullscreen-toggle-overlay {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(7, 12, 18, 0.78);
+  color: #f7fbff;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.slides-section-fullscreen {
+  position: relative;
+  min-height: 100dvh;
+  background: #000000;
+}
+
+.reader-stage {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: #000000;
+}
+
+.pipeline-page-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: #000000;
+}
+
 .learning-carousel {
   display: block;
   width: min(100%, 68rem);
@@ -205,6 +263,37 @@
 .story-carousel {
   width: min(100%, 32rem);
   max-width: 32rem;
+}
+
+.pipeline-page-fullscreen .carousel {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.pipeline-page-fullscreen .story-carousel {
+  width: min(100vw - 2.5rem, 44rem);
+  max-width: 44rem;
+}
+
+.pipeline-page-fullscreen .learning-carousel {
+  width: min(100vw - 2.5rem, 88rem);
+  max-width: 88rem;
+}
+
+.pipeline-page-fullscreen .slide-card {
+  background:
+    linear-gradient(#10161d, #10161d) padding-box,
+    linear-gradient(135deg, rgba(104, 154, 255, 0.42), rgba(255, 213, 142, 0.26)) border-box;
+  box-shadow: 0 28px 64px rgba(0, 0, 0, 0.42);
+}
+
+.pipeline-page-fullscreen .story-slide-title,
+.pipeline-page-fullscreen .slide-copy,
+.pipeline-page-fullscreen .speech-bubble-text,
+.pipeline-page-fullscreen .speech-bubble-speaker,
+.pipeline-page-fullscreen .chapter-title,
+.pipeline-page-fullscreen .section-status {
+  color: inherit;
 }
 
 .story-slides-layout {
@@ -1064,4 +1153,28 @@
     position: static;
   }
 
+}
+
+@media (orientation: portrait) and (min-width: 768px) and (max-width: 1180px) {
+  .pipeline-page-fullscreen .reader-stage {
+    padding: 1rem 0.85rem 1.35rem;
+  }
+
+  .pipeline-page-fullscreen .story-carousel {
+    width: min(100vw - 1.7rem, 34rem);
+    max-width: 34rem;
+  }
+
+  .pipeline-page-fullscreen .learning-carousel {
+    width: min(100vw - 1.7rem, 42rem);
+    max-width: 42rem;
+  }
+
+  .pipeline-page-fullscreen .story-slide-card {
+    min-height: min(82dvh, 48rem);
+  }
+
+  .pipeline-page-fullscreen .learning-slide-card {
+    min-height: min(82dvh, 54rem);
+  }
 }

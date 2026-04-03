@@ -1,9 +1,21 @@
-<section class="pipeline-page" [class.pipeline-page-modal]="modalMode" [style.max-width]="modalMode ? 'none' : '1320px'">
-  <section class="slides-layout-main" [class.panel]="!modalMode" [class.slides-layout-main-modal]="modalMode" style="min-width:0;display:block;">
-      @if (docKey() && !modalMode) {
+<section
+  class="pipeline-page"
+  [class.pipeline-page-modal]="modalMode"
+  [class.pipeline-page-fullscreen]="fullscreenReader()"
+  [style.max-width]="modalMode || fullscreenReader() ? 'none' : '1320px'"
+>
+  <section
+    class="slides-layout-main"
+    [class.panel]="!modalMode && !fullscreenReader()"
+    [class.slides-layout-main-modal]="modalMode"
+    [class.slides-layout-main-fullscreen]="fullscreenReader()"
+    style="min-width:0;display:block;"
+  >
+      @if (docKey() && !modalMode && !fullscreenReader()) {
         <h2 class="book-title">{{ docKey() }}</h2>
       }
 
+      @if (!fullscreenReader()) {
       <div class="action-row">
         @if (shouldShowStoryActions()) {
           <button
@@ -37,21 +49,23 @@
         }
 
       </div>
+      }
 
-      @if (message()) {
+      @if (message() && !fullscreenReader()) {
         <p class="status">{{ message() }}</p>
       }
 
-      @if (isBackgroundProcessingActive()) {
+      @if (isBackgroundProcessingActive() && !fullscreenReader()) {
         <p class="status">
           {{ backgroundProcessingMessage() }}
         </p>
       }
 
-      @if (ttsMessage()) {
+      @if (ttsMessage() && !fullscreenReader()) {
         <p class="status">{{ ttsMessage() }}</p>
       }
 
+      @if (!fullscreenReader()) {
       <div class="tts-speed-control">
         <label class="tts-speed-label" for="pipeline-tts-speed">
           TTS speed: <span>{{ ttsSpeedLabel() }}x</span>
@@ -67,21 +81,33 @@
           (input)="onTtsSpeedInput($event)"
         />
       </div>
+      }
 
-      <section class="slides-section">
-        <div class="section-heading">
+      <section class="slides-section" [class.slides-section-fullscreen]="fullscreenReader()">
+        <div class="section-heading" [class.section-heading-fullscreen]="fullscreenReader()">
           @if (slidesLoading()) {
             <span class="section-status">Loading...</span>
           }
+          @if ((slides().length > 0 || visibleLearningSlides().length > 0) && !slidesLoading()) {
+            <button
+              type="button"
+              class="secondary-action fullscreen-toggle"
+              [class.fullscreen-toggle-overlay]="fullscreenReader()"
+              (click)="toggleFullscreenReader()"
+              [attr.aria-label]="fullscreenReader() ? 'Exit fullscreen reader' : 'Enter fullscreen reader'"
+            >
+              {{ fullscreenReader() ? 'Exit full screen' : 'Full screen' }}
+            </button>
+          }
         </div>
 
-        @if (viewMode() === 'learning' && currentChapterTitle()) {
+        @if (viewMode() === 'learning' && currentChapterTitle() && !fullscreenReader()) {
           <p class="chapter-title">
             <span class="chapter-title-label">Chapter:</span> {{ currentChapterTitle() }}
           </p>
         }
 
-        @if (slideProgressItems().length > 0) {
+        @if (slideProgressItems().length > 0 && !fullscreenReader()) {
           <app-slide-progress
             class="slide-progress-below"
             [items]="slideProgressItems()"
@@ -90,8 +116,12 @@
           ></app-slide-progress>
         }
 
-        <div style="min-width:0;" [class.story-slides-layout]="viewMode() === 'comic' && shouldShowCharactersPanel()">
-          @if (shouldShowCharactersPanel()) {
+        <div
+          style="min-width:0;"
+          [class.story-slides-layout]="viewMode() === 'comic' && shouldShowCharactersPanel() && !fullscreenReader()"
+          [class.reader-stage]="fullscreenReader()"
+        >
+          @if (shouldShowCharactersPanel() && !fullscreenReader()) {
             <aside class="story-characters-panel">
               <div class="story-characters-panel-card">
                 @if (characterReferences().length > 0) {
