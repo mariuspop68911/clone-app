@@ -2436,8 +2436,9 @@ export class PipelineComponent {
       return;
     }
 
-    const combinedSlides = this.mergeComicSlidesById(this.slides(), incomingSlides);
-    const nextIndex = this.clampSlideIndex(this.currentSlide(), combinedSlides.length);
+    const currentSlides = this.slides();
+    const combinedSlides = this.mergeComicSlidesById(currentSlides, incomingSlides);
+    const nextIndex = this.preserveCurrentComicSlideIndex(currentSlides, combinedSlides);
     this.slides.set(combinedSlides);
     this.currentSlide.set(nextIndex);
     this.syncSwiperSlide(nextIndex);
@@ -2526,6 +2527,27 @@ export class PipelineComponent {
       .sort((left, right) => this.compareComicSlides(left, right));
   }
 
+  private preserveCurrentComicSlideIndex(
+    currentSlides: RagComicSlide[],
+    combinedSlides: RagComicSlide[]
+  ): number {
+    const currentIndex = this.currentSlide();
+    const currentSlide = currentSlides[currentIndex];
+    if (!currentSlide) {
+      return this.clampSlideIndex(currentIndex, combinedSlides.length);
+    }
+
+    const currentKey = this.comicSlideIdentityKey(currentSlide, currentIndex);
+    const preservedIndex = combinedSlides.findIndex((slide, index) =>
+      this.comicSlideIdentityKey(slide, index) === currentKey
+    );
+    if (preservedIndex >= 0) {
+      return preservedIndex;
+    }
+
+    return this.clampSlideIndex(currentIndex, combinedSlides.length);
+  }
+
   private compareComicSlides(left: RagComicSlide, right: RagComicSlide): number {
     const leftChapter = this.toNullableFiniteNumber(left.chapterIndex) ?? 0;
     const rightChapter = this.toNullableFiniteNumber(right.chapterIndex) ?? 0;
@@ -2601,6 +2623,10 @@ export class PipelineComponent {
     }
 
     return `idx:${index}:${slide.title ?? ''}:${slide.slideType ?? ''}`;
+  }
+
+  private comicSlideIdentityKey(slide: RagComicSlide, index: number): string {
+    return this.comicSlideMergeKey(slide, index);
   }
 
   private findSlideIndexForChapter(chapter: RagLearningPipelineChapter): number | null {
