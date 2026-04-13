@@ -6,6 +6,7 @@ export interface OpenAiTtsGenerateRequest {
   text: string;
   voice?: string;
   characterName?: string;
+  characterKey?: string;
   languageCode?: string;
   docKey?: string;
   entityType?: 'slide_summary' | 'dialog';
@@ -19,6 +20,7 @@ export type TtsRequest = {
   text: string;
   voice?: string;
   characterName?: string;
+  characterKey?: string;
   languageCode?: string;
   docKey?: string;
   entityType?: 'slide_summary' | 'dialog';
@@ -43,6 +45,7 @@ export class TtsApiService {
       textLength: req.text?.length ?? 0,
       voice: req.voice,
       characterName: req.characterName,
+      characterKey: req.characterKey,
       languageCode: req.languageCode,
       docKey: req.docKey,
       entityType: req.entityType,
@@ -66,6 +69,7 @@ export class TtsApiService {
       textLength: req.text?.length ?? 0,
       voice: req.voice,
       characterName: req.characterName,
+      characterKey: req.characterKey,
       languageCode: req.languageCode,
       docKey: req.docKey,
       entityType: req.entityType,
@@ -82,6 +86,7 @@ export class TtsApiService {
           text: req.text,
           voice: req.voice,
           characterName: req.characterName,
+          characterKey: req.characterKey,
           languageCode: req.languageCode,
           docKey: req.docKey,
           entityType: req.entityType,

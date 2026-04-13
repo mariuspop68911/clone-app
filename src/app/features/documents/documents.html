@@ -3,7 +3,7 @@
     <div class="panel-head">
       <div>
         <p class="eyebrow">Library</p>
-        <h1>Documents</h1>
+        <h1>{{ libraryTitle() }}</h1>
       </div>
       <div class="actions">
         <a routerLink="/import">Import New Document</a>
@@ -25,7 +25,7 @@
                   <a
                     class="doc-card doc-link"
                     [class.doc-card-processing]="isDocumentProcessing(doc)"
-                    [routerLink]="['/documents', docKeyForRoute(doc)]"
+                    [routerLink]="documentRoute(doc)"
                   >
                     @if (coverUrl(doc)) {
                       <img
@@ -76,7 +76,7 @@
                   <a
                     class="doc-card doc-link"
                     [class.doc-card-processing]="isDocumentProcessing(doc)"
-                    [routerLink]="['/documents', docKeyForRoute(doc)]"
+                    [routerLink]="documentRoute(doc)"
                   >
                     @if (coverUrl(doc)) {
                       <img

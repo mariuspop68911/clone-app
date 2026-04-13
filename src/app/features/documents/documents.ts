@@ -1,9 +1,10 @@
 import { isPlatformBrowser } from '@angular/common';
 import { Component, Inject, OnDestroy, OnInit, PLATFORM_ID, computed, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RagApiService, RagDocumentResponse } from '../../core/api/rag-api.service';
 import { IngestProgressService } from '../import/ingest-progress.service';
 import { DocumentCoverCacheService } from '../../shared/document-cover-cache.service';
+import { resolveLibraryBasePath, resolveLibraryTitle } from '../../shared/library-route';
 
 @Component({
   selector: 'app-documents',
@@ -21,6 +22,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   readonly mergedDocs = computed(() => this.mergeTrackedDocs(this.docs()));
 
   constructor(
+    private readonly route: ActivatedRoute,
     private readonly ragApi: RagApiService,
     private readonly ingestProgress: IngestProgressService,
     private readonly documentCoverCache: DocumentCoverCacheService,
@@ -82,6 +84,14 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     return this.mergedDocs().filter((doc) => this.isLearningDoc(doc));
   }
 
+  libraryBasePath(): string {
+    return resolveLibraryBasePath(this.route.snapshot);
+  }
+
+  libraryTitle(): string {
+    return resolveLibraryTitle(this.route.snapshot);
+  }
+
   coverUrl(doc: RagDocumentResponse): string {
     const backendCoverUrl = typeof doc.coverUrl === 'string' ? doc.coverUrl.trim() : '';
     if (backendCoverUrl) {
@@ -97,6 +107,15 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       return key.trim();
     }
     return null;
+  }
+
+  documentRoute(doc: RagDocumentResponse): string[] | null {
+    const docKey = this.docKeyForRoute(doc);
+    if (!docKey) {
+      return null;
+    }
+
+    return ['/', this.libraryBasePath(), docKey];
   }
 
   deleteDocument(event: Event, doc: RagDocumentResponse): void {

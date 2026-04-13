@@ -185,6 +185,71 @@ export interface RagComicBookGenerateAllRequest {
   end?: number | null;
 }
 
+export interface RagProcessSeriesRequest {
+  docKey: string;
+  start: number;
+  end: number;
+}
+
+export interface RagSeriesEpisodeCharacterImage {
+  characterName?: string;
+  character_name?: string;
+  imageUrl?: string;
+  image_url?: string;
+  [key: string]: unknown;
+}
+
+export interface RagSeriesEpisodeEventResponse {
+  eventId?: string;
+  event_id?: string;
+  summary?: string;
+  imageUrl?: string;
+  image_url?: string;
+  type?: string;
+  characterImageUrls?: string[];
+  character_image_urls?: string[] | null;
+  characterImages?: RagSeriesEpisodeCharacterImage[];
+  character_images?: RagSeriesEpisodeCharacterImage[] | null;
+  has_dialogue?: boolean;
+  dialogueLines?: RagSeriesEpisodeDialogueLine[];
+  dialogue_lines?: RagSeriesEpisodeDialogueLine[];
+  characters_in_scene?: string[] | null;
+  location?: string | null;
+  strongest?: boolean;
+  object_tag?: string | null;
+  why_selected?: string | null;
+  importance_score?: number | null;
+  narrative_function?: string | null;
+  [key: string]: unknown;
+}
+
+export interface RagSeriesEpisodeDialogueLine {
+  text?: string;
+  speaker?: string;
+  speakerKey?: string;
+  speaker_key?: string;
+  [key: string]: unknown;
+}
+
+export interface RagSeriesEpisodeResponse {
+  id: number;
+  episodeId?: string;
+  episode_id?: string;
+  episodeTitle?: string;
+  episode_title?: string;
+  startChunkIndex?: number;
+  endChunkIndex?: number;
+  createdAt?: string;
+  events?: RagSeriesEpisodeEventResponse[];
+  selected_events?: RagSeriesEpisodeEventResponse[];
+  episode_summary?: string;
+  anchor_summary?: string;
+  anchor_event_id?: string;
+  selected_event_ids?: string[];
+  excluded_event_ids?: string[];
+  [key: string]: unknown;
+}
+
 export interface RagGenerateLearningSlidesRequest {
   docKey: string;
 }
@@ -564,6 +629,7 @@ export class RagApiService {
   private readonly baseUrl = '/api/rag';
   private readonly pipelineBaseUrl = '/api/pipeline';
   private readonly learningPipelineBaseUrl = '/api/learning_pipeline';
+  private readonly seriesBaseUrl = '/api/series';
   private readonly ingestTimeoutMs = 120000;
   private readonly listDocumentsTimeoutMs = 30000;
 
@@ -738,6 +804,20 @@ export class RagApiService {
   resetPipelineDocument(docKey: string): Observable<void> {
     return this.http.delete<void>(
       `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/reset`
+    );
+  }
+
+  processSeries(req: RagProcessSeriesRequest): Observable<unknown> {
+    return this.http.post(`${this.seriesBaseUrl}/process_series`, {
+      docKey: req.docKey,
+      start: Math.max(0, Math.floor(req.start)),
+      end: Math.max(0, Math.floor(req.end))
+    });
+  }
+
+  getSeriesEpisodes(docKey: string): Observable<RagSeriesEpisodeResponse[]> {
+    return this.http.get<RagSeriesEpisodeResponse[]>(
+      `${this.seriesBaseUrl}/${encodeURIComponent(docKey)}/episodes`
     );
   }
 

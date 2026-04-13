@@ -1,0 +1,38 @@
+<section class="details-modal-shell">
+  <div class="details-modal-scrim"></div>
+
+  <div class="details-modal-content">
+    <a
+      class="details-modal-close"
+      [routerLink]="['/documents2']"
+      aria-label="Close Documents2 details"
+    >
+      X
+    </a>
+
+    <header class="series-build-header">
+      @if (docKey()) {
+        <h2 class="details-modal-title details-modal-title-centered">{{ docKey() }}</h2>
+      }
+
+      <button
+        type="button"
+        class="details-modal-build"
+        (click)="build()"
+        [disabled]="building() || !docKey()"
+      >
+        {{ building() ? 'Building...' : 'Build' }}
+      </button>
+
+      @if (message()) {
+        <p class="details-modal-message details-modal-message-centered">{{ message() }}</p>
+      }
+    </header>
+
+    <div class="details-modal-layout details-modal-layout-compact">
+      <div class="details-modal-main details-modal-main-series">
+        <app-episode-text-area [episodes]="episodes()" />
+      </div>
+    </div>
+  </div>
+</section>

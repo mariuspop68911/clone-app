@@ -1,8 +1,9 @@
 import { AfterViewInit, Component, ViewChild, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AppShellUiService } from '../../app-shell-ui.service';
 import { PipelineComponent } from '../pipeline';
 import { PipelineChaptersSidebarComponent } from '../pipeline/pipeline-chapters-sidebar';
+import { resolveLibraryBasePath } from '../../shared/library-route';
 
 @Component({
   selector: 'app-document-details-modal',
@@ -13,6 +14,7 @@ import { PipelineChaptersSidebarComponent } from '../pipeline/pipeline-chapters-
 export class DocumentDetailsModalComponent implements AfterViewInit {
   @ViewChild('pipelineRef') private pipelineRef?: PipelineComponent;
   private readonly appShellUi = inject(AppShellUiService);
+  private readonly route = inject(ActivatedRoute);
 
   constructor() {
     this.appShellUi.setBrowseButtonVisible(false);
@@ -29,6 +31,10 @@ export class DocumentDetailsModalComponent implements AfterViewInit {
 
   closeModal(): void {
     this.pipelineRef?.stopAutoplayPlayback();
+  }
+
+  libraryBasePath(): string {
+    return resolveLibraryBasePath(this.route.snapshot);
   }
 
   documentTitle(): string {

@@ -1,7 +1,7 @@
 <section class="chat-page" [class.chat-page-embedded]="embedded">
   @if (!embedded) {
     <header class="chat-header">
-      <a class="back" [routerLink]="['/documents', docKey()]">Back to Details</a>
+      <a class="back" [routerLink]="['/', libraryBasePath(), docKey()]">Back to Details</a>
       <h1>Chat: {{ docKey() }}</h1>
     </header>
   }

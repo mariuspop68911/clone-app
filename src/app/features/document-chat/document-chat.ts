@@ -2,6 +2,7 @@ import { Component, Input, OnChanges, SimpleChanges, signal } from '@angular/cor
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RagApiService } from '../../core/api/rag-api.service';
+import { resolveLibraryBasePath } from '../../shared/library-route';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -59,6 +60,10 @@ export class DocumentChatComponent {
 
   ask(question: string): void {
     this.submitQuestion(question);
+  }
+
+  libraryBasePath(): string {
+    return resolveLibraryBasePath(this.route.snapshot);
   }
 
   send(): void {
