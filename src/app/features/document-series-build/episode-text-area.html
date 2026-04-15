@@ -55,7 +55,13 @@
         class="episode-image-panel"
         [class.episode-image-panel-characters]="displayCharacterRows().length > 0"
       >
-        @if (displayCharacterRows().length && displayEvent(); as event) {
+        @if (displayImageUrl(); as imageUrl) {
+          <img
+            class="episode-image"
+            [src]="imageUrl"
+            [alt]="displayEvent().summary || 'Episode scene image'"
+          />
+        } @else if (displayCharacterRows().length && displayEvent(); as event) {
           <div class="episode-character-gallery">
             @for (row of displayCharacterRows(); track row.imageUrl + row.characterName; let rowIndex = $index) {
               <div
@@ -81,12 +87,6 @@
               </div>
             }
           </div>
-        } @else if (displayImageUrl(); as imageUrl) {
-          <img
-            class="episode-image"
-            [src]="imageUrl"
-            [alt]="displayEvent().summary || 'Episode scene image'"
-          />
         } @else {
           <div class="episode-image-empty"></div>
         }

@@ -187,8 +187,7 @@ export interface RagComicBookGenerateAllRequest {
 
 export interface RagProcessSeriesRequest {
   docKey: string;
-  start: number;
-  end: number;
+  limit: number;
 }
 
 export interface RagSeriesEpisodeCharacterImage {
@@ -810,8 +809,7 @@ export class RagApiService {
   processSeries(req: RagProcessSeriesRequest): Observable<unknown> {
     return this.http.post(`${this.seriesBaseUrl}/process_series`, {
       docKey: req.docKey,
-      start: Math.max(0, Math.floor(req.start)),
-      end: Math.max(0, Math.floor(req.end))
+      limit: Math.max(1, Math.floor(req.limit))
     });
   }
 

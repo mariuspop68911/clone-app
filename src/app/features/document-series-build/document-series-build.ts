@@ -51,8 +51,7 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
     this.ragApi
       .processSeries({
         docKey,
-        start: 0,
-        end: 20
+        limit: 20
       })
       .subscribe({
         next: () => {
