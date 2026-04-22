@@ -2473,14 +2473,15 @@ export class PipelineComponent {
 
   private storyProcessBrokerUrl(): string {
     if (typeof window === 'undefined') {
-      return 'ws://127.0.0.1:8080/ws/pipeline';
+      return 'ws://127.0.0.1:8081/ws/pipeline';
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const isLocalDevHost =
       window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (isLocalDevHost && window.location.port === '4200') {
-      return `${protocol}//127.0.0.1:8080/ws/pipeline`;
+    const isLocalDevPort = window.location.port === '4200' || window.location.port === '4201';
+    if (isLocalDevHost && isLocalDevPort) {
+      return `${protocol}//127.0.0.1:8081/ws/pipeline`;
     }
     return `${protocol}//${window.location.host}/ws/pipeline`;
   }
