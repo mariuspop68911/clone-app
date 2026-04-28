@@ -1,12 +1,13 @@
 import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { map, Observable, timeout } from 'rxjs';
+import { EMPTY, Observable, expand, filter, map, of, switchMap, take, throwError, timeout, timer } from 'rxjs';
 
 export interface RagIngestResponse {
   docKey: string;
   documentId: number;
   chunksInserted: number;
   ingestId?: string;
+  jobId?: string;
 }
 
 export interface RagIngestStatusResponse {
@@ -14,6 +15,25 @@ export interface RagIngestStatusResponse {
   stage?: string;
   status?: string;
   message?: string;
+  [key: string]: unknown;
+}
+
+export interface AppJobCreateResponse {
+  jobId: string;
+  status?: string;
+  message?: string;
+}
+
+export interface AppJobStatusResponse {
+  jobId?: string;
+  jobType?: string;
+  status?: string;
+  progressPercent?: number;
+  stage?: string;
+  message?: string;
+  targetDocKey?: string;
+  targetDocId?: number;
+  result?: unknown;
   [key: string]: unknown;
 }
 
@@ -186,7 +206,7 @@ export interface RagComicBookGenerateAllRequest {
 }
 
 export interface RagProcessSeriesRequest {
-  docKey: string;
+  docId: number;
   limit: number;
 }
 
@@ -631,6 +651,7 @@ export class RagApiService {
   private readonly seriesBaseUrl = '/api/series';
   private readonly ingestTimeoutMs = 120000;
   private readonly listDocumentsTimeoutMs = 30000;
+  private readonly jobPollIntervalMs = 1500;
 
   constructor(private readonly http: HttpClient) {}
 
@@ -700,18 +721,20 @@ export class RagApiService {
   generateComicBookAll(
     req: RagComicBookGenerateAllRequest
   ): Observable<RagComicBookGenerateResponse> {
-    return this.http
-      .post<PipelineProcessAllResponse>(`${this.pipelineBaseUrl}/process_all`, req)
-      .pipe(map((response) => this.toComicBookGenerateResponse(response)));
+    return this.waitForJobResult(
+      this.http.post<AppJobCreateResponse>(`${this.pipelineBaseUrl}/process_all`, req),
+      (result) => this.toComicBookGenerateResponse((result ?? {}) as PipelineProcessAllResponse)
+    );
   }
 
   generateLearningSlides(req: RagGenerateLearningSlidesRequest): Observable<RagLearnSlidesResponse> {
-    return this.http
-      .post<PipelineLearningSlidesResponse>(
+    return this.waitForJobResult(
+      this.http.post<AppJobCreateResponse>(
         `${this.learningPipelineBaseUrl}/generate-learning`,
         req
-      )
-      .pipe(map((response) => this.toLearningSlidesResponse(response)));
+      ),
+      (result) => this.toLearningSlidesResponse((result ?? {}) as PipelineLearningSlidesResponse)
+    );
   }
 
   getLearningSlides(docKey: string, start?: number, end?: number): Observable<RagLearnSlidesResponse> {
@@ -734,12 +757,13 @@ export class RagApiService {
   generateChapterQuiz(
     req: RagGenerateChapterQuizRequest
   ): Observable<RagLearningChapterQuiz> {
-    return this.http
-      .post<PipelineLearningChapterQuizRaw>(
+    return this.waitForJobResult(
+      this.http.post<AppJobCreateResponse>(
         `${this.learningPipelineBaseUrl}/generate-chapter-quiz`,
         req
-      )
-      .pipe(map((response) => this.toLearningChapterQuiz(response)));
+      ),
+      (result) => this.toLearningChapterQuiz((result ?? {}) as PipelineLearningChapterQuizRaw)
+    );
   }
 
   completeChapterQuiz(req: RagCompleteChapterQuizRequest): Observable<unknown> {
@@ -751,23 +775,28 @@ export class RagApiService {
   }
 
   generateReviewQuiz(req: RagGenerateReviewQuizRequest): Observable<RagLearningChapterQuiz> {
-    return this.http
-      .post<PipelineLearningChapterQuizRaw>(
+    return this.waitForJobResult(
+      this.http.post<AppJobCreateResponse>(
         `${this.learningPipelineBaseUrl}/generate-review-quiz`,
         req
-      )
-      .pipe(map((response) => this.toLearningChapterQuiz(response)));
+      ),
+      (result) => this.toLearningChapterQuiz((result ?? {}) as PipelineLearningChapterQuizRaw)
+    );
   }
 
   generateChapterReviewSlides(
     req: RagGenerateChapterReviewSlidesRequest
   ): Observable<RagGenerateChapterReviewSlidesResponse> {
-    return this.http
-      .post<PipelineLearningChapterReviewSlidesResponse>(
+    return this.waitForJobResult(
+      this.http.post<AppJobCreateResponse>(
         `${this.learningPipelineBaseUrl}/generate-chapter-review-slides`,
         req
-      )
-      .pipe(map((response) => this.toGenerateChapterReviewSlidesResponse(response)));
+      ),
+      (result) =>
+        this.toGenerateChapterReviewSlidesResponse(
+          (result ?? {}) as PipelineLearningChapterReviewSlidesResponse
+        )
+    );
   }
 
   explainLearningSummary(req: RagExplainLike12Request): Observable<RagExplainLike12Response> {
@@ -796,26 +825,28 @@ export class RagApiService {
     });
   }
 
-  resetComicBook(docKey: string): Observable<void> {
-    return this.http.delete<void>(`${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/reset`);
-  }
-
-  resetPipelineDocument(docKey: string): Observable<void> {
+  deleteDocument(docId: number): Observable<void> {
     return this.http.delete<void>(
-      `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/reset`
+      `${this.baseUrl}/documents/${encodeURIComponent(String(docId))}`
     );
   }
 
   processSeries(req: RagProcessSeriesRequest): Observable<unknown> {
-    return this.http.post(`${this.seriesBaseUrl}/process_series`, {
-      docKey: req.docKey,
-      limit: Math.max(1, Math.floor(req.limit))
-    });
+    return this.waitForJobResult(
+      this.http.post<AppJobCreateResponse>(
+        `${this.seriesBaseUrl}/documents/${encodeURIComponent(String(req.docId))}/process`,
+        {
+          docId: req.docId,
+          limit: Math.max(1, Math.floor(req.limit))
+        }
+      ),
+      (result) => result
+    );
   }
 
-  getSeriesEpisodes(docKey: string): Observable<RagSeriesEpisodeResponse[]> {
+  getSeriesEpisodes(docId: number): Observable<RagSeriesEpisodeResponse[]> {
     return this.http.get<RagSeriesEpisodeResponse[]>(
-      `${this.seriesBaseUrl}/${encodeURIComponent(docKey)}/episodes`
+      `${this.seriesBaseUrl}/documents/${encodeURIComponent(String(docId))}/episodes`
     );
   }
 
@@ -836,12 +867,6 @@ export class RagApiService {
     return this.http.get<RagCharacterReferenceImageResponse[]>(
       `${this.pipelineBaseUrl}/${encodeURIComponent(docKey)}/character-references`
     );
-  }
-
-  bindPipelineLiveSession(docKey: string, processAllId: string): Observable<void> {
-    const encodedDocKey = encodeURIComponent(docKey);
-    const params = new HttpParams().set('processAllId', processAllId);
-    return this.http.post<void>(`${this.pipelineBaseUrl}/${encodedDocKey}/session`, null, { params });
   }
 
   normalizeComicSlidesPayload(payload: unknown): RagComicSlide[] {
@@ -886,6 +911,50 @@ export class RagApiService {
         params: this.languageParams(languageCode)
       }
     );
+  }
+
+  getJobStatus(jobId: string): Observable<AppJobStatusResponse> {
+    return this.http.get<AppJobStatusResponse>(`/api/jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  private waitForJobResult<T>(
+    createJob$: Observable<AppJobCreateResponse>,
+    mapResult: (result: unknown, status: AppJobStatusResponse) => T
+  ): Observable<T> {
+    return createJob$.pipe(
+      switchMap((job) => this.pollJob(job.jobId)),
+      switchMap((status) => {
+        if (!this.isSuccessfulJob(status)) {
+          const message =
+            typeof status.message === 'string' && status.message.trim()
+              ? status.message.trim()
+              : 'Job failed';
+          return throwError(() => new Error(message));
+        }
+        return of(mapResult(status.result, status));
+      })
+    );
+  }
+
+  private pollJob(jobId: string): Observable<AppJobStatusResponse> {
+    return this.getJobStatus(jobId).pipe(
+      expand((status) =>
+        this.isTerminalJob(status)
+          ? EMPTY
+          : timer(this.jobPollIntervalMs).pipe(switchMap(() => this.getJobStatus(jobId)))
+      ),
+      filter((status) => this.isTerminalJob(status)),
+      take(1)
+    );
+  }
+
+  private isTerminalJob(status: AppJobStatusResponse | null | undefined): boolean {
+    const value = typeof status?.status === 'string' ? status.status.trim().toUpperCase() : '';
+    return value === 'DONE' || value === 'FAILED';
+  }
+
+  private isSuccessfulJob(status: AppJobStatusResponse | null | undefined): boolean {
+    return typeof status?.status === 'string' && status.status.trim().toUpperCase() === 'DONE';
   }
 
   private languageParams(languageCode?: string, includePromptTxt?: boolean): HttpParams | undefined {

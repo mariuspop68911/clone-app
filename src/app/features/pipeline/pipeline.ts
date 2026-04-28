@@ -48,7 +48,6 @@ import { LoadingOverlayService } from '../../shared/loading-overlay.service';
 import { AppShellUiService } from '../../app-shell-ui.service';
 import { register } from 'swiper/element/bundle';
 import { Subscription, firstValueFrom } from 'rxjs';
-import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import { marked } from 'marked';
 
 register();
@@ -113,22 +112,6 @@ interface SourcePreviewPage {
   trustedPdfUrl: SafeResourceUrl;
 }
 
-interface StoryProcessEventEnvelope {
-  eventType?: string;
-  type?: string;
-  event?: string;
-  event_name?: string;
-  kind?: string;
-  status?: string;
-  message?: string;
-  error?: string;
-  payload?: unknown;
-  data?: unknown;
-  slides?: unknown;
-  slide?: unknown;
-  [key: string]: unknown;
-}
-
 type ActiveVisualMode = 'none' | 'dialogue' | 'context';
 type PipelineViewMode = 'comic' | 'learning';
 
@@ -162,11 +145,6 @@ export class PipelineComponent {
   private sourcePdfLoadToken = 0;
   private loadedSourceSignature = '';
   private lastAutoLoadTriggerKey = '';
-  private storyProcessRequestDocKey = '';
-  private storyProcessStartedDocKey = '';
-  private storyProcessClient: Client | null = null;
-  private storyProcessSubscription: StompSubscription | null = null;
-  private activeProcessAllId = '';
   private suppressStoryAutoProcessStart = false;
   private selectionModeLongPressTimer: ReturnType<typeof setTimeout> | null = null;
   private chapterQuizCheckTimer: ReturnType<typeof setTimeout> | null = null;
@@ -508,9 +486,6 @@ export class PipelineComponent {
       this.sourcePages.set([]);
       this.sourceLoading.set(false);
       this.sourceMessage.set('');
-      this.closeStoryProcessStream();
-      this.storyProcessStartedDocKey = '';
-      this.storyProcessRequestDocKey = '';
       this.suppressStoryAutoProcessStart = false;
       this.processAllRunning.set(false);
       this.characterReferences.set([]);
@@ -555,7 +530,6 @@ export class PipelineComponent {
     this.clearSelectionModeLongPressTimer();
     this.clearChapterQuizCheckTimer();
     this.clearBackgroundLearningRefreshTimer();
-    this.closeStoryProcessStream();
     this.suppressStoryAutoProcessStart = false;
     this.processAllRunning.set(false);
     if (typeof window !== 'undefined') {
@@ -640,8 +614,13 @@ export class PipelineComponent {
 
   clearSlides(): void {
     const key = this.docKey().trim();
+    const docId = this.docId();
     if (!key) {
       this.message.set('Missing docKey.');
+      return;
+    }
+    if (docId === null) {
+      this.message.set('Missing document id.');
       return;
     }
     if (this.loading() || this.clearing()) {
@@ -650,17 +629,14 @@ export class PipelineComponent {
 
     this.clearing.set(true);
     this.message.set('');
-    this.closeStoryProcessStream();
-    this.storyProcessStartedDocKey = '';
-    this.storyProcessRequestDocKey = '';
     this.processAllRunning.set(false);
     this.stopCardTts();
 
-    this.ragApi.resetComicBook(key).subscribe({
+    this.ragApi.deleteDocument(docId).subscribe({
       next: () => {
         this.clearing.set(false);
         this.resetSlideState(key);
-        this.message.set('Comic book data cleared.');
+        this.message.set('Document deleted.');
       },
       error: (err) => {
         const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
@@ -669,7 +645,7 @@ export class PipelineComponent {
             ? err.error
             : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
         this.clearing.set(false);
-        this.message.set(`Failed to clear comic book (${status}): ${backendMessage}`);
+        this.message.set(`Failed to delete document (${status}): ${backendMessage}`);
       }
     });
   }
@@ -1909,18 +1885,12 @@ export class PipelineComponent {
     this.showSlidesOverlay('Loading slides...');
     this.loadLearningContext(normalizedDocKey);
     if (this.shouldUseLearningFlow()) {
-      this.closeStoryProcessStream();
-      this.storyProcessStartedDocKey = '';
-      this.storyProcessRequestDocKey = '';
       this.suppressStoryAutoProcessStart = false;
       this.processAllRunning.set(false);
       this.loadLearningSlidesFallback(normalizedDocKey, typeof performance !== 'undefined' ? performance.now() : Date.now());
       return;
     }
 
-    this.closeStoryProcessStream();
-    this.storyProcessStartedDocKey = '';
-    this.storyProcessRequestDocKey = '';
     this.suppressStoryAutoProcessStart = false;
     this.processAllRunning.set(false);
     this.loadSlides(normalizedDocKey);
@@ -1972,9 +1942,6 @@ export class PipelineComponent {
           this.applyFetchedComicSlides(response, nextSlides);
           this.startStoryProcessAll(docKey, false, true);
           return;
-        }
-        if (nextSlides.length && !this.shouldUseLearningFlow()) {
-          this.ensureStoryAutoTriggerSession(docKey);
         }
 
         const totalCount = typeof response.count === 'number' ? response.count : nextSlides.length;
@@ -2156,15 +2123,15 @@ export class PipelineComponent {
       return;
     }
 
-    if (onlyOnce && this.storyProcessStartedDocKey === docKey) {
+    if (onlyOnce && this.processAllRunning()) {
       console.info('[Pipeline] startStoryProcessAll skipped', {
         docKey,
-        reason: 'already-started-once'
+        reason: 'already-running'
       });
       return;
     }
 
-    if (this.loading() && this.storyProcessRequestDocKey === docKey) {
+    if (this.loading() || this.processAllRunning()) {
       console.info('[Pipeline] startStoryProcessAll skipped', {
         docKey,
         reason: 'request-already-in-flight'
@@ -2173,325 +2140,72 @@ export class PipelineComponent {
     }
 
     this.suppressStoryAutoProcessStart = false;
-    this.storyProcessStartedDocKey = docKey;
-    this.storyProcessRequestDocKey = docKey;
     this.processAllRunning.set(true);
     this.loading.set(true);
     this.showLoadMoreSlide.set(false);
     this.message.set(manual ? 'Processing next chapters...' : 'Starting story processing...');
-    const processAllId = this.createProcessAllId();
     console.info('[Pipeline] startStoryProcessAll starting process_all', {
       docKey,
       manual,
-      onlyOnce,
-      processAllId
+      onlyOnce
     });
-    void this.startStoryProcessRun(docKey, processAllId);
-  }
-
-  private ensureStoryAutoTriggerSession(docKey: string): void {
-    const normalizedDocKey = docKey.trim();
-    if (!normalizedDocKey || this.shouldUseLearningFlow()) {
-      return;
-    }
-    if (this.storyProcessStartedDocKey === normalizedDocKey || this.storyProcessClient) {
-      return;
-    }
-
-    const processAllId = this.createProcessAllId();
-    this.storyProcessStartedDocKey = normalizedDocKey;
-    this.storyProcessRequestDocKey = normalizedDocKey;
-    void this.openStoryProcessStream(normalizedDocKey, processAllId)
-      .then(() => firstValueFrom(this.ragApi.bindPipelineLiveSession(normalizedDocKey, processAllId)))
-      .then(() => {
-        this.storyProcessRequestDocKey = '';
-      })
-      .catch((err) => {
-        this.storyProcessStartedDocKey = '';
-        this.storyProcessRequestDocKey = '';
-        this.closeStoryProcessStream();
-        console.warn('[Pipeline] Failed to bind story auto-trigger session', {
-          docKey: normalizedDocKey,
-          processAllId,
-          error: this.readApiError(err)
-        });
-      });
-  }
-
-  private async startStoryProcessRun(docKey: string, processAllId: string): Promise<void> {
     const requestStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const streamPromise = this.openStoryProcessStream(docKey, processAllId);
-
-    void streamPromise.catch((err) => {
-      const backendMessage = this.readApiError(err);
-      if (this.storyProcessRequestDocKey !== docKey || !this.processAllRunning()) {
-        return;
-      }
-
-      this.finishStoryProcessRun(`Story processing stream failed: ${backendMessage}`);
-      console.warn('[Pipeline] Story process stream failed', {
+    this.ragApi
+      .generateComicBookAll({
         docKey,
-        processAllId,
-        backendMessage
-      });
-    });
+        start: null,
+        end: null
+      })
+      .subscribe({
+        next: (response) => {
+          const generatedSlides = Array.isArray(response.slides?.slides)
+            ? response.slides.slides
+            : [];
+          if (generatedSlides.length) {
+            this.applyFetchedComicSlides(
+              {
+                docId: response.docId,
+                count:
+                  typeof response.slides?.count === 'number' && Number.isFinite(response.slides.count)
+                    ? response.slides.count
+                    : undefined,
+                returnedCount: generatedSlides.length
+              },
+              generatedSlides
+            );
+          }
+          this.finishStoryProcessRun('');
+          console.info('[Pipeline] process_all request completed', {
+            docKey,
+            requestElapsedMs: Math.round(
+              (typeof performance !== 'undefined' ? performance.now() : Date.now()) - requestStartedAt
+            )
+          });
+        },
+        error: (err) => {
+          const status =
+            err instanceof HttpErrorResponse && err.status ? `HTTP ${err.status}` : 'Request failed';
+          const backendMessage =
+            err instanceof HttpErrorResponse
+              ? typeof err.error === 'string'
+                ? err.error
+                : err.error?.message ?? err.error?.error ?? err.message ?? 'unknown error'
+              : this.readApiError(err);
 
-    try {
-      await firstValueFrom(
-        this.ragApi.generateComicBookAll({
-          docKey,
-          processAllId,
-          start: null,
-          end: null
-        })
-      );
-
-      console.info('[Pipeline] process_all request acknowledged', {
-        docKey,
-        processAllId,
-        requestElapsedMs: Math.round(
-          (typeof performance !== 'undefined' ? performance.now() : Date.now()) - requestStartedAt
-        )
-      });
-    } catch (err) {
-      const status = err instanceof HttpErrorResponse && err.status ? `HTTP ${err.status}` : 'Request failed';
-      const backendMessage =
-        err instanceof HttpErrorResponse
-          ? typeof err.error === 'string'
-            ? err.error
-            : err.error?.message ?? err.error?.error ?? err.message ?? 'unknown error'
-          : this.readApiError(err);
-
-      this.finishStoryProcessRun(`Failed to generate all (${status}): ${backendMessage}`);
-      console.warn('[Pipeline] Generate all failed', {
-        docKey,
-        processAllId,
-        status,
-        backendMessage
-      });
-    }
-  }
-
-  private openStoryProcessStream(docKey: string, processAllId: string): Promise<void> {
-    this.closeStoryProcessStream();
-
-    return new Promise((resolve, reject) => {
-      const client = new Client({
-        brokerURL: this.storyProcessBrokerUrl(),
-        reconnectDelay: 0,
-        heartbeatIncoming: 0,
-        heartbeatOutgoing: 0,
-        debug: (message: string) => {
-          console.info('[Pipeline][WS]', message);
+          this.finishStoryProcessRun(`Failed to generate all (${status}): ${backendMessage}`);
+          console.warn('[Pipeline] Generate all failed', {
+            docKey,
+            status,
+            backendMessage
+          });
         }
       });
-
-      let settled = false;
-
-      client.onConnect = () => {
-        if (settled) {
-          return;
-        }
-
-        this.storyProcessClient = client;
-        this.activeProcessAllId = processAllId;
-        console.info('[Pipeline] WebSocket connected', {
-          docKey,
-          processAllId,
-          brokerURL: this.storyProcessBrokerUrl()
-        });
-        this.storyProcessSubscription = client.subscribe(
-          `/topic/pipeline/${processAllId}`,
-          (message) => this.handleStoryProcessMessage(docKey, processAllId, message)
-        );
-        console.info('[Pipeline] WebSocket subscribed', {
-          docKey,
-          processAllId,
-          destination: `/topic/pipeline/${processAllId}`
-        });
-        settled = true;
-        resolve();
-      };
-
-      client.onStompError = (frame) => {
-        const details = frame.headers['message'] || frame.body || 'STOMP error';
-        if (!settled) {
-          settled = true;
-          reject(new Error(details));
-          return;
-        }
-
-        this.finishStoryProcessRun(`Story processing failed: ${details}`);
-      };
-
-      client.onWebSocketError = () => {
-        console.warn('[Pipeline] WebSocket low-level error', {
-          docKey,
-          processAllId,
-          brokerURL: this.storyProcessBrokerUrl()
-        });
-        if (!settled) {
-          settled = true;
-          reject(new Error('WebSocket connection failed.'));
-        }
-      };
-
-      client.onWebSocketClose = (event) => {
-        console.warn('[Pipeline] WebSocket closed', {
-          docKey,
-          processAllId,
-          brokerURL: this.storyProcessBrokerUrl(),
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean
-        });
-        if (this.storyProcessClient !== client) {
-          return;
-        }
-
-        const isCurrentRun =
-          this.activeProcessAllId === processAllId || this.storyProcessRequestDocKey === docKey;
-        if (!settled) {
-          settled = true;
-          reject(new Error('WebSocket connection closed before subscribing.'));
-          return;
-        }
-
-        if (isCurrentRun && this.processAllRunning()) {
-          this.finishStoryProcessRun('Story processing connection closed unexpectedly.');
-        }
-      };
-
-      client.activate();
-    });
-  }
-
-  private handleStoryProcessMessage(docKey: string, processAllId: string, message: IMessage): void {
-    if (
-      this.docKey().trim() !== docKey ||
-      this.activeProcessAllId !== processAllId
-    ) {
-      return;
-    }
-
-    let payload: StoryProcessEventEnvelope;
-    try {
-      payload = JSON.parse(message.body) as StoryProcessEventEnvelope;
-    } catch (err) {
-      console.warn('[Pipeline] Failed to parse story process event', err);
-      return;
-    }
-
-    const eventType = this.storyProcessEventType(payload);
-    if (!eventType) {
-      console.warn('[Pipeline] Received story process event without type', payload);
-      return;
-    }
-
-    console.info('[Pipeline] Received event', { eventType, payload });
-
-    switch (eventType) {
-      case 'process_started':
-        this.loading.set(true);
-        this.processAllRunning.set(true);
-        this.message.set(payload.message || 'Processing story slides...');
-        break;
-      case 'character_slide_ready': {
-        const slides = this.storyProcessEventSlides(payload);
-        this.appendStorySlidesFromEvent(slides);
-        this.mergeCharacterReferencesFromSlides(slides);
-        break;
-      }
-      case 'story_slides_ready': {
-        const slides = this.storyProcessEventSlides(payload);
-        this.appendStorySlidesFromEvent(slides);
-        break;
-      }
-      case 'process_completed':
-        this.finishStoryProcessRun('');
-        void this.loadCurrentSlideDialogs();
-        break;
-      case 'process_failed':
-        this.finishStoryProcessRun(payload.message || payload.error || 'Story processing failed.');
-        break;
-      default:
-        console.info('[Pipeline] Ignored story process event', { eventType, payload });
-    }
-  }
-
-  private storyProcessEventType(payload: StoryProcessEventEnvelope): string {
-    const rawType =
-      payload.eventType ?? payload.type ?? payload.event ?? payload.event_name ?? payload.kind ?? payload.status;
-    return typeof rawType === 'string' ? rawType.trim().toLowerCase() : '';
-  }
-
-  private storyProcessEventSlides(payload: StoryProcessEventEnvelope): RagComicSlide[] {
-    return this.ragApi.normalizeComicSlidesPayload(
-      payload.payload ?? payload.data ?? payload.slides ?? payload.slide ?? payload
-    );
-  }
-
-  private appendStorySlidesFromEvent(incomingSlides: RagComicSlide[]): void {
-    if (!incomingSlides.length) {
-      return;
-    }
-
-    const currentSlides = this.slides();
-    const combinedSlides = this.mergeComicSlidesById(currentSlides, incomingSlides);
-    const nextIndex = this.preserveCurrentComicSlideIndex(currentSlides, combinedSlides);
-    this.slides.set(combinedSlides);
-    this.currentSlide.set(nextIndex);
-    this.syncSwiperSlide(nextIndex);
-    this.viewMode.set('comic');
-    this.message.set('');
-    void this.loadCurrentSlideDialogs();
-    this.maybeAutoLoadMoreAfterSlideAdvance(nextIndex);
   }
 
   private finishStoryProcessRun(message: string): void {
     this.loading.set(false);
     this.processAllRunning.set(false);
-    this.storyProcessRequestDocKey = '';
     this.message.set(message);
-  }
-
-  private closeStoryProcessStream(): void {
-    const client = this.storyProcessClient;
-
-    try {
-      this.storyProcessSubscription?.unsubscribe();
-    } catch {}
-
-    this.storyProcessSubscription = null;
-    this.storyProcessClient = null;
-    this.activeProcessAllId = '';
-
-    if (client) {
-      void client.deactivate();
-    }
-  }
-
-  private storyProcessBrokerUrl(): string {
-    if (typeof window === 'undefined') {
-      return 'ws://127.0.0.1:8081/ws/pipeline';
-    }
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const isLocalDevHost =
-      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const isLocalDevPort = window.location.port === '4200' || window.location.port === '4201';
-    if (isLocalDevHost && isLocalDevPort) {
-      return `${protocol}//127.0.0.1:8081/ws/pipeline`;
-    }
-    return `${protocol}//${window.location.host}/ws/pipeline`;
-  }
-
-  private createProcessAllId(): string {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-
-    return `process-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
   private mergeComicSlidesById(currentSlides: RagComicSlide[], incomingSlides: RagComicSlide[]): RagComicSlide[] {
@@ -4229,9 +3943,6 @@ export class PipelineComponent {
 
   private resetSlideState(docKey: string): void {
     this.setFullscreenReader(false);
-    this.closeStoryProcessStream();
-    this.storyProcessStartedDocKey = '';
-    this.storyProcessRequestDocKey = '';
     this.processAllRunning.set(false);
     this.suppressStoryAutoProcessStart = false;
     this.showLoadMoreSlide.set(false);

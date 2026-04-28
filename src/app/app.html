@@ -1,7 +1,7 @@
 <div class="app-layout">
   <app-loading-overlay></app-loading-overlay>
 
-  @if (!drawerOpen() && appShellUi.browseButtonVisible()) {
+  @if (showShell() && !drawerOpen() && appShellUi.browseButtonVisible()) {
     <button
       type="button"
       class="drawer-toggle-fab"
@@ -14,7 +14,7 @@
     </button>
   }
 
-  @if (drawerOpen()) {
+  @if (showShell() && drawerOpen()) {
     <button
       type="button"
       class="drawer-backdrop"
@@ -37,7 +37,7 @@
     </aside>
   }
 
-  <main class="content">
+  <main class="content" [class.content-auth]="showShell()" [class.content-guest]="!showShell()">
     <router-outlet />
   </main>
 </div>

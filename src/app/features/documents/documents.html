@@ -43,10 +43,10 @@
                   <button
                     type="button"
                     class="doc-delete"
-                    [disabled]="deletingDocKey() === docKeyForRoute(doc)"
+                    [disabled]="deletingDocId() === documentId(doc)"
                     (click)="deleteDocument($event, doc)"
                   >
-                    {{ deletingDocKey() === docKeyForRoute(doc) ? '...' : 'X' }}
+                    {{ deletingDocId() === documentId(doc) ? '...' : 'X' }}
                   </button>
                 </div>
               } @else {
@@ -94,10 +94,10 @@
                   <button
                     type="button"
                     class="doc-delete"
-                    [disabled]="deletingDocKey() === docKeyForRoute(doc)"
+                    [disabled]="deletingDocId() === documentId(doc)"
                     (click)="deleteDocument($event, doc)"
                   >
-                    {{ deletingDocKey() === docKeyForRoute(doc) ? '...' : 'X' }}
+                    {{ deletingDocId() === documentId(doc) ? '...' : 'X' }}
                   </button>
                 </div>
               } @else {

@@ -84,6 +84,14 @@
   background: #ffffff;
 }
 
+.content-auth {
+  background: #ffffff;
+}
+
+.content-guest {
+  background: transparent;
+}
+
 @media (max-width: 900px) {
   .drawer {
     width: min(92vw, 260px);

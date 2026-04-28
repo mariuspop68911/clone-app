@@ -18,7 +18,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
   docs = signal<RagDocumentResponse[]>([]);
   loading = signal(false);
   message = signal('');
-  deletingDocKey = signal('');
+  deletingDocId = signal<number | null>(null);
   readonly mergedDocs = computed(() => this.mergeTrackedDocs(this.docs()));
 
   constructor(
@@ -123,21 +123,22 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     event.stopPropagation();
 
     const docKey = this.docKeyForRoute(doc);
-    if (!docKey || this.deletingDocKey()) {
+    const docId = this.documentId(doc);
+    if (!docKey || docId === null || this.deletingDocId() !== null) {
       return;
     }
 
-    this.deletingDocKey.set(docKey);
+    this.deletingDocId.set(docId);
     this.message.set('');
 
-    this.ragApi.resetPipelineDocument(docKey).subscribe({
+    this.ragApi.deleteDocument(docId).subscribe({
       next: () => {
         this.docs.update((current) =>
-          current.filter((entry) => this.docKeyForRoute(entry) !== docKey)
+          current.filter((entry) => this.documentId(entry) !== docId)
         );
         this.ingestProgress.stopTrackingDoc(docKey);
         this.documentCoverCache.forget(docKey);
-        this.deletingDocKey.set('');
+        this.deletingDocId.set(null);
         this.message.set(`Deleted document "${docKey}".`);
         this.dispatchDocumentsRefresh();
       },
@@ -147,10 +148,20 @@ export class DocumentsComponent implements OnInit, OnDestroy {
           typeof err?.error === 'string'
             ? err.error
             : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
-        this.deletingDocKey.set('');
+        this.deletingDocId.set(null);
         this.message.set(`Deleting document failed (${status}): ${backendMessage}`);
       }
     });
+  }
+
+  documentId(doc: RagDocumentResponse): number | null {
+    const value =
+      typeof doc.documentId === 'number'
+        ? doc.documentId
+        : typeof doc.id === 'number'
+          ? doc.id
+          : null;
+    return value !== null && Number.isFinite(value) ? value : null;
   }
 
   documentStatusText(doc: RagDocumentResponse): string {

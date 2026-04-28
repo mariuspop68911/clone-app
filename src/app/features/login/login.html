@@ -1,0 +1,53 @@
+<section class="login-page">
+  <div class="login-hero">
+    <p class="eyebrow">SmartComic Studio</p>
+    <h1>Sign in to continue your reading and generation workspace.</h1>
+    <p class="lead">
+      Your documents, learning flows, and series tools now sit behind account-based access.
+    </p>
+  </div>
+
+  <div class="login-card">
+    <header>
+      <h2>Welcome back</h2>
+      <p>Use your account password or continue with Google.</p>
+    </header>
+
+    <form [formGroup]="form" (ngSubmit)="submitPasswordLogin()">
+      <label>
+        <span>Email</span>
+        <input type="email" formControlName="email" autocomplete="email" />
+      </label>
+
+      <label>
+        <span>Password</span>
+        <input type="password" formControlName="password" autocomplete="current-password" />
+      </label>
+
+      @if (errorMessage()) {
+        <p class="error">{{ errorMessage() }}</p>
+      }
+
+      <button type="submit" class="primary-action" [disabled]="submitting() || googleSubmitting()">
+        {{ submitting() ? 'Signing in...' : 'Sign in with email' }}
+      </button>
+    </form>
+
+    <div class="divider">
+      <span>or</span>
+    </div>
+
+    @if (googleEnabled()) {
+      <div class="google-signin">
+        <div #googleButtonHost class="google-button-host"></div>
+        @if (googleSubmitting()) {
+          <p class="hint">Finishing Google sign-in...</p>
+        }
+      </div>
+    } @else {
+      <p class="hint">
+        Google sign-in is hidden until a Google client ID is added to the Angular app config.
+      </p>
+    }
+  </div>
+</section>

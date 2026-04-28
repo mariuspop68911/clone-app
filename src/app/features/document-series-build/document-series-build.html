@@ -19,7 +19,7 @@
         type="button"
         class="details-modal-build"
         (click)="build()"
-        [disabled]="building() || !docKey()"
+        [disabled]="building() || !docKey() || docId() === null"
       >
         {{ building() ? 'Building...' : 'Build' }}
       </button>

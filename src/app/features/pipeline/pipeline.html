@@ -27,14 +27,14 @@
             {{ loading() && viewMode() === 'comic' ? 'Generating...' : 'Generate all' }}
           </button>
 
-          <button
-            type="button"
-            class="secondary-action"
-            (click)="clearSlides()"
-            [disabled]="loading() || clearing()"
-          >
-            {{ clearing() ? 'Clearing...' : 'Clear' }}
-          </button>
+            <button
+              type="button"
+              class="secondary-action"
+              (click)="clearSlides()"
+              [disabled]="loading() || clearing()"
+            >
+              {{ clearing() ? 'Deleting...' : 'Delete' }}
+            </button>
         }
 
         @if (shouldShowLoadMoreSlides()) {

@@ -3,6 +3,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RagApiService, RagSeriesEpisodeResponse } from '../../core/api/rag-api.service';
 import { AppShellUiService } from '../../app-shell-ui.service';
 import { EpisodeTextAreaComponent } from './episode-text-area';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-document-series-build',
@@ -12,6 +13,7 @@ import { EpisodeTextAreaComponent } from './episode-text-area';
 })
 export class DocumentSeriesBuildComponent implements OnDestroy {
   readonly docKey = signal('');
+  readonly docId = signal<number | null>(null);
   readonly building = signal(false);
   readonly message = signal('');
   readonly episodes = signal<RagSeriesEpisodeResponse[]>([]);
@@ -26,11 +28,12 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
     this.route.paramMap.subscribe((params) => {
       const docKey = params.get('docKey')?.trim() ?? '';
       this.docKey.set(docKey);
+      this.docId.set(null);
       this.message.set('');
       this.building.set(false);
       this.episodes.set([]);
       if (docKey) {
-        this.loadEpisodes(docKey);
+        void this.resolveDocumentAndLoadEpisodes(docKey);
       }
     });
   }
@@ -41,7 +44,8 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
 
   build(): void {
     const docKey = this.docKey().trim();
-    if (!docKey || this.building()) {
+    const docId = this.docId();
+    if (!docKey || docId === null || this.building()) {
       return;
     }
 
@@ -50,14 +54,14 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
 
     this.ragApi
       .processSeries({
-        docKey,
+        docId,
         limit: 20
       })
       .subscribe({
         next: () => {
           this.building.set(false);
-          this.message.set(`Build started for "${docKey}".`);
-          this.loadEpisodes(docKey);
+          this.message.set(`Build completed for "${docKey}".`);
+          this.loadEpisodes(docId);
         },
         error: (err) => {
           const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
@@ -71,8 +75,8 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
       });
   }
 
-  private loadEpisodes(docKey: string): void {
-    this.ragApi.getSeriesEpisodes(docKey).subscribe({
+  private loadEpisodes(docId: number): void {
+    this.ragApi.getSeriesEpisodes(docId).subscribe({
       next: (episodes) => {
         this.episodes.set(
           Array.isArray(episodes)
@@ -92,5 +96,33 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
         this.episodes.set([]);
       }
     });
+  }
+
+  private async resolveDocumentAndLoadEpisodes(docKey: string): Promise<void> {
+    try {
+      const docs = await firstValueFrom(this.ragApi.listDocuments());
+      const normalizedDocKey = docKey.trim();
+      const match = (docs ?? []).find((doc) => {
+        const candidate = typeof doc.docKey === 'string' ? doc.docKey.trim() : '';
+        return candidate === normalizedDocKey;
+      });
+      const docId =
+        typeof match?.documentId === 'number'
+          ? match.documentId
+          : typeof match?.id === 'number'
+            ? match.id
+            : null;
+
+      this.docId.set(docId !== null && Number.isFinite(docId) ? docId : null);
+      if (docId !== null && Number.isFinite(docId)) {
+        this.loadEpisodes(docId);
+      } else {
+        this.episodes.set([]);
+        this.message.set(`Document "${docKey}" was not found.`);
+      }
+    } catch {
+      this.docId.set(null);
+      this.episodes.set([]);
+    }
   }
 }
