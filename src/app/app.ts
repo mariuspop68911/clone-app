@@ -3,7 +3,7 @@ import { Component, Inject, OnInit, PLATFORM_ID, computed, signal } from '@angul
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 import { AppShellUiService } from './app-shell-ui.service';
-import { AuthService } from './core/auth/auth.service';
+import { AuthStateService } from './core/auth/auth-state.service';
 import { AppLoadingOverlayComponent } from './shared/loading-overlay';
 
 @Component({
@@ -15,11 +15,11 @@ import { AppLoadingOverlayComponent } from './shared/loading-overlay';
 export class App implements OnInit {
   drawerOpen = signal(false);
   currentUrl = signal('');
-  showShell = computed(() => this.authService.isAuthenticated() && this.currentUrl() !== '/login');
+  showShell = computed(() => this.authState.isAuthenticated() && this.currentUrl() !== '/login');
 
   constructor(
     readonly appShellUi: AppShellUiService,
-    readonly authService: AuthService,
+    readonly authState: AuthStateService,
     private readonly router: Router,
     @Inject(PLATFORM_ID) private readonly platformId: object
   ) {}

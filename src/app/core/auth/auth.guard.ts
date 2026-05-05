@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, CanMatchFn, Route, Router, UrlSegment, UrlTree } from '@angular/router';
-import { AuthService } from './auth.service';
+import { AuthStateService } from './auth-state.service';
 
 function createLoginRedirect(router: Router, attemptedUrl: string): UrlTree {
   return router.createUrlTree(['/login'], {
@@ -9,10 +9,10 @@ function createLoginRedirect(router: Router, attemptedUrl: string): UrlTree {
 }
 
 export const authGuard: CanActivateFn = (_route, state) => {
-  const authService = inject(AuthService);
+  const authState = inject(AuthStateService);
   const router = inject(Router);
 
-  if (authService.isAuthenticated()) {
+  if (authState.isAuthenticated()) {
     return true;
   }
 
@@ -20,10 +20,10 @@ export const authGuard: CanActivateFn = (_route, state) => {
 };
 
 export const authMatchGuard: CanMatchFn = (_route: Route, segments: UrlSegment[]) => {
-  const authService = inject(AuthService);
+  const authState = inject(AuthStateService);
   const router = inject(Router);
 
-  if (authService.isAuthenticated()) {
+  if (authState.isAuthenticated()) {
     return true;
   }
 
