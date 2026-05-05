@@ -1,6 +1,12 @@
 import { HttpContextToken, HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, switchMap, throwError } from 'rxjs';
+import {
+  includeApiCredentials,
+  isConfiguredApiRequest,
+  isConfiguredAuthRequest,
+  isConfiguredRefreshRequest
+} from '../config/app-environment';
 import { AuthService } from './auth.service';
 import { AuthStateService } from './auth-state.service';
 
@@ -10,13 +16,14 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
   const authState = inject(AuthStateService);
   const authService = inject(AuthService);
   const token = authState.accessToken();
-  const isApiRequest = request.url.startsWith('/api/');
-  const isAuthRequest = request.url.startsWith('/api/auth/');
-  const isRefreshRequest = request.url.startsWith('/api/auth/refresh');
+  const shouldIncludeCredentials = includeApiCredentials();
+  const isApiRequest = isConfiguredApiRequest(request.url);
+  const isAuthRequest = isConfiguredAuthRequest(request.url);
+  const isRefreshRequest = isConfiguredRefreshRequest(request.url);
   const requestToSend =
     isApiRequest
       ? request.clone({
-          withCredentials: true,
+          withCredentials: shouldIncludeCredentials,
           ...(token && !isRefreshRequest
             ? {
                 setHeaders: {
@@ -42,7 +49,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
         switchMap((refreshedToken) =>
           next(
             request.clone({
-              withCredentials: true,
+              withCredentials: shouldIncludeCredentials,
               context: request.context.set(HAS_REFRESH_RETRY, true),
               setHeaders: {
                 Authorization: `Bearer ${refreshedToken}`

@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { EMPTY, Observable, expand, filter, map, of, switchMap, take, throwError, timeout, timer } from 'rxjs';
+import { appEnvironment, buildApiUrl } from '../config/app-environment';
 
 export interface RagIngestResponse {
   docKey?: string;
@@ -645,13 +646,15 @@ interface PipelineProcessAllResponse {
 
 @Injectable({ providedIn: 'root' })
 export class RagApiService {
-  private readonly baseUrl = '/api/rag';
-  private readonly pipelineBaseUrl = '/api/pipeline';
-  private readonly learningPipelineBaseUrl = '/api/learning_pipeline';
-  private readonly seriesBaseUrl = '/api/series';
+  private readonly baseUrl = buildApiUrl('/rag');
+  private readonly pipelineBaseUrl = buildApiUrl('/pipeline');
+  private readonly learningPipelineBaseUrl = buildApiUrl('/learning_pipeline');
+  private readonly seriesBaseUrl = buildApiUrl('/series');
+  private readonly jobsBaseUrl = buildApiUrl('/jobs');
+  private readonly storySourceBooksBaseUrl = buildApiUrl('/story-source-books');
   private readonly ingestTimeoutMs = 120000;
   private readonly listDocumentsTimeoutMs = 30000;
-  private readonly jobPollIntervalMs = 1500;
+  private readonly jobPollIntervalMs = appEnvironment.polling.jobStatusMs;
 
   constructor(private readonly http: HttpClient) {}
 
@@ -810,13 +813,13 @@ export class RagApiService {
   getRandomStorySourceBooks(limit = 20): Observable<StorySourceBookResponse[]> {
     const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 20;
     const params = new HttpParams().set('limit', String(safeLimit));
-    return this.http.get<StorySourceBookResponse[]>(`/api/story-source-books/random`, { params });
+    return this.http.get<StorySourceBookResponse[]>(`${this.storySourceBooksBaseUrl}/random`, { params });
   }
 
   importStorySourceBookFile(
     request: StorySourceImportFileRequest
   ): Observable<HttpResponse<Blob>> {
-    return this.http.post(`/api/story-source-books/import-file`, request, {
+    return this.http.post(`${this.storySourceBooksBaseUrl}/import-file`, request, {
       observe: 'response',
       responseType: 'blob'
     });
@@ -908,7 +911,7 @@ export class RagApiService {
   }
 
   getJobStatus(jobId: string): Observable<AppJobStatusResponse> {
-    return this.http.get<AppJobStatusResponse>(`/api/jobs/${encodeURIComponent(jobId)}`);
+    return this.http.get<AppJobStatusResponse>(`${this.jobsBaseUrl}/${encodeURIComponent(jobId)}`);
   }
 
   normalizeLearningSlidesResponse(payload: unknown): RagLearnSlidesResponse {

@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, tap } from 'rxjs';
+import { buildApiUrl } from '../config/app-environment';
 
 export interface OpenAiTtsGenerateRequest {
   text: string;
@@ -33,7 +34,7 @@ export type TtsRequest = {
 
 @Injectable({ providedIn: 'root' })
 export class TtsApiService {
-  private readonly baseUrl = '/api/tts';
+  private readonly baseUrl = buildApiUrl('/tts');
   constructor(private readonly http: HttpClient) {}
 
   streamTts(text: string): Observable<Blob> {

@@ -1,13 +1,15 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { EMPTY, Observable, expand, shareReplay, switchMap, timer } from 'rxjs';
+import { appEnvironment, buildApiUrl } from '../config/app-environment';
 import { AppJobStatusResponse } from './rag-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class JobStatusPollingService {
   private readonly http = inject(HttpClient);
   private readonly activePolls = new Map<string, Observable<AppJobStatusResponse>>();
-  private readonly pollIntervalMs = 1500;
+  private readonly pollIntervalMs = appEnvironment.polling.jobStatusMs;
+  private readonly jobsBaseUrl = buildApiUrl('/jobs');
 
   watchJob(jobId: string): Observable<AppJobStatusResponse> {
     const normalizedJobId = jobId.trim();
@@ -56,7 +58,7 @@ export class JobStatusPollingService {
   }
 
   private fetchJobStatus(jobId: string): Observable<AppJobStatusResponse> {
-    return this.http.get<AppJobStatusResponse>(`/api/jobs/${encodeURIComponent(jobId)}`);
+    return this.http.get<AppJobStatusResponse>(`${this.jobsBaseUrl}/${encodeURIComponent(jobId)}`);
   }
 
   private normalizedStatusValue(status: AppJobStatusResponse | null | undefined): string {

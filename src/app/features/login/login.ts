@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { appEnvironment } from '../../core/config/app-environment';
 import { AuthService } from '../../core/auth/auth.service';
 
 declare global {
@@ -53,7 +54,7 @@ export class LoginComponent implements AfterViewInit, OnInit {
   readonly googleSubmitting = signal(false);
   readonly errorMessage = signal('');
   readonly infoMessage = signal('');
-  readonly googleClientId: string;
+  readonly googleClientId = appEnvironment.googleClientId.trim();
   readonly googleEnabled = computed(() => this.googleClientId.length > 0);
 
   constructor(
@@ -62,9 +63,7 @@ export class LoginComponent implements AfterViewInit, OnInit {
     private readonly route: ActivatedRoute,
     @Inject(PLATFORM_ID) private readonly platformId: object,
     @Inject(DOCUMENT) private readonly document: Document
-  ) {
-    this.googleClientId = this.readGoogleClientId();
-  }
+  ) {}
 
   ngAfterViewInit(): void {
     if (!this.googleEnabled() || !isPlatformBrowser(this.platformId)) {
@@ -168,19 +167,6 @@ export class LoginComponent implements AfterViewInit, OnInit {
     const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
     void this.router.navigateByUrl(returnUrl && returnUrl !== '/login' ? returnUrl : '/documents');
   }
-
-  private readGoogleClientId(): string {
-    if (!this.document) {
-      return '';
-    }
-    const value =
-      this.document
-        .querySelector('meta[name="google-client-id"]')
-        ?.getAttribute('content')
-        ?.trim() ?? '';
-    return value;
-  }
-
   private readErrorMessage(error: unknown, fallback: string): string {
     if (
       typeof error === 'object' &&

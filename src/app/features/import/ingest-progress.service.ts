@@ -15,6 +15,7 @@ import {
   throwError,
   timer
 } from 'rxjs';
+import { appEnvironment, buildApiUrl } from '../../core/config/app-environment';
 import { AppJobStatusResponse, RagIngestMode, RagIngestResponse } from '../../core/api/rag-api.service';
 import { JobStatusPollingService } from '../../core/api/job-status-polling.service';
 
@@ -78,7 +79,8 @@ interface TrackedIngestTask {
 export class IngestProgressService {
   private readonly http = inject(HttpClient);
   private readonly jobStatusPolling = inject(JobStatusPollingService);
-  private readonly baseUrl = '/api/rag';
+  private readonly baseUrl = buildApiUrl('/rag');
+  private readonly ingestStatusPollIntervalMs = appEnvironment.polling.ingestStatusMs;
   private readonly trackedStatuses = signal<Record<string, IngestProgressStatus>>({});
   private readonly trackedTasks = new Map<string, TrackedIngestTask>();
 
@@ -248,7 +250,7 @@ export class IngestProgressService {
       );
     }
 
-    return timer(0, 1000).pipe(
+    return timer(0, this.ingestStatusPollIntervalMs).pipe(
       switchMap(() =>
         this.http
           .get<RawIngestProgressStatus>(

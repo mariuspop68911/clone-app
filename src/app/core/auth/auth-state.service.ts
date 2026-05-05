@@ -1,4 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
+import { appEnvironment } from '../config/app-environment';
 
 export interface AuthUserProfile {
   subject: string | null;
@@ -24,8 +25,14 @@ export class AuthStateService {
   readonly profile = this.profileState.asReadonly();
 
   setAccessToken(accessToken: string): void {
+    const payload = this.readJwtPayload(accessToken);
+    if (!payload || !this.matchesTokenAssumptions(payload)) {
+      this.clear();
+      return;
+    }
+
     this.accessTokenState.set(accessToken);
-    this.profileState.set(this.parseProfile(accessToken));
+    this.profileState.set(this.parseProfilePayload(payload));
   }
 
   markResolved(): void {
@@ -37,12 +44,7 @@ export class AuthStateService {
     this.profileState.set(null);
   }
 
-  private parseProfile(accessToken: string): AuthUserProfile | null {
-    const payload = this.readJwtPayload(accessToken);
-    if (!payload) {
-      return null;
-    }
-
+  private parseProfilePayload(payload: Record<string, unknown>): AuthUserProfile | null {
     const email = this.readString(payload['email']);
     const givenName = this.readString(payload['given_name']);
     const familyName = this.readString(payload['family_name']);
@@ -68,6 +70,25 @@ export class AuthStateService {
       roles,
       isAdmin
     };
+  }
+
+  private matchesTokenAssumptions(payload: Record<string, unknown>): boolean {
+    const expectedIssuer = appEnvironment.auth.expectedIssuer?.trim() ?? '';
+    if (expectedIssuer) {
+      const issuer = this.readString(payload['iss']);
+      if (issuer !== expectedIssuer) {
+        return false;
+      }
+    }
+
+    const expectedAudience = appEnvironment.auth.expectedAudience;
+    if (!expectedAudience) {
+      return true;
+    }
+
+    const audiences = this.readAudienceValues(payload['aud']);
+    const expectedAudiences = Array.isArray(expectedAudience) ? expectedAudience : [expectedAudience];
+    return expectedAudiences.some((audience) => audiences.includes(audience));
   }
 
   private readJwtPayload(accessToken: string): Record<string, unknown> | null {
@@ -102,6 +123,17 @@ export class AuthStateService {
       }
     }
     return [];
+  }
+
+  private readAudienceValues(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value
+        .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        .map((entry) => entry.trim());
+    }
+
+    const audience = this.readString(value);
+    return audience ? [audience] : [];
   }
 
   private readString(value: unknown): string | null {
