@@ -49,7 +49,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     if (typeof key === 'string' && key.trim()) {
       return key;
     }
-    return `Document ${index + 1}`;
+    return `Your document ${index + 1}`;
   }
 
   displayMeta(doc: RagDocumentResponse): string {
@@ -139,7 +139,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
         this.ingestProgress.stopTrackingDoc(docKey);
         this.documentCoverCache.forget(docKey);
         this.deletingDocId.set(null);
-        this.message.set(`Deleted document "${docKey}".`);
+        this.message.set(`Removed "${docKey}" from your library.`);
         this.dispatchDocumentsRefresh();
       },
       error: (err) => {
@@ -176,11 +176,11 @@ export class DocumentsComponent implements OnInit, OnDestroy {
     }
 
     if (tracked.backgroundProcessing) {
-      return 'First chapter ready. More chapters are still processing.';
+      return 'Your first chapter is ready. More chapters are still processing for this document.';
     }
 
     if (tracked.done) {
-      return 'Ready';
+      return 'Ready in your library';
     }
 
     return '';
@@ -199,7 +199,7 @@ export class DocumentsComponent implements OnInit, OnDestroy {
       next: (docs) => {
         this.docs.set(docs ?? []);
         if (!(docs?.length ?? 0) && this.ingestProgress.trackedStatusesSnapshot().every((status) => !status.usable)) {
-          this.message.set('No documents found.');
+          this.message.set('No documents found in your library yet.');
         }
         this.loading.set(false);
       },

@@ -1,8 +1,8 @@
 <section class="chat-page" [class.chat-page-embedded]="embedded">
   @if (!embedded) {
     <header class="chat-header">
-      <a class="back" [routerLink]="['/', libraryBasePath(), docKey()]">Back to Details</a>
-      <h1>Chat: {{ docKey() }}</h1>
+      <a class="back" [routerLink]="['/', libraryBasePath(), docKey()]">Back to Your Document</a>
+      <h1>Your Document Chat: {{ docKey() }}</h1>
     </header>
   }
 
@@ -29,7 +29,7 @@
   <footer class="composer">
     <textarea
       [(ngModel)]="input"
-      placeholder="Ask something about this document..."
+      placeholder="Ask something about your document..."
       rows="2"
       (keydown)="onComposerKeydown($event)"
     ></textarea>

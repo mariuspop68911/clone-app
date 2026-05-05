@@ -38,7 +38,7 @@ export class DocumentChatComponent {
       this.messages.set([
         {
           role: 'assistant',
-          text: 'Ask a question about this document and I will answer from indexed content.'
+          text: 'Ask a question about your document and I will answer from the content indexed for your account.'
         }
       ]);
       this.input = initialQuestion;
@@ -75,7 +75,7 @@ export class DocumentChatComponent {
     const key = this.docKeyInput.trim() || this.docKey().trim();
 
     if (!key) {
-      this.message.set('Missing document key.');
+      this.message.set('Missing document key for your library.');
       return;
     }
     if (!question || this.loading()) {

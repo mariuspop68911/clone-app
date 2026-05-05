@@ -7,13 +7,13 @@
       class="details-modal-close"
       (click)="closeModal()"
       [routerLink]="['/', libraryBasePath()]"
-      aria-label="Close document details"
+      aria-label="Close your document workspace"
     >
       X
     </button>
 
     <div class="details-modal-layout">
-      <aside class="details-modal-chapters-rail" aria-label="Document chapters">
+      <aside class="details-modal-chapters-rail" aria-label="Your document chapters">
         @if (documentTitle()) {
           <h2 class="details-modal-title">{{ documentTitle() }}</h2>
         }

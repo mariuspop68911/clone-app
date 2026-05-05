@@ -21,27 +21,27 @@ export const routes: Routes = [
       {
         path: 'documents',
         component: DocumentsComponent,
-        data: { libraryBasePath: 'documents', libraryTitle: 'Documents' }
+        data: { libraryBasePath: 'documents', libraryTitle: 'Your Document Library' }
       },
       {
         path: 'documents/:docKey/chat',
         component: DocumentChatComponent,
-        data: { libraryBasePath: 'documents', libraryTitle: 'Documents' }
+        data: { libraryBasePath: 'documents', libraryTitle: 'Your Document Library' }
       },
       {
         path: 'documents/:docKey',
         component: DocumentDetailsComponent,
-        data: { libraryBasePath: 'documents', libraryTitle: 'Documents' }
+        data: { libraryBasePath: 'documents', libraryTitle: 'Your Document Library' }
       },
       {
         path: 'documents2',
         component: DocumentsComponent,
-        data: { libraryBasePath: 'documents2', libraryTitle: 'Documents2' }
+        data: { libraryBasePath: 'documents2', libraryTitle: 'Your Series Library' }
       },
       {
         path: 'documents2/:docKey',
         component: DocumentSeriesBuildComponent,
-        data: { libraryBasePath: 'documents2', libraryTitle: 'Documents2' }
+        data: { libraryBasePath: 'documents2', libraryTitle: 'Your Series Library' }
       }
     ]
   },

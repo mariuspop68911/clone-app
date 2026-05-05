@@ -67,6 +67,18 @@ export class AuthService {
     this.authState.clear();
   }
 
+  handleSessionExpired(): void {
+    this.clearSession();
+    const returnUrl = this.router.url.startsWith('/login') ? null : this.router.url;
+    void this.router.navigate(['/login'], {
+      replaceUrl: true,
+      queryParams: {
+        reason: 'session-expired',
+        ...(returnUrl ? { returnUrl } : {})
+      }
+    });
+  }
+
   private finishLogout(): void {
     this.clearSession();
     void this.router.navigate(['/login']);

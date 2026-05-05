@@ -60,7 +60,7 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
       .subscribe({
         next: () => {
           this.building.set(false);
-          this.message.set(`Build completed for "${docKey}".`);
+          this.message.set(`Series build completed for your document "${docKey}".`);
           this.loadEpisodes(docId);
         },
         error: (err) => {
@@ -118,7 +118,7 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
         this.loadEpisodes(docId);
       } else {
         this.episodes.set([]);
-        this.message.set(`Document "${docKey}" was not found.`);
+        this.message.set(`Document "${docKey}" was not found in your library.`);
       }
     } catch {
       this.docId.set(null);

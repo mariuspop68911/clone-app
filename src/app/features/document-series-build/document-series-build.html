@@ -5,7 +5,7 @@
     <a
       class="details-modal-close"
       [routerLink]="['/documents2']"
-      aria-label="Close Documents2 details"
+      aria-label="Close your series workspace"
     >
       X
     </a>
@@ -13,6 +13,9 @@
     <header class="series-build-header">
       @if (docKey()) {
         <h2 class="details-modal-title details-modal-title-centered">{{ docKey() }}</h2>
+        <p class="details-modal-message details-modal-message-centered">
+          Build and review series episodes generated from this document in your account.
+        </p>
       }
 
       <button
@@ -21,7 +24,7 @@
         (click)="build()"
         [disabled]="building() || !docKey() || docId() === null"
       >
-        {{ building() ? 'Building...' : 'Build' }}
+        {{ building() ? 'Building...' : 'Build My Series' }}
       </button>
 
       @if (message()) {

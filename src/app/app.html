@@ -28,6 +28,16 @@
       (click)="$event.stopPropagation()"
     >
       <h1>RAG Console</h1>
+      @if (authState.profile(); as profile) {
+        <section class="drawer-profile" aria-label="Account">
+          <p class="drawer-profile-label">Signed in as</p>
+          <p class="drawer-profile-name">{{ profile.displayName || 'Account' }}</p>
+          <p class="drawer-profile-email">{{ profile.email || profile.subject || 'No account details available' }}</p>
+          <p class="drawer-profile-role" [class.drawer-profile-role-admin]="profile.isAdmin">
+            {{ profile.isAdmin ? 'Administrator' : 'Standard account' }}
+          </p>
+        </section>
+      }
       <nav>
         <a routerLink="/browse-gutenberg" routerLinkActive="active" (click)="closeDrawer()">Browse Gutenberg</a>
         <a routerLink="/documents" routerLinkActive="active" (click)="closeDrawer()">Documents</a>

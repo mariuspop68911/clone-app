@@ -51,7 +51,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
           )
         ),
         catchError((refreshError: unknown) => {
-          authService.clearSession();
+          authService.handleSessionExpired();
           return throwError(() => refreshError);
         })
       );

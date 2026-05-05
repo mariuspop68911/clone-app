@@ -2,21 +2,22 @@
   <header class="hero">
     <div class="panel-head">
       <div>
-        <p class="eyebrow">Library</p>
+        <p class="eyebrow">Your Workspace</p>
         <h1>{{ libraryTitle() }}</h1>
+        <p class="message">Only documents owned by your signed-in account appear here.</p>
       </div>
       <div class="actions">
-        <a routerLink="/import">Import New Document</a>
+        <a routerLink="/import">Import to Your Library</a>
       </div>
     </div>
 
-    @if (message()) {
+    @if (message() && mergedDocs().length) {
       <p class="message">{{ message() }}</p>
     }
 
     @if (mergedDocs().length) {
       <section class="docs-group">
-        <h2 class="docs-group-title">Stories</h2>
+        <h2 class="docs-group-title">Your Story Documents</h2>
         <ul class="docs-grid">
           @for (doc of storyDocs(); track $index) {
             <li>
@@ -67,7 +68,7 @@
       </section>
 
       <section class="docs-group">
-        <h2 class="docs-group-title">Learning</h2>
+        <h2 class="docs-group-title">Your Learning And Action Documents</h2>
         <ul class="docs-grid">
           @for (doc of learningDocs(); track $index) {
             <li>
@@ -116,6 +117,8 @@
           }
         </ul>
       </section>
+    } @else if (message()) {
+      <p class="message">{{ message() }}</p>
     }
   </header>
 </section>

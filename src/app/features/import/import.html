@@ -1,13 +1,15 @@
 <section class="import-page">
-  <h1>Import Document</h1>
+  <h1>Import Into Your Library</h1>
+
+  <p class="msg">Imported documents are attached to your signed-in account and shown only in your workspace.</p>
 
   @if (sourceLabel()) {
     <p class="source-label">{{ sourceLabel() }}</p>
   }
 
   <label>
-    Document name
-    <input [(ngModel)]="docKey" placeholder="Automatically set from the PDF name" />
+    Document name in your library
+    <input [(ngModel)]="docKey" placeholder="Automatically set from the file name for your library" />
   </label>
 
   @if (!selectedFile) {
@@ -34,11 +36,11 @@
     <section class="ready-callout">
       <p class="ready-callout-title">First chapter ready</p>
       <p class="ready-callout-copy">
-        The document is usable now. You can open the learning context immediately while the rest of the chapters continue processing in the background.
+        Your document is usable now. You can open its learning context immediately while the rest of the chapters continue processing in the background.
       </p>
       <div class="ready-callout-actions">
-        <a [routerLink]="['/documents', usableDocKey()]">Open document</a>
-        <a routerLink="/documents">View library</a>
+        <a [routerLink]="['/documents', usableDocKey()]">Open Your Document</a>
+        <a routerLink="/documents">View Your Library</a>
       </div>
     </section>
   }

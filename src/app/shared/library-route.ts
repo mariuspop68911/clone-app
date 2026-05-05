@@ -1,7 +1,7 @@
 import { ActivatedRouteSnapshot } from '@angular/router';
 
 const defaultLibraryBasePath = 'documents';
-const defaultLibraryTitle = 'Documents';
+const defaultLibraryTitle = 'Your Document Library';
 
 export function resolveLibraryBasePath(snapshot: ActivatedRouteSnapshot): string {
   const configuredBasePath = snapshot.data['libraryBasePath'];

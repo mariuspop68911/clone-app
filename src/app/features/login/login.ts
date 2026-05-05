@@ -4,6 +4,7 @@ import {
   Component,
   ElementRef,
   Inject,
+  OnInit,
   PLATFORM_ID,
   ViewChild,
   computed,
@@ -39,7 +40,7 @@ declare global {
   templateUrl: './login.html',
   styleUrl: './login.scss'
 })
-export class LoginComponent implements AfterViewInit {
+export class LoginComponent implements AfterViewInit, OnInit {
   @ViewChild('googleButtonHost') private readonly googleButtonHost?: ElementRef<HTMLDivElement>;
   private readonly formBuilder = inject(FormBuilder);
 
@@ -51,6 +52,7 @@ export class LoginComponent implements AfterViewInit {
   readonly submitting = signal(false);
   readonly googleSubmitting = signal(false);
   readonly errorMessage = signal('');
+  readonly infoMessage = signal('');
   readonly googleClientId: string;
   readonly googleEnabled = computed(() => this.googleClientId.length > 0);
 
@@ -71,6 +73,16 @@ export class LoginComponent implements AfterViewInit {
     this.loadGoogleIdentityScript();
   }
 
+  ngOnInit(): void {
+    this.route.queryParamMap.subscribe((params) => {
+      this.infoMessage.set(
+        params.get('reason') === 'session-expired'
+          ? 'Your session expired. Please sign in again to continue.'
+          : ''
+      );
+    });
+  }
+
   submitPasswordLogin(): void {
     if (this.form.invalid || this.submitting()) {
       this.form.markAllAsTouched();
@@ -78,6 +90,7 @@ export class LoginComponent implements AfterViewInit {
     }
 
     this.errorMessage.set('');
+    this.infoMessage.set('');
     this.submitting.set(true);
     this.authService
       .login(this.form.getRawValue())
@@ -128,6 +141,7 @@ export class LoginComponent implements AfterViewInit {
           return;
         }
         this.errorMessage.set('');
+        this.infoMessage.set('');
         this.googleSubmitting.set(true);
         this.authService.loginWithGoogle({ idToken: credential }).subscribe({
           next: () => this.navigateAfterLogin(),

@@ -133,6 +133,16 @@ input:focus {
   font-weight: 600;
 }
 
+.notice {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid #c7d9f2;
+  border-radius: 14px;
+  background: #edf5ff;
+  color: #1a4f7a;
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .login-page {
     grid-template-columns: 1fr;
