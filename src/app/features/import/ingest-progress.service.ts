@@ -6,7 +6,6 @@ import {
   Subject,
   catchError,
   filter,
-  ignoreElements,
   map,
   of,
   shareReplay,
@@ -16,7 +15,8 @@ import {
   throwError,
   timer
 } from 'rxjs';
-import { RagIngestMode, RagIngestResponse } from '../../core/api/rag-api.service';
+import { AppJobStatusResponse, RagIngestMode, RagIngestResponse } from '../../core/api/rag-api.service';
+import { JobStatusPollingService } from '../../core/api/job-status-polling.service';
 
 export interface IngestProgressRequest {
   docKey: string;
@@ -28,6 +28,7 @@ export interface IngestProgressRequest {
 
 export interface IngestProgressStatus {
   ingestId: string;
+  jobId?: string;
   docKey?: string;
   documentId?: number;
   mode?: string;
@@ -76,6 +77,7 @@ interface TrackedIngestTask {
 @Injectable({ providedIn: 'root' })
 export class IngestProgressService {
   private readonly http = inject(HttpClient);
+  private readonly jobStatusPolling = inject(JobStatusPollingService);
   private readonly baseUrl = '/api/rag';
   private readonly trackedStatuses = signal<Record<string, IngestProgressStatus>>({});
   private readonly trackedTasks = new Map<string, TrackedIngestTask>();
@@ -108,29 +110,11 @@ export class IngestProgressService {
       .pipe(takeUntil(stop$))
       .pipe(shareReplay({ bufferSize: 1, refCount: false }));
 
-    const uploadError$ = upload$.pipe(
-      ignoreElements(),
-      catchError((error) => of(error))
-    );
-
-    const status$ = timer(0, 1000).pipe(
-      switchMap(() =>
-        this.http
-          .get<RawIngestProgressStatus>(`${this.baseUrl}/ingest/${encodeURIComponent(ingestId)}/status`)
-          .pipe(
-            catchError((error: unknown) => {
-              if (this.shouldRetryStatusRequest(error)) {
-                return of(null);
-              }
-              return throwError(() => error);
-            })
-          )
+    const status$ = upload$.pipe(
+      switchMap((response) =>
+        this.observeIngestStatus(response, ingestId, request.mode, requestedDocKey)
       ),
-      filter((status): status is RawIngestProgressStatus => status !== null),
-      map((status) => this.normalizeStatus(status, ingestId)),
-      takeUntil(uploadError$),
       takeUntil(stop$),
-      takeWhile((status) => !status.done && !status.failed, true),
       shareReplay({ bufferSize: 1, refCount: false })
     );
 
@@ -156,17 +140,20 @@ export class IngestProgressService {
         this.renameTrackedStatus(requestedDocKey, responseDocKey, ingestId);
         this.updateTrackedStatus(responseDocKey, {
           ingestId,
+          jobId: this.readString(response.jobId),
           docKey: responseDocKey,
           documentId: typeof response.documentId === 'number' ? response.documentId : undefined,
           mode: request.mode,
-          progressPercent: Math.max(8, this.trackedStatus(responseDocKey)?.progressPercent ?? 0),
-          stage: 'FIRST_CHAPTER_READY',
+          progressPercent: Math.max(5, this.trackedStatus(responseDocKey)?.progressPercent ?? 0),
+          stage: 'STARTED',
           message:
-            'First chapter ready. You can open the document now while the remaining chapters keep processing in the background.',
+            typeof response.jobId === 'string' && response.jobId.trim()
+              ? 'Upload accepted. Processing has started.'
+              : 'Upload complete. Waiting for ingest progress updates.',
           done: false,
           failed: false,
-          usable: true,
-          backgroundProcessing: true,
+          usable: false,
+          backgroundProcessing: false,
           chunksInserted:
             typeof response.chunksInserted === 'number' ? response.chunksInserted : undefined
         });
@@ -243,6 +230,45 @@ export class IngestProgressService {
     return Object.values(this.trackedStatuses());
   }
 
+  private observeIngestStatus(
+    response: RagIngestResponse,
+    fallbackIngestId: string,
+    mode: RagIngestMode,
+    requestedDocKey: string
+  ): Observable<IngestProgressStatus> {
+    const responseJobId = this.readString(response.jobId);
+    const responseIngestId = this.readString(response.ingestId) ?? fallbackIngestId;
+
+    if (responseJobId) {
+      return this.jobStatusPolling.watchJob(responseJobId).pipe(
+        map((status) =>
+          this.normalizeJobStatus(status, responseJobId, responseIngestId, mode, requestedDocKey, response)
+        ),
+        takeWhile((status) => !status.done && !status.failed, true)
+      );
+    }
+
+    return timer(0, 1000).pipe(
+      switchMap(() =>
+        this.http
+          .get<RawIngestProgressStatus>(
+            `${this.baseUrl}/ingest/${encodeURIComponent(responseIngestId)}/status`
+          )
+          .pipe(
+            catchError((error: unknown) => {
+              if (this.shouldRetryStatusRequest(error)) {
+                return of(null);
+              }
+              return throwError(() => error);
+            })
+          )
+      ),
+      filter((status): status is RawIngestProgressStatus => status !== null),
+      map((status) => this.normalizeStatus(status, responseIngestId)),
+      takeWhile((status) => !status.done && !status.failed, true)
+    );
+  }
+
   stopTrackingDoc(docKey: string | null | undefined): void {
     const normalizedDocKey = typeof docKey === 'string' ? docKey.trim() : '';
     if (!normalizedDocKey) {
@@ -287,6 +313,7 @@ export class IngestProgressService {
 
     return {
       ingestId: this.readString(status.ingestId) ?? ingestId,
+      jobId: undefined,
       docKey: this.readString(status.docKey),
       documentId: this.readNumber(status.documentId),
       mode: this.readString(status.mode),
@@ -299,6 +326,65 @@ export class IngestProgressService {
       backgroundProcessing: false,
       chunksInserted: this.readNumber(status.chunksInserted),
       updatedAt: this.readString(status.updatedAt)
+    };
+  }
+
+  private normalizeJobStatus(
+    status: AppJobStatusResponse,
+    jobId: string,
+    ingestId: string,
+    mode: RagIngestMode,
+    requestedDocKey: string,
+    response: RagIngestResponse
+  ): IngestProgressStatus {
+    const resultRecord =
+      status.result && typeof status.result === 'object'
+        ? (status.result as Record<string, unknown>)
+        : null;
+    const statusValue = this.readString(status.status)?.toUpperCase() ?? '';
+    const stage = (this.readString(status.stage) ?? (statusValue || 'STARTED')).toUpperCase();
+    const failed = statusValue === 'FAILED' || stage === 'FAILED';
+    const done = statusValue === 'DONE' || stage === 'DONE';
+    const usable =
+      done ||
+      stage === 'FIRST_CHAPTER_READY' ||
+      this.readBoolean(resultRecord?.['usable']) === true;
+    const docKey =
+      this.readString(status.targetDocKey) ??
+      this.readString(resultRecord?.['docKey']) ??
+      this.readString(response.docKey) ??
+      requestedDocKey;
+    const documentId =
+      this.readNumber(status.targetDocId) ??
+      this.readNumber(resultRecord?.['documentId']) ??
+      this.readNumber(resultRecord?.['id']) ??
+      this.readNumber(response.documentId);
+    const message =
+      this.readString(status.message) ??
+      (done
+        ? 'Ingest completed.'
+        : failed
+          ? 'Ingest failed.'
+          : usable
+            ? 'First chapter ready. Remaining chapters are still processing in the background.'
+            : 'Processing your document...');
+
+    return {
+      ingestId,
+      jobId,
+      docKey,
+      documentId,
+      mode,
+      progressPercent: this.normalizePercent(status.progressPercent ?? (done ? 100 : 0)),
+      stage,
+      message,
+      done,
+      failed,
+      usable,
+      backgroundProcessing: usable && !done && !failed,
+      chunksInserted:
+        this.readNumber(resultRecord?.['chunksInserted']) ?? this.readNumber(response.chunksInserted),
+      updatedAt: undefined
     };
   }
 

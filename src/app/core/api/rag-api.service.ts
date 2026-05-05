@@ -3,9 +3,9 @@ import { Injectable } from '@angular/core';
 import { EMPTY, Observable, expand, filter, map, of, switchMap, take, throwError, timeout, timer } from 'rxjs';
 
 export interface RagIngestResponse {
-  docKey: string;
-  documentId: number;
-  chunksInserted: number;
+  docKey?: string;
+  documentId?: number;
+  chunksInserted?: number;
   ingestId?: string;
   jobId?: string;
 }
@@ -727,13 +727,10 @@ export class RagApiService {
     );
   }
 
-  generateLearningSlides(req: RagGenerateLearningSlidesRequest): Observable<RagLearnSlidesResponse> {
-    return this.waitForJobResult(
-      this.http.post<AppJobCreateResponse>(
-        `${this.learningPipelineBaseUrl}/generate-learning`,
-        req
-      ),
-      (result) => this.toLearningSlidesResponse((result ?? {}) as PipelineLearningSlidesResponse)
+  generateLearningSlides(req: RagGenerateLearningSlidesRequest): Observable<AppJobCreateResponse> {
+    return this.http.post<AppJobCreateResponse>(
+      `${this.learningPipelineBaseUrl}/generate-learning`,
+      req
     );
   }
 
@@ -831,16 +828,13 @@ export class RagApiService {
     );
   }
 
-  processSeries(req: RagProcessSeriesRequest): Observable<unknown> {
-    return this.waitForJobResult(
-      this.http.post<AppJobCreateResponse>(
-        `${this.seriesBaseUrl}/documents/${encodeURIComponent(String(req.docId))}/process`,
-        {
-          docId: req.docId,
-          limit: Math.max(1, Math.floor(req.limit))
-        }
-      ),
-      (result) => result
+  processSeries(req: RagProcessSeriesRequest): Observable<AppJobCreateResponse> {
+    return this.http.post<AppJobCreateResponse>(
+      `${this.seriesBaseUrl}/documents/${encodeURIComponent(String(req.docId))}/process`,
+      {
+        docId: req.docId,
+        limit: Math.max(1, Math.floor(req.limit))
+      }
     );
   }
 
@@ -915,6 +909,10 @@ export class RagApiService {
 
   getJobStatus(jobId: string): Observable<AppJobStatusResponse> {
     return this.http.get<AppJobStatusResponse>(`/api/jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  normalizeLearningSlidesResponse(payload: unknown): RagLearnSlidesResponse {
+    return this.toLearningSlidesResponse((payload ?? {}) as PipelineLearningSlidesResponse);
   }
 
   private waitForJobResult<T>(

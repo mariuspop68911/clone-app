@@ -1,9 +1,10 @@
 import { Component, OnDestroy, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { RagApiService, RagSeriesEpisodeResponse } from '../../core/api/rag-api.service';
 import { AppShellUiService } from '../../app-shell-ui.service';
 import { EpisodeTextAreaComponent } from './episode-text-area';
-import { firstValueFrom } from 'rxjs';
+import { JobStatusPollingService } from '../../core/api/job-status-polling.service';
 
 @Component({
   selector: 'app-document-series-build',
@@ -12,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
   styleUrl: './document-series-build.scss'
 })
 export class DocumentSeriesBuildComponent implements OnDestroy {
+  private seriesJobSubscription: Subscription | null = null;
   readonly docKey = signal('');
   readonly docId = signal<number | null>(null);
   readonly building = signal(false);
@@ -21,7 +23,8 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
   constructor(
     private readonly route: ActivatedRoute,
     private readonly ragApi: RagApiService,
-    private readonly appShellUi: AppShellUiService
+    private readonly appShellUi: AppShellUiService,
+    private readonly jobStatusPolling: JobStatusPollingService
   ) {
     this.appShellUi.setBrowseButtonVisible(false);
 
@@ -32,6 +35,8 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
       this.message.set('');
       this.building.set(false);
       this.episodes.set([]);
+      this.seriesJobSubscription?.unsubscribe();
+      this.seriesJobSubscription = null;
       if (docKey) {
         void this.resolveDocumentAndLoadEpisodes(docKey);
       }
@@ -39,6 +44,7 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.seriesJobSubscription?.unsubscribe();
     this.appShellUi.setBrowseButtonVisible(true);
   }
 
@@ -58,19 +64,43 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
         limit: 20
       })
       .subscribe({
-        next: () => {
-          this.building.set(false);
-          this.message.set(`Series build completed for your document "${docKey}".`);
-          this.loadEpisodes(docId);
+        next: (job) => {
+          this.message.set(
+            typeof job.message === 'string' && job.message.trim()
+              ? job.message.trim()
+              : 'Series build started for your document.'
+          );
+          this.seriesJobSubscription?.unsubscribe();
+          this.seriesJobSubscription = this.jobStatusPolling.watchJob(job.jobId).subscribe({
+            next: (status) => {
+              const stageMessage =
+                typeof status.message === 'string' && status.message.trim()
+                  ? status.message.trim()
+                  : this.friendlyJobMessage(status.status, 'Building your series...');
+
+              if (!this.jobStatusPolling.isTerminal(status)) {
+                this.message.set(stageMessage);
+                return;
+              }
+
+              this.building.set(false);
+              if (this.jobStatusPolling.isSuccessful(status)) {
+                this.message.set(`Series build completed for your document "${docKey}".`);
+                this.loadEpisodes(docId);
+                return;
+              }
+
+              this.message.set(stageMessage || 'Series build failed.');
+            },
+            error: (err) => {
+              this.building.set(false);
+              this.message.set(`Build failed: ${this.readApiError(err)}`);
+            }
+          });
         },
         error: (err) => {
-          const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
-          const backendMessage =
-            typeof err?.error === 'string'
-              ? err.error
-              : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
           this.building.set(false);
-          this.message.set(`Build failed (${status}): ${backendMessage}`);
+          this.message.set(`Build failed: ${this.readApiError(err)}`);
         }
       });
   }
@@ -124,5 +154,30 @@ export class DocumentSeriesBuildComponent implements OnDestroy {
       this.docId.set(null);
       this.episodes.set([]);
     }
+  }
+
+  private readApiError(error: unknown): string {
+    const err = error as {
+      status?: number;
+      error?: unknown;
+      message?: string;
+    };
+    const status = err?.status ? `HTTP ${err.status}` : 'Request failed';
+    const backendMessage =
+      typeof err?.error === 'string'
+        ? err.error
+        : (err?.error as { message?: string; error?: string } | undefined)?.message ??
+          (err?.error as { message?: string; error?: string } | undefined)?.error ??
+          err?.message ??
+          'unknown error';
+    return `${status}: ${backendMessage}`;
+  }
+
+  private friendlyJobMessage(status: unknown, fallback: string): string {
+    if (typeof status !== 'string' || !status.trim()) {
+      return fallback;
+    }
+
+    return status.trim().toLowerCase().replace(/_/g, ' ');
   }
 }

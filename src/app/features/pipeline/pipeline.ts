@@ -49,6 +49,7 @@ import { AppShellUiService } from '../../app-shell-ui.service';
 import { register } from 'swiper/element/bundle';
 import { Subscription, firstValueFrom } from 'rxjs';
 import { marked } from 'marked';
+import { JobStatusPollingService } from '../../core/api/job-status-polling.service';
 
 register();
 
@@ -161,6 +162,7 @@ export class PipelineComponent {
   private readonly pendingTtsRequests = new Set<Subscription>();
   private autoRequestedInitialSlides = false;
   private learningRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private learningGenerationSubscription: Subscription | null = null;
   private readonly failedUriMap = signal<Record<string, true>>({});
   private readonly quizGeneratingChapterIndexMap = signal<Record<number, true>>({});
   private readonly learningImageActiveIndexMap = signal<Record<string, number>>({});
@@ -178,6 +180,7 @@ export class PipelineComponent {
   private readonly appShellUi = inject(AppShellUiService);
   private readonly loadingOverlay = inject(LoadingOverlayService);
   private readonly ingestProgress = inject(IngestProgressService);
+  private readonly jobStatusPolling = inject(JobStatusPollingService);
   @Input() modalMode = false;
 
   docKey = signal('');
@@ -523,6 +526,7 @@ export class PipelineComponent {
   }
 
   ngOnDestroy(): void {
+    this.learningGenerationSubscription?.unsubscribe();
     this.appShellUi.setBrowseButtonVisible(true);
     this.hideSlidesOverlay();
     this.hideGenerationOverlay();
@@ -2809,6 +2813,7 @@ export class PipelineComponent {
         const nextIndex = this.initialSlideIndex(nextSlides.length);
         this.currentSlide.set(nextIndex);
         this.syncSwiperSlide(nextIndex);
+        this.loading.set(false);
         this.slidesLoading.set(false);
         this.slidesMessage.set('');
         if (nextSlides.length) {
@@ -2829,6 +2834,7 @@ export class PipelineComponent {
           elapsedMs: Math.round(elapsedMs)
         });
         this.hideSlidesOverlay();
+        this.hideGenerationOverlay();
       },
       error: (err) => {
         const elapsedMs =
@@ -2838,12 +2844,14 @@ export class PipelineComponent {
           typeof err?.error === 'string'
             ? err.error
             : err?.error?.message ?? err?.error?.error ?? err?.message ?? 'unknown error';
+        this.loading.set(false);
         this.slides.set([]);
         this.learningSlides.set([]);
         this.viewMode.set('comic');
         this.slidesLoading.set(false);
         this.slidesMessage.set(`Failed to get slides (${status}): ${backendMessage}`);
         this.hideSlidesOverlay();
+        this.hideGenerationOverlay();
         console.warn('[Pipeline] Learning slide fallback failed', {
           docKey,
           elapsedMs: Math.round(elapsedMs),
@@ -2870,42 +2878,52 @@ export class PipelineComponent {
     this.showGenerationOverlay('Generating slides...');
 
     this.ragApi.generateLearningSlides({ docKey }).subscribe({
-      next: (response) => {
-        const finishedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        const requestElapsedMs = finishedAt - requestStartedAt;
-        const hasMore = this.shouldShowLoadMoreForLearning(response);
-        const returnedCount = Array.isArray(response.slides) ? response.slides.length : 0;
-        const backendLastLimit = this.toNullableFiniteNumber(response.lastLimit);
-        this.docId.set(this.toNullableFiniteNumber(response.docId) ?? this.docId());
-        const nextCursor =
-          backendLastLimit !== null && backendLastLimit >= start
-            ? backendLastLimit
-            : start + returnedCount;
-        this.loading.set(false);
-        this.viewMode.set('learning');
-        this.learningBatchStart.set(start);
-        this.learningBatchEnd.set(nextCursor);
-        this.showLoadMoreLearningSlide.set(hasMore);
-        this.writeBatchState(docKey, PipelineComponent.learningBatchStateStorageKey, {
-          start,
-          end: nextCursor,
-          hasMore
+      next: (job) => {
+        this.message.set(
+          typeof job.message === 'string' && job.message.trim()
+            ? job.message.trim()
+            : 'Learning generation started.'
+        );
+        this.learningGenerationSubscription?.unsubscribe();
+        this.learningGenerationSubscription = this.jobStatusPolling.watchJob(job.jobId).subscribe({
+          next: (status) => {
+            const nextMessage =
+              typeof status.message === 'string' && status.message.trim()
+                ? status.message.trim()
+                : 'Generating slides...';
+
+            if (!this.jobStatusPolling.isTerminal(status)) {
+              this.message.set(nextMessage);
+              return;
+            }
+
+            if (!this.jobStatusPolling.isSuccessful(status)) {
+              this.loading.set(false);
+              this.pendingLearningContinuationIndex = null;
+              this.message.set(nextMessage || 'Failed to generate learning slides.');
+              this.hideSlidesOverlay();
+              this.hideGenerationOverlay();
+              return;
+            }
+
+            this.loadLearningSlidesFallback(docKey, requestStartedAt);
+          },
+          error: (err) => {
+            const elapsedMs =
+              (typeof performance !== 'undefined' ? performance.now() : Date.now()) - requestStartedAt;
+            const backendMessage = this.readApiError(err);
+            this.loading.set(false);
+            this.pendingLearningContinuationIndex = null;
+            this.message.set(`Failed to generate learning (${backendMessage})`);
+            this.hideSlidesOverlay();
+            this.hideGenerationOverlay();
+            console.warn('[Pipeline] Generate learning failed', {
+              docKey,
+              elapsedMs: Math.round(elapsedMs),
+              backendMessage
+            });
+          }
         });
-        this.message.set('');
-        this.appendLearningSlides(response);
-        if (Array.isArray(response.slides) && response.slides.length && this.sourceOpen()) {
-          void this.loadSourcePagesForCurrentSlide();
-        }
-        console.info('[Pipeline] Generate learning response received', {
-          docKey,
-          nextCursor,
-          requestElapsedMs: Math.round(requestElapsedMs),
-          returnedCount,
-          totalCount: response.count ?? null,
-          lastLimit: response.lastLimit ?? null
-        });
-        this.hideSlidesOverlay();
-        this.hideGenerationOverlay();
       },
       error: (err) => {
         const elapsedMs =

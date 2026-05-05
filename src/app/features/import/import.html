@@ -45,6 +45,10 @@
     </section>
   }
 
+  @if (currentIngestStatus()) {
+    <app-ingest-progress [status]="currentIngestStatus()" />
+  }
+
   @if (message() && !ingestActive()) {
     <p class="msg">{{ message() }}</p>
   }

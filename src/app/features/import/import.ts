@@ -3,9 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { RagApiService, RagIngestMode } from '../../core/api/rag-api.service';
-import {
-  IngestProgressService
-} from './ingest-progress.service';
+import { IngestProgressComponent } from './ingest-progress';
+import { IngestProgressStatus, IngestProgressService } from './ingest-progress.service';
 import { ImportModeSelectorComponent } from './import-mode-selector';
 import { LoadingOverlayService } from '../../shared/loading-overlay.service';
 import { DocumentCoverCacheService } from '../../shared/document-cover-cache.service';
@@ -15,7 +14,8 @@ import { DocumentCoverCacheService } from '../../shared/document-cover-cache.ser
   imports: [
     FormsModule,
     RouterLink,
-    ImportModeSelectorComponent
+    ImportModeSelectorComponent,
+    IngestProgressComponent
   ],
   templateUrl: './import.html',
   styleUrl: './import.scss'
@@ -37,6 +37,7 @@ export class ImportComponent implements OnInit, OnDestroy {
   ingestMode = signal<RagIngestMode>('Story Mode');
   ingestActive = signal(false);
   usableDocKey = signal('');
+  currentIngestStatus = signal<IngestProgressStatus | null>(null);
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -156,39 +157,47 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.stopIngestTracking();
     this.ingestActive.set(true);
     this.usableDocKey.set('');
+    this.currentIngestStatus.set(null);
     this.message.set('Uploading document...');
     this.showIngestOverlay('Uploading document...');
 
     this.ingestStateSubscription = task.status$.subscribe({
       next: (status) => {
+        this.currentIngestStatus.set(status);
+        this.hideIngestOverlay();
         if (status.failed) {
           this.ingestActive.set(false);
           this.loading.set(false);
           this.message.set(status.message || 'Ingest failed.');
-          this.hideIngestOverlay();
           this.stopIngestTracking();
         } else if (status.done) {
           this.ingestActive.set(false);
           this.loading.set(false);
           this.message.set(status.message || 'File ingested successfully.');
-          this.hideIngestOverlay();
           this.selectedFile = null;
           this.sourceLabel.set('');
           this.ingestMode.set('Story Mode');
           this.stopIngestTracking();
         } else if (status.usable) {
-          this.usableDocKey.set(status.docKey?.trim() || docKey);
+          const nextUsableDocKey = status.docKey?.trim() || docKey;
+          if (thumbnailUrl) {
+            this.documentCoverCache.remember(nextUsableDocKey, thumbnailUrl);
+          }
+          if (!this.usableDocKey()) {
+            this.dispatchDocumentsRefresh();
+          }
+          this.usableDocKey.set(nextUsableDocKey);
           this.message.set(
             status.message ||
               'First chapter ready. You can open the document now while the remaining chapters keep processing in the background.'
           );
-          this.hideIngestOverlay();
         }
       },
       error: (error) => {
         this.ingestActive.set(false);
         this.loading.set(false);
         this.message.set(`Ingest status failed: ${this.readApiError(error)}`);
+        this.currentIngestStatus.set(null);
         this.hideIngestOverlay();
       }
     });
@@ -196,15 +205,14 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.ingestUploadSubscription = task.upload$.subscribe({
       next: (response) => {
         this.loading.set(false);
-        const usableDocKey = response.docKey?.trim() || docKey;
         if (thumbnailUrl) {
-          this.documentCoverCache.remember(usableDocKey, thumbnailUrl);
+          this.documentCoverCache.remember(docKey, thumbnailUrl);
         }
-        this.usableDocKey.set(usableDocKey);
         this.message.set(
-          'First chapter ready. You can open the document now while the remaining chapters keep processing in the background.'
+          typeof response.jobId === 'string' && response.jobId.trim()
+            ? 'Upload accepted. Processing your document now.'
+            : 'Upload finished. Waiting for ingest progress updates.'
         );
-        this.dispatchDocumentsRefresh();
         this.hideIngestOverlay();
       },
       error: (err) => {
@@ -212,6 +220,7 @@ export class ImportComponent implements OnInit, OnDestroy {
           this.message.set('Ingest timed out after 120s. Backend is taking too long or is unreachable.');
           this.loading.set(false);
           this.ingestActive.set(false);
+          this.currentIngestStatus.set(null);
           this.hideIngestOverlay();
           return;
         }
@@ -224,6 +233,7 @@ export class ImportComponent implements OnInit, OnDestroy {
         this.message.set(`Ingest failed (${status}): ${backendMessage}`);
         this.loading.set(false);
         this.ingestActive.set(false);
+        this.currentIngestStatus.set(null);
         this.hideIngestOverlay();
       }
     });
@@ -472,6 +482,7 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.stopIngestTracking();
     this.ingestActive.set(false);
     this.usableDocKey.set('');
+    this.currentIngestStatus.set(null);
     this.hideIngestOverlay();
   }
 
