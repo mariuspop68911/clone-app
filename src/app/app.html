@@ -34,10 +34,32 @@
         <a routerLink="/documents2" routerLinkActive="active" (click)="closeDrawer()">Documents2</a>
         <a routerLink="/import" routerLinkActive="active" (click)="closeDrawer()">Import</a>
       </nav>
+      <div class="drawer-actions">
+        <button type="button" class="drawer-action-btn" (click)="logout()" [disabled]="logoutPending() || logoutAllPending()">
+          {{ logoutPending() ? 'Logging out...' : 'Log out' }}
+        </button>
+        <button
+          type="button"
+          class="drawer-action-btn drawer-action-btn-secondary"
+          (click)="logoutAll()"
+          [disabled]="logoutPending() || logoutAllPending()"
+        >
+          {{ logoutAllPending() ? 'Logging out everywhere...' : 'Log out all devices' }}
+        </button>
+      </div>
     </aside>
   }
 
-  <main class="content" [class.content-auth]="showShell()" [class.content-guest]="!showShell()">
-    <router-outlet />
-  </main>
+  @if (authResolved()) {
+    <main class="content" [class.content-auth]="showShell()" [class.content-guest]="!showShell()">
+      <router-outlet />
+    </main>
+  } @else {
+    <main class="content content-auth-pending" aria-busy="true" aria-live="polite">
+      <section class="auth-pending-card">
+        <span class="auth-pending-spinner" aria-hidden="true"></span>
+        <p>Restoring your session...</p>
+      </section>
+    </main>
+  }
 </div>

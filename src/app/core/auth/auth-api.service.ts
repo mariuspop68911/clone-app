@@ -35,7 +35,15 @@ export class AuthApiService {
     });
   }
 
+  refresh(): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(`${this.baseUrl}/refresh`, {}, { withCredentials: true });
+  }
+
   logout(): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/logout`, {}, { withCredentials: true });
+  }
+
+  logoutAll(): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/logout-all`, {}, { withCredentials: true });
   }
 }

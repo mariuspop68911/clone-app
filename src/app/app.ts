@@ -1,8 +1,10 @@
 import { isPlatformBrowser } from '@angular/common';
-import { Component, Inject, OnInit, PLATFORM_ID, computed, signal } from '@angular/core';
+import { Component, EffectRef, Inject, OnInit, PLATFORM_ID, Signal, computed, effect, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { finalize } from 'rxjs';
 import { filter } from 'rxjs';
 import { AppShellUiService } from './app-shell-ui.service';
+import { AuthService } from './core/auth/auth.service';
 import { AuthStateService } from './core/auth/auth-state.service';
 import { AppLoadingOverlayComponent } from './shared/loading-overlay';
 
@@ -15,14 +17,41 @@ import { AppLoadingOverlayComponent } from './shared/loading-overlay';
 export class App implements OnInit {
   drawerOpen = signal(false);
   currentUrl = signal('');
-  showShell = computed(() => this.authState.isAuthenticated() && this.currentUrl() !== '/login');
+  logoutPending = signal(false);
+  logoutAllPending = signal(false);
+  authResolved: Signal<boolean>;
+  showShell = computed(() => {
+    return this.authResolved() && this.authState.isAuthenticated() && this.currentUrl() !== '/login';
+  });
+  private readonly loginRecoveryEffect: EffectRef;
 
   constructor(
     readonly appShellUi: AppShellUiService,
+    readonly authService: AuthService,
     readonly authState: AuthStateService,
     private readonly router: Router,
     @Inject(PLATFORM_ID) private readonly platformId: object
-  ) {}
+  ) {
+    this.authResolved = this.authState.isResolved;
+    this.loginRecoveryEffect = effect(() => {
+      if (!isPlatformBrowser(this.platformId) || !this.authState.isAuthenticated()) {
+        return;
+      }
+
+      const url = this.currentUrl();
+      if (!url.startsWith('/login')) {
+        return;
+      }
+
+      const parsedUrl = this.router.parseUrl(url);
+      const returnUrl = parsedUrl.queryParams['returnUrl'];
+      const destination =
+        typeof returnUrl === 'string' && returnUrl.trim() && returnUrl !== '/login'
+          ? returnUrl
+          : '/documents';
+      void this.router.navigateByUrl(destination, { replaceUrl: true });
+    });
+  }
 
   ngOnInit(): void {
     if (!isPlatformBrowser(this.platformId)) {
@@ -46,5 +75,35 @@ export class App implements OnInit {
 
   closeDrawer(): void {
     this.drawerOpen.set(false);
+  }
+
+  logout(): void {
+    if (this.logoutPending() || this.logoutAllPending()) {
+      return;
+    }
+
+    this.logoutPending.set(true);
+    this.authService
+      .logout()
+      .pipe(finalize(() => this.logoutPending.set(false)))
+      .subscribe({
+        next: () => this.closeDrawer(),
+        error: () => this.logoutPending.set(false)
+      });
+  }
+
+  logoutAll(): void {
+    if (this.logoutPending() || this.logoutAllPending()) {
+      return;
+    }
+
+    this.logoutAllPending.set(true);
+    this.authService
+      .logoutAll()
+      .pipe(finalize(() => this.logoutAllPending.set(false)))
+      .subscribe({
+        next: () => this.closeDrawer(),
+        error: () => this.logoutAllPending.set(false)
+      });
   }
 }
