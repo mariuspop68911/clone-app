@@ -3,7 +3,7 @@ name: Build And Publish Frontend Container Images
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 env:
