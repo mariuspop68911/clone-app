@@ -6,11 +6,8 @@ const stagingBackend = {
   serviceName: 'documentor-staging-api'
 } as const;
 
-// Fill this with the staging API base URL once the Cloud Run public URL or gateway route is known.
-// Examples:
-// - '/api' when the frontend and API are served behind the same origin/proxy.
-// - 'https://<documentor-staging-api-cloud-run-url>/api' when calling Cloud Run directly.
-const stagingApiBaseUrl = '/api';
+const stagingApiBaseUrl =
+  'https://documentor-staging-api-509998383418.europe-central2.run.app/api';
 
 // These must match the backend's staging JWT issuer/audience env vars exactly.
 const stagingJwtIssuer = 'demo-clone';
