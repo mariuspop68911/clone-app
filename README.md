@@ -36,6 +36,24 @@ ng build
 
 This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
 
+## Cloud Run
+
+The Dockerfile builds the Angular SSR app in a build stage, installs only production dependencies in the runtime stage, and starts the compiled server with `npm start`. The SSR server reads Cloud Run's `PORT` environment variable and defaults to `8080` in the container.
+
+Example staging deploy:
+
+```bash
+gcloud run deploy clone-app-staging --source . --region REGION --allow-unauthenticated
+```
+
+Example production deploy:
+
+```bash
+gcloud run deploy clone-app --source . --region REGION --allow-unauthenticated
+```
+
+The frontend uses relative `/api` URLs in production, so keep routing/proxying aligned with the backend deployment.
+
 ## Running unit tests
 
 To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
