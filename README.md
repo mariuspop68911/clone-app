@@ -42,7 +42,7 @@ The Dockerfile builds the Angular SSR app in a build stage, installs only produc
 
 ## Container Publishing
 
-The `Build And Publish Frontend Container Images` GitHub Actions workflow mirrors the backend container workflow. It runs on pushes to `main` and on manual dispatch, builds immutable images tagged as `sha-<12-char-sha>`, then pushes staging and production images to separate Google Cloud projects.
+The `Build And Publish Frontend Container Images` GitHub Actions workflow mirrors the backend container workflow. It runs on pushes to `master` and on manual dispatch, builds immutable images tagged as `sha-<12-char-sha>`, then pushes staging and production images to separate Google Cloud projects.
 
 The staging image is built with the Angular `staging` configuration. The production image is built with the Angular `production` configuration.
 
@@ -77,7 +77,7 @@ gcloud run deploy clone-app-staging --project documentor-staging --image europe-
 
 ## Staging Cloud Run Deployment
 
-The `Deploy Staging Frontend Cloud Run Service` workflow deploys the staging frontend image from Artifact Registry to Cloud Run after `Build And Publish Frontend Container Images` succeeds on `main`. It can also be run manually with an immutable image tag such as `sha-abc123def456`.
+The `Deploy Staging Frontend Cloud Run Service` workflow deploys the staging frontend image from Artifact Registry to Cloud Run after `Build And Publish Frontend Container Images` succeeds on `master`. It can also be run manually with an immutable image tag such as `sha-abc123def456`.
 
 It deploys:
 
