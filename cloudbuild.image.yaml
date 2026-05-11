@@ -1,0 +1,22 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - BUILD_CONFIGURATION=${_BUILD_CONFIGURATION}
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REGISTRY_REPOSITORY}/${_IMAGE_NAME}:${_IMAGE_TAG}
+      - .
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_ARTIFACT_REGISTRY_REPOSITORY}/${_IMAGE_NAME}:${_IMAGE_TAG}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: europe-central2
+  _ARTIFACT_REGISTRY_REPOSITORY: documentor-container
+  _IMAGE_NAME: clone-app
+  _IMAGE_TAG: manual
+  _BUILD_CONFIGURATION: production

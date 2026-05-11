@@ -6,6 +6,7 @@
     "start": "node dist/clone-app/server/server.mjs",
     "start:dev": "ng serve --port 4201",
     "build": "ng build",
+    "build:staging": "ng build --configuration staging",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "serve:ssr:clone-app": "node dist/clone-app/server/server.mjs"
