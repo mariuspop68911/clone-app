@@ -1,0 +1,124 @@
+<section class="docs-page">
+  <header class="hero">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">Your Workspace</p>
+        <h1>{{ libraryTitle() }}</h1>
+        <p class="message">Only documents owned by your signed-in account appear here.</p>
+      </div>
+      <div class="actions">
+        <a routerLink="/import">Import to Your Library</a>
+      </div>
+    </div>
+
+    @if (message() && mergedDocs().length) {
+      <p class="message">{{ message() }}</p>
+    }
+
+    @if (mergedDocs().length) {
+      <section class="docs-group">
+        <h2 class="docs-group-title">Your Story Documents</h2>
+        <ul class="docs-grid">
+          @for (doc of storyDocs(); track $index) {
+            <li>
+              @if (docKeyForRoute(doc)) {
+                <div class="doc-card-shell">
+                  <a
+                    class="doc-card doc-link"
+                    [class.doc-card-processing]="isDocumentProcessing(doc)"
+                    [routerLink]="documentRoute(doc)"
+                  >
+                    @if (coverUrl(doc)) {
+                      <img
+                        class="doc-cover"
+                        [src]="coverUrl(doc)"
+                        [alt]="displayTitle(doc, $index) + ' cover'"
+                      />
+                    }
+                    <h3>{{ displayTitle(doc, $index) }}</h3>
+                    @if (documentStatusText(doc)) {
+                      <p class="doc-status">{{ documentStatusText(doc) }}</p>
+                    }
+                  </a>
+
+                  <button
+                    type="button"
+                    class="doc-delete"
+                    [disabled]="deletingDocId() === documentId(doc)"
+                    (click)="deleteDocument($event, doc)"
+                  >
+                    {{ deletingDocId() === documentId(doc) ? '...' : 'X' }}
+                  </button>
+                </div>
+              } @else {
+                <div class="doc-card doc-disabled">
+                  @if (coverUrl(doc)) {
+                    <img
+                      class="doc-cover"
+                      [src]="coverUrl(doc)"
+                      [alt]="displayTitle(doc, $index) + ' cover'"
+                    />
+                  }
+                  <h3>{{ displayTitle(doc, $index) }}</h3>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="docs-group">
+        <h2 class="docs-group-title">Your Learning And Action Documents</h2>
+        <ul class="docs-grid">
+          @for (doc of learningDocs(); track $index) {
+            <li>
+              @if (docKeyForRoute(doc)) {
+                <div class="doc-card-shell">
+                  <a
+                    class="doc-card doc-link"
+                    [class.doc-card-processing]="isDocumentProcessing(doc)"
+                    [routerLink]="documentRoute(doc)"
+                  >
+                    @if (coverUrl(doc)) {
+                      <img
+                        class="doc-cover"
+                        [src]="coverUrl(doc)"
+                        [alt]="displayTitle(doc, $index) + ' cover'"
+                      />
+                    }
+                    <h3>{{ displayTitle(doc, $index) }}</h3>
+                    @if (documentStatusText(doc)) {
+                      <p class="doc-status">{{ documentStatusText(doc) }}</p>
+                    }
+                  </a>
+
+                  <button
+                    type="button"
+                    class="doc-delete"
+                    [disabled]="deletingDocId() === documentId(doc)"
+                    (click)="deleteDocument($event, doc)"
+                  >
+                    {{ deletingDocId() === documentId(doc) ? '...' : 'X' }}
+                  </button>
+                </div>
+              } @else {
+                <div class="doc-card doc-disabled">
+                  @if (coverUrl(doc)) {
+                    <img
+                      class="doc-cover"
+                      [src]="coverUrl(doc)"
+                      [alt]="displayTitle(doc, $index) + ' cover'"
+                    />
+                  }
+                  <h3>{{ displayTitle(doc, $index) }}</h3>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    } @else if (message()) {
+      <p class="message">{{ message() }}</p>
+    }
+  </header>
+</section>

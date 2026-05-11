@@ -1,0 +1,862 @@
+<section
+  class="pipeline-page"
+  [class.pipeline-page-modal]="modalMode"
+  [class.pipeline-page-fullscreen]="fullscreenReader()"
+  [style.max-width]="modalMode || fullscreenReader() ? 'none' : '1320px'"
+>
+  <section
+    class="slides-layout-main"
+    [class.panel]="!modalMode && !fullscreenReader()"
+    [class.slides-layout-main-modal]="modalMode"
+    [class.slides-layout-main-fullscreen]="fullscreenReader()"
+    style="min-width:0;display:block;"
+  >
+      @if (docKey() && !modalMode && !fullscreenReader()) {
+        <h2 class="book-title">{{ docKey() }}</h2>
+      }
+
+      @if (!fullscreenReader()) {
+      <div class="action-row">
+        @if (shouldShowStoryActions()) {
+          <button
+            type="button"
+            class="primary-action"
+            (click)="generateAll()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ loading() && viewMode() === 'comic' ? 'Generating...' : 'Generate all' }}
+          </button>
+
+            <button
+              type="button"
+              class="secondary-action"
+              (click)="clearSlides()"
+              [disabled]="loading() || clearing()"
+            >
+              {{ clearing() ? 'Deleting...' : 'Delete' }}
+            </button>
+        }
+
+        @if (shouldShowLoadMoreSlides()) {
+          <button
+            type="button"
+            class="secondary-action"
+            (click)="loadMoreSlides()"
+            [disabled]="loading() || clearing()"
+          >
+            {{ loading() ? 'Loading More...' : 'Load more' }}
+          </button>
+        }
+
+      </div>
+      }
+
+      @if (message() && !fullscreenReader()) {
+        <p class="status">{{ message() }}</p>
+      }
+
+      @if (isBackgroundProcessingActive() && !fullscreenReader()) {
+        <p class="status">
+          {{ backgroundProcessingMessage() }}
+        </p>
+      }
+
+      @if (ttsMessage() && !fullscreenReader()) {
+        <p class="status">{{ ttsMessage() }}</p>
+      }
+
+      @if (!fullscreenReader()) {
+      <div class="tts-speed-control">
+        <label class="tts-speed-label" for="pipeline-tts-speed">
+          TTS speed: <span>{{ ttsSpeedLabel() }}x</span>
+        </label>
+        <input
+          id="pipeline-tts-speed"
+          class="tts-speed-slider"
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.05"
+          [value]="ttsSpeed()"
+          (input)="onTtsSpeedInput($event)"
+        />
+      </div>
+      }
+
+      <section class="slides-section" [class.slides-section-fullscreen]="fullscreenReader()">
+        <div class="section-heading" [class.section-heading-fullscreen]="fullscreenReader()">
+          @if (slidesLoading()) {
+            <span class="section-status">Loading...</span>
+          }
+          @if ((slides().length > 0 || visibleLearningSlides().length > 0) && !slidesLoading()) {
+            <button
+              type="button"
+              class="secondary-action fullscreen-toggle"
+              [class.fullscreen-toggle-overlay]="fullscreenReader()"
+              (click)="toggleFullscreenReader()"
+              [attr.aria-label]="fullscreenReader() ? 'Exit fullscreen reader' : 'Enter fullscreen reader'"
+            >
+              {{ fullscreenReader() ? 'Exit full screen' : 'Full screen' }}
+            </button>
+          }
+        </div>
+
+        @if (viewMode() === 'learning' && currentChapterTitle() && !fullscreenReader()) {
+          <p class="chapter-title">
+            <span class="chapter-title-label">Chapter:</span> {{ currentChapterTitle() }}
+          </p>
+        }
+
+        @if (slideProgressItems().length > 0 && !fullscreenReader()) {
+          <app-slide-progress
+            class="slide-progress-below"
+            [items]="slideProgressItems()"
+            [currentIndex]="slideProgressCurrentIndex()"
+            [loading]="processAllRunning()"
+          ></app-slide-progress>
+        }
+
+        <div
+          style="min-width:0;"
+          [class.story-slides-layout]="viewMode() === 'comic' && shouldShowCharactersPanel() && !fullscreenReader()"
+          [class.reader-stage]="fullscreenReader()"
+        >
+          @if (shouldShowCharactersPanel() && !fullscreenReader()) {
+            <aside class="story-characters-panel">
+              <div class="story-characters-panel-card">
+                @if (characterReferences().length > 0) {
+                  <div class="characters-bubble-grid">
+                    @for (character of characterReferences(); track (character.characterName ?? character.imageUrl ?? $index)) {
+                      <button
+                        type="button"
+                        class="character-card"
+                        (click)="openCharacterInfo(character)"
+                        [attr.aria-label]="'Open character details for ' + characterName(character)"
+                      >
+                        @if (character.imageUrl) {
+                          <img
+                            class="character-card-image"
+                            [src]="imageSrc(character.imageUrl)"
+                            [alt]="characterName(character)"
+                            (error)="onImageError(character.imageUrl, $event)"
+                          />
+                        } @else {
+                          <div class="character-card-placeholder" aria-hidden="true">
+                            {{ characterName(character).charAt(0) }}
+                          </div>
+                        }
+                        <p class="character-card-name">{{ characterName(character) }}</p>
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            </aside>
+          }
+
+          @if (viewMode() === 'comic' && slides().length > 0) {
+            <swiper-container
+              #carouselEl
+              class="carousel story-carousel"
+              style="padding:0.2rem 1.1rem 0.8rem 0.75rem;box-sizing:border-box;overflow:visible;"
+              slides-per-view="1"
+              space-between="0"
+              grab-cursor="true"
+              resistance-ratio="0.85"
+              (swiperslidechange)="onSlideIndexChange($event)"
+            >
+              @for (slide of slides(); track slide.id ?? slide.comicNote?.id ?? $index; let cardIndex = $index) {
+                <swiper-slide class="carousel-slide">
+                  <article class="slide-card story-slide-card">
+                    @if (storySlideTitle(slide)) {
+                      <header class="story-slide-header">
+                        @if (storySlideTypeLabel(slide)) {
+                          <span class="story-slide-type">{{ storySlideTypeLabel(slide) }}</span>
+                        }
+                        <h3 class="story-slide-title">{{ storySlideTitle(slide) }}</h3>
+                      </header>
+                    }
+                    <div class="slide-visual">
+                      @if (slideImageUrl(slide); as imageUrl) {
+                          <img
+                            class="slide-image"
+                            [class.slide-image-zoom-left]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-left'"
+                            [class.slide-image-zoom-center]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-center'"
+                            [class.slide-image-zoom-right]="dialogueZoomClass(slide, cardIndex) === 'slide-image-zoom-right'"
+                            [src]="imageSrc(imageUrl)"
+                            [alt]="'Slide ' + (slide.id ?? $index + 1)"
+                            (error)="onImageError(imageUrl, $event)"
+                          />
+                        @if (isFailed(imageUrl)) {
+                          <p class="image-error">
+                            Preview failed (likely private object). Open this URI with an authorized
+                            account.
+                          </p>
+                        }
+                      } @else {
+                        <div class="slide-image slide-image--empty" aria-label="No image available">
+                          <div class="slide-image-placeholder">
+                            <div class="slide-image-placeholder-art" aria-hidden="true">No image</div>
+                            <p class="slide-image-placeholder-text">Image coming soon</p>
+                          </div>
+                        </div>
+                      }
+
+                      @if (shouldShowHeadMarkers(slide, cardIndex)) {
+                        <div class="head-markers-layer" aria-hidden="true">
+                          @for (marker of headMarkers(slide, cardIndex); track marker.characterName + '-' + $index) {
+                            <div
+                              class="mouth-marker"
+                              [style.left.%]="marker.leftPercent"
+                              [style.top.%]="marker.topPercent"
+                              [attr.title]="marker.characterName || 'Character'"
+                            >
+                              <span class="mouth-marker-x">X</span>
+                              <span class="mouth-marker-name">{{ marker.characterName || 'Character' }}</span>
+                            </div>
+                          }
+                          @if (activeDialogueBubble(slide, cardIndex); as bubble) {
+                            <div
+                              class="speech-bubble"
+                              [style.left.%]="bubble.leftPercent"
+                              [style.top.%]="bubble.topPercent"
+                              [attr.title]="bubble.characterName || 'Character'"
+                            >
+                              <p class="speech-bubble-text">
+                                @if (bubble.characterName) {
+                                  <span class="speech-bubble-speaker speech-bubble-speaker-block">
+                                    {{ bubble.characterName }}
+                                  </span>
+                                }
+                                @for (token of activeDialogueBubbleTokens(slide, cardIndex); track $index) {
+                                  @if (token.isWord) {
+                                    <span
+                                      class="word"
+                                      [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, bubble.wordStart)"
+                                    >
+                                      {{ token.text }}
+                                    </span>
+                                  } @else {
+                                    <span>{{ token.text }}</span>
+                                  }
+                                }
+                              </p>
+                            </div>
+                          }
+                        </div>
+                      }
+
+                      @if (activeDialogueFallbackLine(slide, cardIndex)) {
+                        <div class="speech-bubble speech-bubble-fallback">
+                          <p class="speech-bubble-text">
+                            @if (activeDialogueFallbackSpeaker(slide, cardIndex)) {
+                              <span class="speech-bubble-speaker">
+                                {{ activeDialogueFallbackSpeaker(slide, cardIndex) }}:
+                              </span>
+                              <span> </span>
+                            }
+                            @for (token of activeDialogueFallbackTokens(slide, cardIndex); track $index) {
+                              @if (token.isWord) {
+                                <span
+                                  class="word"
+                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
+                                >
+                                  {{ token.text }}
+                                </span>
+                              } @else {
+                                <span>{{ token.text }}</span>
+                              }
+                            }
+                          </p>
+                        </div>
+                      }
+
+                      @if (activeContextText(slide, cardIndex)) {
+                        <div class="slide-card-body slide-card-body-top">
+                          <p class="slide-copy">
+                            @for (token of activeContextTokens(slide, cardIndex); track $index) {
+                              @if (token.isWord) {
+                                <span
+                                  class="word"
+                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, activeDialogueWordStart())"
+                                >
+                                  {{ token.text }}
+                                </span>
+                              } @else {
+                                <span>{{ token.text }}</span>
+                              }
+                            }
+                          </p>
+                        </div>
+                      }
+
+                      @if (shouldShowSlideSummary(slide, cardIndex)) {
+                        <div class="slide-card-body">
+                          <p class="slide-copy">
+                            @for (token of mainNoteTokens(slide); track $index) {
+                              @if (token.isWord) {
+                                <span
+                                  class="word"
+                                  [class.word-active]="isTokenActive(slide, cardIndex, token.wordIndex, 0)"
+                                >
+                                  {{ token.text }}
+                                </span>
+                              } @else {
+                                <span>{{ token.text }}</span>
+                              }
+                            }
+                          </p>
+                        </div>
+                      }
+                    </div>
+
+                    <div class="tts-controls">
+                      <button
+                        type="button"
+                        class="btn-tts-toggle"
+                        (click)="toggleCardTts(slide, cardIndex)"
+                        [disabled]="(ttsLoading() && !isCardLoading(slide, cardIndex)) || slidesLoading()"
+                        [attr.aria-label]="isCardPlaying(slide, cardIndex) ? 'Pause' : 'Play'"
+                      >
+                        @if (isCardPlaying(slide, cardIndex)) {
+                          <span class="tts-icon tts-icon-pause" aria-hidden="true"></span>
+                        } @else if (isCardLoading(slide, cardIndex)) {
+                          <span class="tts-icon tts-icon-loading" aria-hidden="true"></span>
+                        } @else {
+                          <span class="tts-icon tts-icon-play" aria-hidden="true"></span>
+                        }
+                      </button>
+                    </div>
+                  </article>
+                </swiper-slide>
+              }
+            </swiper-container>
+
+          } @else if (viewMode() === 'learning' && visibleLearningSlides().length > 0) {
+            <swiper-container
+              #carouselEl
+              class="carousel learning-carousel"
+              style="padding:0.2rem 1.1rem 0.8rem 0.75rem;box-sizing:border-box;overflow:visible;"
+              slides-per-view="1"
+              space-between="0"
+              grab-cursor="true"
+              resistance-ratio="0.85"
+              (swiperslidechange)="onSlideIndexChange($event)"
+            >
+              @for (slide of visibleLearningSlides(); track slide.summary ?? slide.title ?? $index; let cardIndex = $index) {
+                <swiper-slide class="carousel-slide">
+                  <article
+                    class="slide-card learning-slide-card"
+                    [class.learning-slide-card-no-image]="!learningImageUrls(slide).length"
+                    [class.learning-slide-card-takeaways]="isKeyTakeawaysLearningSlide(slide)"
+                    [style]="learningSlideCardStyle(slide)"
+                  >
+                    <div
+                      class="learning-slide-main"
+                      [class.learning-slide-main-no-image]="!learningImageUrls(slide).length"
+                      [class.learning-slide-main-takeaways]="isKeyTakeawaysLearningSlide(slide)"
+                    >
+                    @if (!isQuizLearningSlide(slide) && learningTitle(slide) && !isKeyTakeawaysLearningSlide(slide)) {
+                      <div class="learning-slide-title" [class.learning-slide-title-no-image]="!learningImageUrls(slide).length">
+                        <h2
+                          style="margin:0;color:#1f2937;font-size:1.0625rem;line-height:1.1;font-weight:800;"
+                        >
+                          {{ learningTitle(slide) }}
+                        </h2>
+                      </div>
+                    }
+
+                    <div class="learning-slide-body" [class.learning-slide-body-takeaways]="isKeyTakeawaysLearningSlide(slide)">
+                      @if (learningImageUrls(slide).length) {
+                        <div class="learning-slide-media-shell" [class.learning-slide-media-shell-takeaways]="isKeyTakeawaysLearningSlide(slide)">
+                          @if (hasMultipleLearningImages(slide)) {
+                            <div style="overflow:hidden;touch-action:pan-x;">
+                              <swiper-container
+                                class="learning-image-carousel"
+                                style="display:block;width:100%;margin:0;padding:0;box-sizing:border-box;overflow:visible;touch-action:pan-x;"
+                                slides-per-view="auto"
+                                space-between="2"
+                                grab-cursor="true"
+                                centered-slides="false"
+                                nested="true"
+                                touch-start-prevent-default="false"
+                                touch-move-stop-propagation="true"
+                                mousewheel-force-to-axis="true"
+                                simulate-touch="true"
+                                (swiperslidechange)="onLearningImageCarouselSlideChange($event, slide)"
+                              >
+                                @for (imageUrl of learningImageUrls(slide); track imageUrl) {
+                                  <swiper-slide
+                                    class="carousel-slide"
+                                    style="width:calc(100% - 1.15rem);box-sizing:border-box;"
+                                  >
+                                    <div
+                                      style="display:block;width:100%;cursor:grab;"
+                                      (pointerdown)="onLearningImagePointerDown($event)"
+                                      (pointermove)="onLearningImagePointerMove($event)"
+                                      (pointerup)="onLearningImagePointerUp()"
+                                      (pointercancel)="onLearningImagePointerCancel()"
+                                      (pointerleave)="onLearningImagePointerCancel()"
+                                      (click)="openLearningImageViewerFromTap($event, imageUrl, learningTitle(slide), slide)"
+                                    >
+                                      <img
+                                        style="width:100%;max-height:16rem;display:block;object-fit:contain;user-select:none;-webkit-user-drag:none;"
+                                        [src]="imageSrc(imageUrl)"
+                                        [alt]="learningTitle(slide)"
+                                        draggable="false"
+                                        loading="eager"
+                                        decoding="async"
+                                        (error)="onImageError(imageUrl, $event)"
+                                      />
+                                    </div>
+                                  </swiper-slide>
+                                }
+                              </swiper-container>
+                              <div style="display:flex;justify-content:center;gap:0.4rem;margin-top:0.75rem;">
+                                @for (imageUrl of learningImageUrls(slide); track imageUrl; let imageIndex = $index) {
+                                  <span
+                                    style="display:block;width:0.42rem;height:0.42rem;border-radius:999px;"
+                                    [style.background]="learningImageActiveIndex(slide) === imageIndex ? '#17486c' : '#c7d4df'"
+                                  ></span>
+                                }
+                              </div>
+                            </div>
+                            @for (imageUrl of learningImageUrls(slide); track imageUrl) {
+                              @if (isFailed(imageUrl)) {
+                                <p class="image-error">
+                                  Preview failed (likely private object). Open this URI with an authorized
+                                  account.
+                                </p>
+                                <p style="margin:0.25rem 0 0;text-align:left;">
+                                  <a [href]="imageSrc(imageUrl)" target="_blank" rel="noreferrer">
+                                    Open image
+                                  </a>
+                                </p>
+                              }
+                            }
+                          } @else if (learningImageUrl(slide); as imageUrl) {
+                            @if (isLearningSlideImageClickable(slide)) {
+                              <button
+                                type="button"
+                                class="slide-image-button"
+                                style="display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in;"
+                                (click)="openImageViewer(imageUrl, learningTitle(slide), slide)"
+                              >
+                                <img
+                                  style="width:100%;max-height:16rem;display:block;object-fit:contain;user-select:none;-webkit-user-drag:none;"
+                                  [src]="imageSrc(imageUrl)"
+                                  [alt]="learningTitle(slide)"
+                                  draggable="false"
+                                  loading="eager"
+                                  decoding="async"
+                                  (error)="onImageError(imageUrl, $event)"
+                                />
+                              </button>
+                            } @else {
+                              <img
+                                [class.learning-takeaways-image]="isKeyTakeawaysLearningSlide(slide)"
+                                [style.width]="'100%'"
+                                [style.max-height]="isKeyTakeawaysLearningSlide(slide) ? null : '16rem'"
+                                [style.display]="'block'"
+                                [style.object-fit]="isKeyTakeawaysLearningSlide(slide) ? 'cover' : 'contain'"
+                                style="user-select:none;-webkit-user-drag:none;"
+                                [src]="imageSrc(imageUrl)"
+                                [alt]="learningTitle(slide)"
+                                draggable="false"
+                                loading="eager"
+                                decoding="async"
+                                (error)="onImageError(imageUrl, $event)"
+                              />
+                            }
+                            @if (isFailed(imageUrl)) {
+                              <p class="image-error">
+                                Preview failed (likely private object). Open this URI with an authorized
+                                account.
+                              </p>
+                              <p style="margin:0.25rem 0 0;text-align:left;">
+                                <a [href]="imageSrc(imageUrl)" target="_blank" rel="noreferrer">
+                                  Open image
+                                </a>
+                              </p>
+                            }
+                          }
+                        </div>
+                      }
+
+                      @if (isQuizLearningSlide(slide)) {
+                        <div class="learning-quiz-shell">
+                          <p class="learning-quiz-question">
+                            {{ quizQuestionText(slide) }}
+                          </p>
+
+                          <div class="learning-quiz-options">
+                            @for (option of quizAnswerOptions(slide); track option; let optionIndex = $index) {
+                              <button
+                                type="button"
+                                class="learning-quiz-option"
+                                [style.background]="quizOptionAnswered(slide, optionIndex) && quizOptionCorrect(slide, optionIndex) ? '#dff4e4' : (quizOptionAnswered(slide, optionIndex) ? '#fde3e3' : '#ffffff')"
+                                [style.border-color]="quizOptionAnswered(slide, optionIndex) && quizOptionCorrect(slide, optionIndex) ? '#79bf8c' : (quizOptionAnswered(slide, optionIndex) ? '#d57c7c' : '#c8d9ea')"
+                                [disabled]="selectedQuizOptionIndex(slide) !== null"
+                                (click)="selectQuizAnswerOnSlide(slide, optionIndex, $event)"
+                              >
+                                {{ option }}
+                              </button>
+                            }
+                          </div>
+                        </div>
+                      } @else {
+                        <div
+                          class="learning-slide-summary-shell"
+                          [class.learning-slide-summary-shell-takeaways]="isKeyTakeawaysLearningSlide(slide)"
+                          style="position:relative;max-width:68ch;"
+                          [style.max-width]="'none'"
+                          [style.width]="'100%'"
+                          [style.padding]="selectionModeEnabled() ? '1.55rem 0.7rem 0.7rem' : null"
+                          [style.border]="selectionModeEnabled() ? '1px solid rgba(23,72,108,0.26)' : null"
+                          [style.border-radius]="selectionModeEnabled() ? '14px' : null"
+                          [style.background]="selectionModeEnabled() ? 'rgba(248,251,255,0.76)' : null"
+                        >
+                          @if (isKeyTakeawaysLearningSlide(slide) && learningTitle(slide)) {
+                            <div class="learning-slide-title learning-slide-title-takeaways">
+                              <h2
+                                style="margin:0;color:#1f2937;font-size:1.0625rem;line-height:1.1;font-weight:800;"
+                              >
+                                {{ learningTitle(slide) }}
+                              </h2>
+                            </div>
+                          }
+
+                          @if (selectionModeEnabled()) {
+                            <span
+                              style="position:absolute;top:0.45rem;left:0.7rem;color:#2a5878;font-size:0.68rem;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;"
+                            >
+                              Select text to explain
+                            </span>
+
+                            <button
+                              type="button"
+                              style="position:absolute;top:0.45rem;right:0.55rem;width:1.35rem;height:1.35rem;border:0;border-radius:999px;background:#d7e6f2;color:#1b4e73;font:700 0.86rem/1 inherit;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;"
+                              (click)="closeLearningSummarySelectionMode($event)"
+                              aria-label="Close text selection mode"
+                            >
+                              &times;
+                            </button>
+                          }
+
+                          <div
+                            class="learning-summary learning-summary-interactive"
+                            [class.swiper-no-swiping]="selectionModeEnabled()"
+                            [style.display]="'block'"
+                            [style.width]="'100%'"
+                            [style.max-width]="'none'"
+                            [style.color]="'#24303f'"
+                            [style.font-size]="'16px'"
+                            [style.line-height]="'1.7'"
+                            [style.text-align]="'left'"
+                            [style.cursor]="selectionModeEnabled() ? 'text' : 'grab'"
+                            [style.user-select]="selectionModeEnabled() ? 'text' : 'none'"
+                            [style.-webkit-user-select]="selectionModeEnabled() ? 'text' : 'none'"
+                            [innerHTML]="learningSummaryHtml(slide)"
+                            (click)="onLearningSummaryClick($event)"
+                            (mouseup)="onLearningSummaryMouseUp($event, slide)"
+                            (mousedown)="onLearningSummaryPointerDown($event)"
+                            (pointerdown)="onLearningSummaryPointerDown($event)"
+                            (pointerup)="onLearningSummaryPointerUp()"
+                            (pointercancel)="onLearningSummaryPointerUp()"
+                            (mouseleave)="onLearningSummaryPointerUp()"
+                            (touchend)="onLearningSummaryPointerUp()"
+                            (touchcancel)="onLearningSummaryPointerUp()"
+                          ></div>
+                        </div>
+                      }
+                    </div>
+
+                    </div>
+
+                    <div class="learning-slide-bottom">
+                      <footer class="learning-slide-footer">
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                          @if (shouldShowLearningSlideSourcePages(slide)) {
+                            @for (page of learningSourcePages(slide); track page) {
+                              <button
+                                type="button"
+                                class="slide-page-chip"
+                                (click)="toggleSourcePanel()"
+                              >
+                                Page {{ page }}
+                              </button>
+                            }
+                          }
+                        </div>
+
+                        @if (isKeyTakeawaysLearningSlide(slide)) {
+                          <div style="display:grid;gap:0.45rem;justify-items:end;align-items:center;">
+                            <button
+                              type="button"
+                              class="slide-action-button slide-action-button-soft"
+                              (click)="generateOrOpenChapterQuizFromTakeaways(slide)"
+                            >
+                              Quiz
+                            </button>
+
+                            @if (shouldShowNextChapterButton(slide)) {
+                              <button
+                                type="button"
+                                class="slide-action-button slide-action-button-primary"
+                                (click)="goToNextChapterFromTakeaways(slide)"
+                              >
+                                Next chapter
+                              </button>
+                            }
+                          </div>
+                        } @else if (isReviewQuizLearningSlide(slide) && isLastReviewQuizSlideForChapter(slide) && shouldShowNextChapterButton(slide)) {
+                          <button
+                            type="button"
+                            class="slide-action-button slide-action-button-primary"
+                            [disabled]="!allQuizQuestionsAnswered(slide)"
+                            (click)="advanceToNextChapterAfterReviewQuiz(slide)"
+                          >
+                            Next chapter
+                          </button>
+                        } @else if (isQuizLearningSlide(slide) && shouldShowQuizNextButton(slide)) {
+                          <button
+                            type="button"
+                            class="slide-action-button slide-action-button-primary"
+                            [disabled]="!allQuizQuestionsAnswered(slide)"
+                            (click)="advanceAfterQuiz(slide)"
+                          >
+                            Next
+                          </button>
+                        } @else if (isReviewLearningSlide(slide) && isLastReviewSlideForChapter(slide)) {
+                          <button
+                            type="button"
+                            class="slide-action-button slide-action-button-primary"
+                            (click)="advanceAfterReview(slide)"
+                          >
+                            Next
+                          </button>
+                        } @else if (canExplainLearningSlide(slide)) {
+                          <button
+                            type="button"
+                            class="slide-action-button slide-action-button-soft"
+                            (click)="explainFullSummary(slide)"
+                          >
+                            Explain
+                          </button>
+                        }
+                      </footer>
+
+                      @if (!isQuizLearningSlide(slide)) {
+                      <div class="tts-controls learning-slide-tts-controls">
+                        <button
+                          type="button"
+                          class="btn-tts-toggle"
+                          (click)="toggleLearningTts(slide, cardIndex)"
+                          [disabled]="(ttsLoading() && !isLearningCardLoading(cardIndex)) || slidesLoading()"
+                          [attr.aria-label]="isLearningCardPlaying(cardIndex) ? 'Pause' : 'Play'"
+                        >
+                          @if (isLearningCardPlaying(cardIndex)) {
+                            <span class="tts-icon tts-icon-pause" aria-hidden="true"></span>
+                          } @else if (isLearningCardLoading(cardIndex)) {
+                            <span class="tts-icon tts-icon-loading" aria-hidden="true"></span>
+                          } @else {
+                            <span class="tts-icon tts-icon-play" aria-hidden="true"></span>
+                          }
+                        </button>
+                      </div>
+                      }
+                    </div>
+                  </article>
+                </swiper-slide>
+              }
+            </swiper-container>
+
+          }
+
+          @if (slidesMessage()) {
+            <p class="status">{{ slidesMessage() }}</p>
+          }
+
+          @if (visibleSlideCount() > 0 && shouldShowLoadMoreSlides()) {
+            <div class="load-more-actions">
+              <button
+                type="button"
+                class="primary-action"
+                (click)="loadMoreSlides()"
+                [disabled]="loading() || clearing()"
+              >
+                {{ loading() ? 'Loading More...' : 'Load more' }}
+              </button>
+            </div>
+          }
+        </div>
+
+  </section>
+
+  @if (askOpen() || sourceOpen() || characterInfoOpen() || explainOpen()) {
+      <button
+        type="button"
+        class="ask-backdrop"
+        (click)="closeAllSidePanels()"
+        aria-label="Close side panel"
+      ></button>
+    }
+
+  @if (explainSelectionVisible()) {
+    @for (box of explainSelectionBoxes(); track box.left + '-' + box.top + '-' + box.width + '-' + box.height) {
+      <div
+        style="position:fixed;z-index:32;pointer-events:none;border:1px solid rgba(23,72,108,.42);border-radius:6px;background:rgba(90,164,255,.18);box-shadow:0 0 0 1px rgba(90,164,255,.08) inset;"
+        [style.left.px]="box.left"
+        [style.top.px]="box.top"
+        [style.width.px]="box.width"
+        [style.height.px]="box.height"
+      ></div>
+    }
+
+    <button
+      type="button"
+      style="position:fixed;z-index:33;transform:translateY(-50%);border:0;border-radius:999px;padding:.38rem .78rem;background:#17486c;color:#fff;font:700 .8rem/1 inherit;box-shadow:0 .6rem 1.2rem rgba(23,72,108,.24);cursor:pointer;"
+      [style.left.px]="explainSelectionButtonLeft()"
+      [style.top.px]="explainSelectionButtonTop()"
+      (click)="triggerSelectionExplain()"
+    >
+      Explain
+    </button>
+  }
+
+  @if (!askOpen() && !characterInfoOpen() && !explainOpen()) {
+    @if (!sourceOpen() && canShowSourceButton()) {
+      <button
+        type="button"
+        class="ask-fab ask-fab-source-fab"
+        (click)="toggleSourcePanel()"
+        [attr.aria-expanded]="sourceOpen()"
+        aria-controls="pipeline-source-panel"
+        aria-label="Open source panel"
+      >
+        Source
+      </button>
+    }
+
+    <button
+      type="button"
+      class="ask-fab"
+      [class.ask-fab-open]="askOpen()"
+      (click)="toggleAskPanel()"
+      [attr.aria-expanded]="askOpen()"
+      aria-controls="pipeline-ask-panel"
+      aria-label="Open ask panel"
+    >
+      Ask
+    </button>
+  }
+
+  <app-slide-side-bubble
+    title="Ask"
+    variant="ask"
+    [open]="askOpen()"
+    (closeRequested)="askOpen.set(false)"
+  >
+    <app-document-chat
+      [embedded]="true"
+      [docKeyInput]="docKey()"
+      [languageCode]="selectedLanguage()"
+      [requestedQuestion]="askRequestedQuestion()"
+      [requestKey]="askRequestKey()"
+    ></app-document-chat>
+  </app-slide-side-bubble>
+
+  <app-slide-side-bubble
+    [title]="characterIntroTitle()"
+    variant="explain"
+    side="left"
+    [open]="characterInfoOpen()"
+    (closeRequested)="characterInfoOpen.set(false)"
+  >
+    <div class="character-intro-bubble">
+      @if (characterIntroImageUrl(); as imageUrl) {
+        <img
+          class="character-intro-bubble-image"
+          [src]="imageSrc(imageUrl)"
+          [alt]="characterIntroTitle()"
+          (error)="onImageError(imageUrl, $event)"
+        />
+      }
+
+      @if (characterIntroSlideTitle()) {
+        <p class="character-intro-bubble-label">{{ characterIntroSlideTitle() }}</p>
+      }
+
+      <p class="character-intro-bubble-text">{{ characterIntroText() }}</p>
+    </div>
+  </app-slide-side-bubble>
+
+  <app-slide-side-bubble
+    title="Explanation"
+    variant="explain"
+    [open]="explainOpen()"
+    (closeRequested)="explainOpen.set(false)"
+  >
+    <div class="explain-bubble-body">
+      @if (explanationLoading()) {
+        <p class="explain-bubble-text">Explaining...</p>
+      } @else if (explanationMessage()) {
+        <p class="explain-bubble-text explain-bubble-text-error">{{ explanationMessage() }}</p>
+      } @else {
+        <p class="explain-bubble-text">{{ explanationText() || explanationSummary() }}</p>
+      }
+    </div>
+  </app-slide-side-bubble>
+
+  <app-slide-side-bubble
+    title="Source"
+    variant="source"
+    side="left"
+    [wide]="true"
+    [showHeader]="false"
+    [open]="sourceOpen()"
+    (closeRequested)="sourceOpen.set(false)"
+  >
+    <div class="source-bubble-content">
+      @if (sourceLoading()) {
+        <p class="status">Loading source pages...</p>
+      } @else if (sourceMessage()) {
+        <p class="status">{{ sourceMessage() }}</p>
+      }
+
+      @if (sourcePages().length > 0) {
+        <div class="source-bubble-pages">
+          @for (page of sourcePages(); track page.pageNumber) {
+            <article class="source-bubble-page">
+              <object
+                class="source-bubble-pdf"
+                [data]="page.trustedPdfUrl"
+                type="application/pdf"
+              >
+                <div style="padding:1rem;">
+                  <p class="status">Embedded PDF preview is unavailable in this browser.</p>
+                  <a [href]="page.pdfUrl" target="_blank" rel="noreferrer">Open page {{ page.pageNumber }}</a>
+                </div>
+              </object>
+            </article>
+          }
+        </div>
+      }
+    </div>
+  </app-slide-side-bubble>
+
+  @if (imageViewerOpen()) {
+    <app-image-viewer-modal
+      [imageUrl]="imageViewerUrl()"
+      [alt]="imageViewerAlt()"
+      [zoom]="imageViewerZoom()"
+      [explainVisible]="canExplainImageViewer()"
+      [explainLoading]="explanationLoading()"
+      (closeRequested)="closeImageViewer()"
+      (zoomInRequested)="zoomInImageViewer()"
+      (zoomOutRequested)="zoomOutImageViewer()"
+      (zoomResetRequested)="resetImageViewerZoom()"
+      (explainRequested)="explainImageViewer()"
+    ></app-image-viewer-modal>
+  }
+</section>

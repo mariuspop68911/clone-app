@@ -1,0 +1,38 @@
+<section class="details-modal-shell">
+  <div class="details-modal-scrim"></div>
+
+  <div class="details-modal-content">
+    <button
+      type="button"
+      class="details-modal-close"
+      (click)="closeModal()"
+      [routerLink]="['/', libraryBasePath()]"
+      aria-label="Close your document workspace"
+    >
+      X
+    </button>
+
+    <div class="details-modal-layout">
+      <aside class="details-modal-chapters-rail" aria-label="Your document chapters">
+        @if (documentTitle()) {
+          <h2 class="details-modal-title">{{ documentTitle() }}</h2>
+        }
+
+        <div class="details-modal-chapters-body">
+          <app-pipeline-chapters-sidebar
+            [chapters]="chapterItems()"
+            [activeChapterIndex]="activeChapterIndex()"
+            [availableChapterIndexes]="availableChapterIndexes()"
+            [loading]="learningContextLoading()"
+            [error]="learningContextError()"
+            (sectionSelected)="goToChapterSection($event)"
+          ></app-pipeline-chapters-sidebar>
+        </div>
+      </aside>
+
+      <div class="details-modal-main">
+        <app-pipeline #pipelineRef [modalMode]="true"></app-pipeline>
+      </div>
+    </div>
+  </div>
+</section>

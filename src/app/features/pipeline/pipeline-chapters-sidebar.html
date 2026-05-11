@@ -1,0 +1,71 @@
+<aside class="chapters-sidebar" aria-label="Book chapters">
+  <div class="chapters-sidebar-header">
+    <div class="chapters-sidebar-title">
+      <span class="chapters-sidebar-title-icon" aria-hidden="true">#</span>
+      <span>Chapters</span>
+    </div>
+  </div>
+
+  @if (loading) {
+    <p class="chapters-sidebar-status">Loading chapters...</p>
+  } @else if (error) {
+    <p class="chapters-sidebar-status">{{ error }}</p>
+  } @else if (chapters.length) {
+    <nav class="chapters-nav">
+      @for (chapter of chapters; track trackChapter($index, chapter); let index = $index) {
+        <article
+          class="chapter-item"
+          [class.chapter-item-active]="activeChapterIndex === index"
+          [class.chapter-item-disabled]="!isChapterAvailable(index)"
+          [class.chapter-item-completed]="chapterStatus(index, chapter) === 'completed'"
+        >
+          <div class="chapter-item-header-row">
+            <div class="chapter-item-head">
+              <span class="chapter-item-index">{{ index + 1 }}</span>
+              <span class="chapter-item-copy">
+                <span class="chapter-item-title">{{ chapterLabel(index, chapter) }}</span>
+                @if (pageRange(chapter)) {
+                  <span class="chapter-item-meta">{{ pageRange(chapter) }}</span>
+                }
+              </span>
+            </div>
+
+            <span
+              class="chapter-status-badge"
+              [class.chapter-status-badge-completed]="chapterStatus(index, chapter) === 'completed'"
+              [class.chapter-status-badge-progress]="chapterStatus(index, chapter) === 'in-progress'"
+              [class.chapter-status-badge-upcoming]="chapterStatus(index, chapter) === 'upcoming'"
+            >
+              <span class="chapter-status-badge-icon" aria-hidden="true">
+                @if (chapterStatus(index, chapter) === 'completed') {
+                  OK
+                } @else if (chapterStatus(index, chapter) === 'in-progress') {
+                  >
+                } @else {
+                  o
+                }
+              </span>
+              {{ chapterStatusLabel(index, chapter) }}
+            </span>
+          </div>
+
+          <div class="chapter-item-sections">
+            @for (section of sectionItems; track section.key) {
+              <button
+                type="button"
+                class="chapter-section-button"
+                [disabled]="!sectionAvailable(index, chapter, section.key)"
+                (click)="selectSection(index, chapter, section.key)"
+              >
+                <span class="chapter-section-icon" aria-hidden="true">{{ section.icon }}</span>
+                <span class="chapter-section-label">{{ section.label }}</span>
+              </button>
+            }
+          </div>
+        </article>
+      }
+    </nav>
+  } @else {
+    <p class="chapters-sidebar-status">No chapters available.</p>
+  }
+</aside>

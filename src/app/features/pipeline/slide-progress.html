@@ -1,0 +1,31 @@
+@if (indicatorItems().length > 0) {
+  <div class="slide-progress" aria-label="Slide progress">
+    @for (item of indicatorItems(); track item.index; let renderedIndex = $index) {
+      <div class="slide-progress-segment">
+        <div
+          class="slide-progress-dot"
+          [class.slide-progress-dot-current]="item.current"
+          [class.slide-progress-dot-viewed]="item.viewed"
+          [class.slide-progress-dot-loading]="item.loading"
+          [style.background]="item.dotBackground"
+          [style.border-color]="item.dotBorder"
+          [style.color]="item.dotColor"
+          [style.opacity]="item.opacity"
+          [attr.aria-current]="item.current ? 'step' : null"
+        >
+          @if (item.viewed) {
+            <span class="slide-progress-check">&#10003;</span>
+          }
+        </div>
+
+        @if (hasLineAfter(renderedIndex, indicatorItems())) {
+          <div
+            class="slide-progress-line"
+            [style.background]="item.lineColor"
+            [style.opacity]="item.future ? 0.38 : 1"
+          ></div>
+        }
+      </div>
+    }
+  </div>
+}

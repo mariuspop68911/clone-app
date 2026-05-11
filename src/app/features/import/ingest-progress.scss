@@ -1,0 +1,84 @@
+.ingest-progress {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem;
+  border: 1px solid #d6e2f0;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.ingest-progress-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.ingest-progress-track {
+  height: 0.7rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7eef5;
+}
+
+.ingest-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #1b6ca8, #23a6d5);
+  transition: width 240ms ease;
+}
+
+.ingest-progress-value,
+.ingest-progress-message,
+.ingest-progress-stage {
+  margin: 0;
+}
+
+.ingest-progress-value {
+  color: #183a57;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.ingest-progress-message {
+  color: #17334b;
+  font-weight: 600;
+}
+
+.ingest-progress-stage {
+  color: #61798f;
+  font-size: 0.84rem;
+}
+
+.ingest-progress-note {
+  margin: 0;
+  color: #315a79;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.ingest-progress-failed {
+  border-color: #efc3c8;
+  background: #fff7f8;
+}
+
+.ingest-progress-failed .ingest-progress-bar {
+  background: linear-gradient(135deg, #d44b5a, #ef798a);
+}
+
+.ingest-progress-failed .ingest-progress-message {
+  color: #a22936;
+}
+
+.ingest-progress-done .ingest-progress-bar {
+  background: linear-gradient(135deg, #28724b, #53b47d);
+}
+
+.ingest-progress-usable:not(.ingest-progress-done):not(.ingest-progress-failed) {
+  border-color: #bad8c4;
+  background: #f7fcf8;
+}
+
+.ingest-progress-usable:not(.ingest-progress-done):not(.ingest-progress-failed) .ingest-progress-bar {
+  background: linear-gradient(135deg, #2d8b57, #67b97e);
+}

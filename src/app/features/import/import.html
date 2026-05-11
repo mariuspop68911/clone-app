@@ -1,0 +1,55 @@
+<section class="import-page">
+  <h1>Import Into Your Library</h1>
+
+  <p class="msg">Imported documents are attached to your signed-in account and shown only in your workspace.</p>
+
+  @if (sourceLabel()) {
+    <p class="source-label">{{ sourceLabel() }}</p>
+  }
+
+  <label>
+    Document name in your library
+    <input [(ngModel)]="docKey" placeholder="Automatically set from the file name for your library" />
+  </label>
+
+  @if (!selectedFile) {
+    <label>
+      File
+      <input
+        type="file"
+        accept=".pdf,.epub,application/pdf,application/epub+zip"
+        (change)="onFileChange($event)"
+        [disabled]="loading() || ingestActive()"
+      />
+    </label>
+  } @else {
+    <app-import-mode-selector
+      [selectedMode]="ingestMode()"
+      [busy]="loading() || ingestActive()"
+      (selectedModeChange)="setIngestMode($event)"
+      (confirmRequested)="onModeConfirmed()"
+      (cancelRequested)="cancelImport()"
+    />
+  }
+
+  @if (usableDocKey()) {
+    <section class="ready-callout">
+      <p class="ready-callout-title">First chapter ready</p>
+      <p class="ready-callout-copy">
+        Your document is usable now. You can open its learning context immediately while the rest of the chapters continue processing in the background.
+      </p>
+      <div class="ready-callout-actions">
+        <a [routerLink]="['/documents', usableDocKey()]">Open Your Document</a>
+        <a routerLink="/documents">View Your Library</a>
+      </div>
+    </section>
+  }
+
+  @if (currentIngestStatus()) {
+    <app-ingest-progress [status]="currentIngestStatus()" />
+  }
+
+  @if (message() && !ingestActive()) {
+    <p class="msg">{{ message() }}</p>
+  }
+</section>

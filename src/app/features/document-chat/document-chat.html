@@ -1,0 +1,40 @@
+<section class="chat-page" [class.chat-page-embedded]="embedded">
+  @if (!embedded) {
+    <header class="chat-header">
+      <a class="back" [routerLink]="['/', libraryBasePath(), docKey()]">Back to Your Document</a>
+      <h1>Your Document Chat: {{ docKey() }}</h1>
+    </header>
+  }
+
+  <section class="chat-body">
+    @for (item of messages(); track $index) {
+      <div class="row" [class.row-user]="item.role === 'user'">
+        <div class="bubble" [class.bubble-user]="item.role === 'user'">
+          {{ item.text }}
+        </div>
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="row">
+        <div class="bubble">Thinking...</div>
+      </div>
+    }
+  </section>
+
+  @if (message()) {
+    <p class="status">{{ message() }}</p>
+  }
+
+  <footer class="composer">
+    <textarea
+      [(ngModel)]="input"
+      placeholder="Ask something about your document..."
+      rows="2"
+      (keydown)="onComposerKeydown($event)"
+    ></textarea>
+    <button type="button" (click)="send()" [disabled]="loading() || !input.trim()">
+      {{ loading() ? 'Sending...' : 'Send' }}
+    </button>
+  </footer>
+</section>

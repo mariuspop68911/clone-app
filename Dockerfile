@@ -1,0 +1,27 @@
+FROM node:20-alpine AS build
+WORKDIR /app
+
+ARG BUILD_CONFIGURATION=production
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build -- --configuration=$BUILD_CONFIGURATION
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=8080
+
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=build --chown=node:node /app/dist ./dist
+
+USER node
+
+EXPOSE 8080
+
+CMD ["npm", "start"]

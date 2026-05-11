@@ -1,1 +1,75 @@
-<router-outlet />
+<div class="app-layout">
+  <app-loading-overlay></app-loading-overlay>
+
+  @if (showShell() && !drawerOpen() && appShellUi.browseButtonVisible()) {
+    <button
+      type="button"
+      class="drawer-toggle-fab"
+      (click)="toggleDrawer()"
+      [attr.aria-expanded]="drawerOpen()"
+      aria-controls="app-drawer"
+      aria-label="Open browse panel"
+    >
+      Browse
+    </button>
+  }
+
+  @if (showShell() && drawerOpen()) {
+    <button
+      type="button"
+      class="drawer-backdrop"
+      (click)="closeDrawer()"
+      aria-label="Close browse panel"
+    ></button>
+    <aside
+      id="app-drawer"
+      class="drawer drawer-open"
+      aria-hidden="false"
+      (click)="$event.stopPropagation()"
+    >
+      <h1>RAG Console</h1>
+      @if (authState.profile(); as profile) {
+        <section class="drawer-profile" aria-label="Account">
+          <p class="drawer-profile-label">Signed in as</p>
+          <p class="drawer-profile-name">{{ profile.displayName || 'Account' }}</p>
+          <p class="drawer-profile-email">{{ profile.email || profile.subject || 'No account details available' }}</p>
+          <p class="drawer-profile-role" [class.drawer-profile-role-admin]="profile.isAdmin">
+            {{ profile.isAdmin ? 'Administrator' : 'Standard account' }}
+          </p>
+        </section>
+      }
+      <nav>
+        <a routerLink="/browse-gutenberg" routerLinkActive="active" (click)="closeDrawer()">Browse Gutenberg</a>
+        <a routerLink="/documents" routerLinkActive="active" (click)="closeDrawer()">Documents</a>
+        <a routerLink="/documents2" routerLinkActive="active" (click)="closeDrawer()">Documents2</a>
+        <a routerLink="/import" routerLinkActive="active" (click)="closeDrawer()">Import</a>
+      </nav>
+      <div class="drawer-actions">
+        <button type="button" class="drawer-action-btn" (click)="logout()" [disabled]="logoutPending() || logoutAllPending()">
+          {{ logoutPending() ? 'Logging out...' : 'Log out' }}
+        </button>
+        <button
+          type="button"
+          class="drawer-action-btn drawer-action-btn-secondary"
+          (click)="logoutAll()"
+          [disabled]="logoutPending() || logoutAllPending()"
+        >
+          {{ logoutAllPending() ? 'Logging out everywhere...' : 'Log out all devices' }}
+        </button>
+      </div>
+    </aside>
+  }
+
+  @if (authResolved()) {
+    <main class="content" [class.content-auth]="showShell()" [class.content-guest]="!showShell()">
+      <router-outlet />
+    </main>
+  } @else {
+    <main class="content content-auth-pending" aria-busy="true" aria-live="polite">
+      <section class="auth-pending-card">
+        <span class="auth-pending-spinner" aria-hidden="true"></span>
+        <p>Restoring your session...</p>
+      </section>
+    </main>
+  }
+</div>

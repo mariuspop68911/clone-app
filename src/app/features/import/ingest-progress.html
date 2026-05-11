@@ -1,0 +1,27 @@
+@if (status(); as currentStatus) {
+  <section
+    class="ingest-progress"
+    [class.ingest-progress-failed]="isFailed()"
+    [class.ingest-progress-done]="isDone()"
+    [class.ingest-progress-usable]="isUsable()"
+  >
+    <div class="ingest-progress-head">
+      <div class="ingest-progress-track" aria-hidden="true">
+        <div class="ingest-progress-bar" [style.width.%]="progressPercent()"></div>
+      </div>
+      <span class="ingest-progress-value">{{ progressPercent() }}%</span>
+    </div>
+
+    <p class="ingest-progress-message">{{ message() }}</p>
+
+    @if (stageLabel()) {
+      <p class="ingest-progress-stage">{{ stageLabel() }}</p>
+    }
+
+    @if (isBackgroundProcessing()) {
+      <p class="ingest-progress-note">
+        The first chapter and learning context are ready in your library now. Remaining chapters will keep appearing as backend processing finishes.
+      </p>
+    }
+  </section>
+}

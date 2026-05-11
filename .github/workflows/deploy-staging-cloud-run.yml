@@ -1,0 +1,93 @@
+name: Deploy Staging Frontend Cloud Run Service
+
+on:
+  workflow_run:
+    workflows:
+      - Build And Publish Frontend Container Images
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable image tag to deploy, for example sha-abc123def456
+        required: true
+
+env:
+  REGION: europe-central2
+  STAGING_PROJECT_ID: documentor-staging
+  REPOSITORY_NAME: documentor-container
+  FRONTEND_IMAGE_NAME: clone-app
+  FRONTEND_SERVICE_NAME: documentor-staging-frontend
+
+jobs:
+  deploy:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Determine immutable image tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+          else
+            TAG="sha-$(echo '${{ github.event.workflow_run.head_sha }}' | cut -c1-12)"
+          fi
+          echo "value=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy staging frontend service
+        shell: bash
+        env:
+          STAGING_API_ORIGIN: ${{ vars.STAGING_API_ORIGIN }}
+          STAGING_GOOGLE_CLIENT_ID: ${{ vars.STAGING_GOOGLE_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+
+          IMAGE="${REGION}-docker.pkg.dev/${STAGING_PROJECT_ID}/${REPOSITORY_NAME}/${FRONTEND_IMAGE_NAME}:${{ steps.tag.outputs.value }}"
+
+          ENV_VARS=()
+          if [ -n "${STAGING_API_ORIGIN}" ]; then
+            ENV_VARS+=("STAGING_API_ORIGIN=${STAGING_API_ORIGIN}")
+          fi
+          if [ -n "${STAGING_GOOGLE_CLIENT_ID}" ]; then
+            ENV_VARS+=("STAGING_GOOGLE_CLIENT_ID=${STAGING_GOOGLE_CLIENT_ID}")
+          fi
+
+          DEPLOY_ARGS=(
+            run deploy "${FRONTEND_SERVICE_NAME}"
+            --project="${STAGING_PROJECT_ID}"
+            --region="${REGION}"
+            --platform=managed
+            --image="${IMAGE}"
+            --allow-unauthenticated
+            --port=8080
+          )
+
+          if [ "${#ENV_VARS[@]}" -gt 0 ]; then
+            IFS=,
+            DEPLOY_ARGS+=(--set-env-vars="${ENV_VARS[*]}")
+            unset IFS
+          fi
+
+          gcloud "${DEPLOY_ARGS[@]}"
+
+      - name: Show deployed image reference
+        run: |
+          echo "Frontend image: ${REGION}-docker.pkg.dev/${STAGING_PROJECT_ID}/${REPOSITORY_NAME}/${FRONTEND_IMAGE_NAME}:${{ steps.tag.outputs.value }}"

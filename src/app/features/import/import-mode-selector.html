@@ -1,0 +1,32 @@
+<section class="mode-shell">
+  <div class="mode-copy">
+    <h2>Choose Mode</h2>
+    <p>Select how this document should be imported into your account before continuing.</p>
+  </div>
+
+  <div class="mode-options" aria-label="Import mode">
+    @for (mode of modeOptions; track mode) {
+      <button
+        type="button"
+        class="mode-option"
+        [class.mode-option-active]="selectedMode === mode"
+        (click)="setMode(mode)"
+        [disabled]="busy"
+      >
+        <span class="mode-option-title">{{ mode === 'Story Mode' ? 'Story' : 'Learning' }}</span>
+        <span class="mode-option-text">
+          {{ mode === 'Story Mode' ? 'Review pages first, then import.' : 'Skip preview and ingest immediately.' }}
+        </span>
+      </button>
+    }
+  </div>
+
+  <div class="mode-actions">
+    <button type="button" class="mode-action-button mode-action-button-secondary" (click)="cancelRequested.emit()" [disabled]="busy">
+      Choose Another File
+    </button>
+      <button type="button" class="mode-action-button mode-action-button-primary" (click)="confirmRequested.emit()" [disabled]="busy">
+      {{ selectedMode === 'Story Mode' ? 'Continue' : 'Confirm and Import' }}
+      </button>
+  </div>
+</section>

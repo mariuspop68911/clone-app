@@ -1,0 +1,115 @@
+<section class="episode-text-area-shell">
+  @if (episodes().length) {
+    <div class="episode-text-area-tabs" aria-label="Episode selector">
+      @for (episode of episodes(); track episodeTrackId(episode, $index)) {
+        <button
+          type="button"
+          class="episode-text-area-tab"
+          [class.episode-text-area-tab-active]="isEpisodeActive(episode, $index)"
+          (click)="selectEpisode(episodeTrackId(episode, $index))"
+        >
+          {{ episodeTitle(episode) }}
+        </button>
+      }
+    </div>
+
+    <div class="episode-text-area-content">
+      <div class="episode-text-area-panel">
+        <div class="episode-text-area-fade episode-text-area-fade-top" aria-hidden="true"></div>
+
+        <div #scrollContainer class="episode-text-area-scroll">
+          @if (selectedEpisode(); as episode) {
+            @if (normalizedEvents(episode).length) {
+              @for (event of normalizedEvents(episode); track event.eventId || event.event_id || $index; let summaryIndex = $index) {
+                <button
+                  type="button"
+                  class="episode-summary-row"
+                  [class.episode-summary-row-active]="isEventActive(summaryIndex)"
+                  (click)="selectEvent(summaryIndex)"
+                >
+                  @for (token of episodeTokens(eventSummaryText(event)); track $index) {
+                    @if (token.isWord) {
+                    <span
+                        [attr.data-global-word-index]="globalWordIndex(summaryIndex, token.wordIndex, eventSummaryText(event))"
+                        [class.word-active]="isWordActive(token.wordIndex, wordOffsetBefore(summaryIndex), eventSummaryText(event))"
+                      >
+                        {{ token.text }}
+                      </span>
+                    } @else {
+                      <span>{{ token.text }}</span>
+                    }
+                  }
+
+                </button>
+              }
+            } @else {
+              <div class="episode-summary-empty">No episode text yet.</div>
+            }
+          }
+        </div>
+
+        <div class="episode-text-area-fade episode-text-area-fade-bottom" aria-hidden="true"></div>
+      </div>
+
+      <aside
+        class="episode-image-panel"
+        [class.episode-image-panel-characters]="displayCharacterRows().length > 0"
+      >
+        @if (displayImageUrl(); as imageUrl) {
+          <img
+            class="episode-image"
+            [src]="imageUrl"
+            [alt]="displayEvent().summary || 'Episode scene image'"
+          />
+        } @else if (displayCharacterRows().length && displayEvent(); as event) {
+          <div class="episode-character-gallery">
+            @for (row of displayCharacterRows(); track row.imageUrl + row.characterName; let rowIndex = $index) {
+              <div
+                class="episode-character-row"
+                [style.transform]="circleItemTransform(rowIndex, displayCharacterRows().length)"
+              >
+                <img
+                  class="episode-character-image"
+                  [class.episode-character-image-speaking]="isCharacterRowSpeaking(displayEventIndex(), row)"
+                  [src]="row.imageUrl"
+                  [alt]="row.characterName || 'Character image'"
+                />
+
+                @if (activeDialogForCharacterRow(displayEventIndex(), row); as activeDialog) {
+                  <div class="episode-character-dialogs" [attr.aria-label]="row.characterName + ' dialog'">
+                    <div class="episode-dialog-bubble">
+                      @for (token of episodeTokens(activeDialog.text); track $index) {
+                        <span>{{ token.text }}</span>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="episode-image-empty"></div>
+        }
+      </aside>
+    </div>
+
+    <div class="episode-text-area-tts">
+      <p class="episode-tts-label">Narrator</p>
+
+      <button
+        type="button"
+        class="episode-tts-button"
+        (click)="toggleTts()"
+        [disabled]="ttsLoading()"
+      >
+        {{ ttsPlaying() ? 'Stop narrator' : (ttsLoading() ? 'Loading narrator...' : 'Play narrator') }}
+      </button>
+
+      @if (ttsMessage()) {
+        <p class="episode-tts-message">{{ ttsMessage() }}</p>
+      }
+    </div>
+  } @else {
+    <div class="episode-text-area-empty">No episodes generated yet.</div>
+  }
+</section>

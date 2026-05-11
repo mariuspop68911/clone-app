@@ -1,0 +1,148 @@
+.source-books-page {
+  max-width: 72rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  color: #55708a;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.subtitle {
+  margin: 0.5rem 0 0;
+  color: #46627a;
+  max-width: 42rem;
+}
+
+.refresh-btn {
+  border: 1px solid #c7d4df;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.books-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.book-card {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #d9e3ec;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.cover {
+  width: 104px;
+  height: 148px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #eef3f7;
+}
+
+.placeholder {
+  display: grid;
+  place-items: center;
+  color: #60788d;
+  font-weight: 600;
+}
+
+.content {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.content h2,
+.authors,
+.meta,
+.summary {
+  margin: 0;
+}
+
+.authors {
+  font-weight: 700;
+}
+
+.meta,
+.summary,
+.message {
+  color: #4b657b;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tags span {
+  border-radius: 999px;
+  background: #eef6ff;
+  color: #24547d;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
+}
+
+.actions a {
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+}
+
+.actions .primary {
+  background: #183a57;
+  color: #fff;
+}
+
+.actions .secondary {
+  border: 1px solid #c7d4df;
+  color: #183a57;
+  background: #fff;
+}
+
+@media (max-width: 700px) {
+  .hero {
+    flex-direction: column;
+  }
+
+  .book-card {
+    grid-template-columns: 1fr;
+  }
+
+  .cover {
+    width: 100%;
+    max-width: 180px;
+  }
+}
