@@ -67,6 +67,12 @@ export interface RagDocumentLastSlideResponse {
   [key: string]: unknown;
 }
 
+export interface RagDocumentPdfPreviewResponse {
+  pdfUrl?: string;
+  url?: string;
+  [key: string]: unknown;
+}
+
 interface RagDocumentListEnvelope {
   value?: RagDocumentResponse[];
   [key: string]: unknown;
@@ -806,8 +812,25 @@ export class RagApiService {
     );
   }
 
-  getDocumentPdfUrl(docId: number): string {
-    return `${this.baseUrl}/documents/${encodeURIComponent(String(docId))}/pdf`;
+  getDocumentPdfPreviewUrl(docId: number): Observable<string> {
+    return this.http
+      .get<RagDocumentPdfPreviewResponse>(
+        `${this.baseUrl}/documents/${encodeURIComponent(String(docId))}/pdf-preview`
+      )
+      .pipe(
+        map((response) => {
+          const pdfUrl =
+            typeof response?.pdfUrl === 'string' && response.pdfUrl.trim()
+              ? response.pdfUrl.trim()
+              : typeof response?.url === 'string' && response.url.trim()
+                ? response.url.trim()
+                : '';
+          if (!pdfUrl) {
+            throw new Error('No PDF preview URL returned.');
+          }
+          return pdfUrl;
+        })
+      );
   }
 
   getRandomStorySourceBooks(limit = 20): Observable<StorySourceBookResponse[]> {

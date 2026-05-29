@@ -2752,7 +2752,7 @@ export class PipelineComponent {
     this.sourceMessage.set('');
 
     try {
-      const baseUrl = this.ragApi.getDocumentPdfUrl(docId);
+      const baseUrl = await firstValueFrom(this.ragApi.getDocumentPdfPreviewUrl(docId));
       const renderedPages: SourcePreviewPage[] = sourcePageNumbers.map((pageNumber) => ({
         pageNumber,
         pdfUrl: `${baseUrl}#page=${pageNumber}&view=FitH&navpanes=0&pagemode=none`,

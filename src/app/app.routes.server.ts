@@ -2,11 +2,7 @@ import { RenderMode, ServerRoute } from '@angular/ssr';
 
 export const serverRoutes: ServerRoute[] = [
   {
-    path: 'documents/:docKey/chat',
-    renderMode: RenderMode.Server
-  },
-  {
-    path: 'documents/:docKey',
+    path: 'documents2/:docKey/chat',
     renderMode: RenderMode.Server
   },
   {

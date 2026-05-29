@@ -165,7 +165,7 @@ export class LoginComponent implements AfterViewInit, OnInit {
     this.submitting.set(false);
     this.googleSubmitting.set(false);
     const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-    void this.router.navigateByUrl(returnUrl && returnUrl !== '/login' ? returnUrl : '/documents');
+    void this.router.navigateByUrl(returnUrl && returnUrl !== '/login' ? returnUrl : '/documents2');
   }
   private readErrorMessage(error: unknown, fallback: string): string {
     if (
