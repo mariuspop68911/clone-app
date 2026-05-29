@@ -48,7 +48,7 @@ export class App implements OnInit {
       const destination =
         typeof returnUrl === 'string' && returnUrl.trim() && returnUrl !== '/login'
           ? returnUrl
-          : '/documents';
+          : '/documents2';
       void this.router.navigateByUrl(destination, { replaceUrl: true });
     });
   }
